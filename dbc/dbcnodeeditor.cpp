@@ -4,6 +4,7 @@
 #include <QSettings>
 #include <QKeyEvent>
 #include <QColorDialog>
+#include <QRegularExpression>
 #include "helpwindow.h"
 #include "utility.h"
 
@@ -32,7 +33,7 @@ DBCNodeEditor::DBCNodeEditor(QWidget *parent) :
         {
             if (dbcNode == nullptr) return;
             if (dbcNode->name != ui->lineMsgName->text()) dbcFile->setDirtyFlag();
-            dbcNode->name = ui->lineMsgName->text();
+            dbcNode->name = ui->lineMsgName->text().simplified().replace(QRegularExpression("[^A-Za-z0-9_]"), "_");
             emit updatedTreeInfo(dbcNode);
         });
 
