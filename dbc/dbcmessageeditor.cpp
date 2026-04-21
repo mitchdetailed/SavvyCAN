@@ -4,6 +4,7 @@
 #include <QSettings>
 #include <QKeyEvent>
 #include <QColorDialog>
+#include <QRegularExpression>
 #include "helpwindow.h"
 #include "utility.h"
 
@@ -45,7 +46,7 @@ DBCMessageEditor::DBCMessageEditor(QWidget *parent) :
             if (dbcMessage == nullptr) return;
             if (suppressEditCallbacks) return;
             if (dbcMessage->name != ui->lineMsgName->text().simplified().replace(' ', '_')) dbcFile->setDirtyFlag();
-            dbcMessage->name = ui->lineMsgName->text().simplified().replace(' ', '_');
+            dbcMessage->name = ui->lineMsgName->text().simplified().replace(QRegularExpression("[^A-Za-z0-9_]"), "_");
             emit updatedTreeInfo(dbcMessage);
         });
 
@@ -80,10 +81,10 @@ DBCMessageEditor::DBCMessageEditor(QWidget *parent) :
                 if (!node)
                 {
                     DBC_NODE newNode;
-                    newNode.name = newText;
+                    newNode.name = QString(newText).replace(QRegularExpression("[^A-Za-z0-9_]"), "_");
                     dbcFile->dbc_nodes.append(newNode);
-                    node = dbcFile->findNodeByName(newText);
-                    ui->comboSender->addItem(newText);
+                    node = dbcFile->findNodeByName(newNode.name);
+                    ui->comboSender->addItem(newNode.name);
                 }
                 if (node != dbcMessage->sender) dbcFile->setDirtyFlag();
                 dbcMessage->sender = node;

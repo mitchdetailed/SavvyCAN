@@ -58,7 +58,7 @@ QString DBC_SIGNAL::multiplexDbcString(DbcMuxStringFormat fmt) const
     for (auto limitPair : multiplexLowAndHighValues) {
         if (fmt == MuxStringFormat_DbcFile) {
             if (!ret.isEmpty())
-                ret.append(QStringLiteral(" "));
+                ret.append(QStringLiteral(", "));
             ret.append(QString("%1-%2").arg(limitPair.first).arg(limitPair.second));
         } else {
             if (!ret.isEmpty())
@@ -85,6 +85,7 @@ void DBC_SIGNAL::copyMultiplexValuesFromSignal(const DBC_SIGNAL &signal)
  */
 int DBC_SIGNAL::getSimpleMultiplexValue()
 {
+    if (multiplexLowAndHighValues.isEmpty()) return 0;
     return multiplexLowAndHighValues.at(0).first;
 }
 

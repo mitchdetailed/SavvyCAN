@@ -1474,7 +1474,7 @@ bool DBCFile::saveFile(QString fileName)
     outFile->write("    BU_BO_REL_\n");
     outFile->write("    SG_MUL_VAL_\n");
     outFile->write("\n");
-    outFile->write("BS_: \n");
+    outFile->write("BS_:\n");
 
     //Build list of nodes line
     nodesOutput.append("BU_: ");
@@ -1491,16 +1491,16 @@ bool DBCFile::saveFile(QString fileName)
             nodesOutput.append(node.name + " ");
             if (node.comment.length() > 0)
             {
-                commentsOutput.append("CM_ BU_ " + node.name + " \"" + node.comment + "\";\n");
+                commentsOutput.append("CM_ BU_ " + node.name + " \"" + QString(node.comment).replace('"', "\\\"") + "\";\n");
             }
             if (node.attributes.count() > 0)
             {
                 foreach (DBC_ATTRIBUTE_VALUE val, node.attributes) {
-                    attrValOutput.append("BA_ \"" + val.attrName + "\" BU_ ");
+                    attrValOutput.append("BA_ \"" + val.attrName + "\" BU_ " + node.name + " ");
                     switch (val.value.type())
                     {
                     case QVariant::Type::String:
-                        attrValOutput.append("\"" + val.value.toString() + "\";\n");
+                        attrValOutput.append("\"" + QString(val.value.toString()).replace('"', "\\\"") + "\";\n");
                         break;
                     case QVariant::Type::Bool:
                         attrValOutput.append(QString::number(val.value.toBool() ? 1 : 0) + ";\n");
@@ -1523,7 +1523,7 @@ bool DBCFile::saveFile(QString fileName)
         for (int v = 0; v < table.valList.count(); v++)
         {
             DBC_VAL_ENUM_ENTRY val = table.valList[v];
-            valueTableOutput.append(" " + QString::number(val.value) + " \"" + val.descript + "\"");
+            valueTableOutput.append(" " + QString::number(val.value) + " \"" + QString(val.descript).replace('"', "\\\"") + "\"");
         }
         valueTableOutput.append(";\n");
     }
@@ -1551,10 +1551,10 @@ bool DBCFile::saveFile(QString fileName)
         }
 
         msgOutput.append("BO_ " + QString::number(ID) + " " + msg->name + ": " + QString::number(msg->len) +
-                         " " + msg->sender->name + "\n");
+                         " " + (msg->sender ? msg->sender->name : QStringLiteral("Vector__XXX")) + "\n");
         if (msg->comment.length() > 0)
         {
-            commentsOutput.append("CM_ BO_ " + QString::number(ID) + " \"" + msg->comment + "\";\n");
+            commentsOutput.append("CM_ BO_ " + QString::number(ID) + " \"" + QString(msg->comment).replace('"', "\\\"") + "\";\n");
         }
 
         //If this message has attributes then compile them into attributes list to output later on.
@@ -1565,7 +1565,7 @@ bool DBCFile::saveFile(QString fileName)
                 switch (val.value.type())
                 {
                 case QVariant::Type::String:
-                    attrValOutput.append("\"" + val.value.toString() + "\";\n");
+                    attrValOutput.append("\"" + QString(val.value.toString()).replace('"', "\\\"") + "\";\n");
                     break;
                 case QVariant::Type::Bool:
                     attrValOutput.append(QString::number(val.value.toBool() ? 1 : 0) + ";\n");
@@ -1612,10 +1612,13 @@ bool DBCFile::saveFile(QString fileName)
                 else msgOutput.append("0+");
                 break;
             case SIGNED_INT:
-            case SP_FLOAT:
-            case DP_FLOAT:
                 if (sig->intelByteOrder) msgOutput.append("1-");
                 else msgOutput.append("0-");
+                break;
+            case SP_FLOAT:
+            case DP_FLOAT:
+                if (sig->intelByteOrder) msgOutput.append("1+");
+                else msgOutput.append("0+");
                 break;
             case STRING:
                 msgOutput.append("4-");
@@ -1626,12 +1629,12 @@ bool DBCFile::saveFile(QString fileName)
             }
             msgOutput.append(" (" + QString::number(sig->factor) + "," + QString::number(sig->bias) + ") [" +
                              QString::number(sig->min) + "|" + QString::number(sig->max) + "] \"" + sig->unitName
-                             + "\" " + sig->receiver->name + "\n");
+                             + "\" " + (sig->receiver ? sig->receiver->name : QStringLiteral("Vector__XXX")) + "\n");
             if (sig->valType == SP_FLOAT || sig->valType == DP_FLOAT)
                 sigValTypeOutput.append("SIG_VALTYPE_ " + QString::number(ID) + " " + sig->name + " : " + QString::number(sig->valType == SP_FLOAT ? 1 : 2) + ";\n");
             if (sig->comment.length() > 0)
             {
-                commentsOutput.append("CM_ SG_ " + QString::number(ID) + " " + sig->name + " \"" + sig->comment + "\";\n");
+                commentsOutput.append("CM_ SG_ " + QString::number(ID) + " " + sig->name + " \"" + QString(sig->comment).replace('"', "\\\"") + "\";\n");
             }
 
             //if this signal has attributes then compile them in a special list of attributes
@@ -1642,7 +1645,7 @@ bool DBCFile::saveFile(QString fileName)
                     switch (val.value.type())
                     {
                     case QVariant::Type::String:
-                        attrValOutput.append("\"" + val.value.toString() + "\";\n");
+                        attrValOutput.append("\"" + QString(val.value.toString()).replace('"', "\\\"") + "\";\n");
                         break;
                     case QVariant::Type::Bool:
                         attrValOutput.append(QString::number(val.value.toBool() ? 1 : 0) + ";\n");
@@ -1660,7 +1663,7 @@ bool DBCFile::saveFile(QString fileName)
                 for (int v = 0; v < sig->valList.count(); v++)
                 {
                     DBC_VAL_ENUM_ENTRY val = sig->valList[v];
-                    valuesOutput.append(" " + QString::number(val.value) + " \"" + val.descript +"\"");
+                    valuesOutput.append(" " + QString::number(val.value) + " \"" + QString(val.descript).replace('"', "\\\"") + "\"");
                 }
                 valuesOutput.append(";\n");
             }
@@ -1700,7 +1703,7 @@ bool DBCFile::saveFile(QString fileName)
         switch (dbc_attributes[x].valType)
         {
         case ATTR_INT:
-            msgOutput.append("INT " + QString::number(dbc_attributes[x].lower) + " " + QString::number(dbc_attributes[x].upper));
+            msgOutput.append("INT " + QString::number((long long)dbc_attributes[x].lower) + " " + QString::number((long long)dbc_attributes[x].upper));
             break;
         case ATTR_FLOAT:
             msgOutput.append("FLOAT " + QString::number(dbc_attributes[x].lower) + " " + QString::number(dbc_attributes[x].upper));
@@ -1712,7 +1715,7 @@ bool DBCFile::saveFile(QString fileName)
             msgOutput.append("ENUM ");
             foreach (QString str, dbc_attributes[x].enumVals)
             {
-                msgOutput.append("\"" + str + "\",");
+                msgOutput.append("\"" + QString(str).replace('"', "\\\"") + "\",");
             }
             msgOutput.truncate(msgOutput.length() - 1); //remove trailing ,
             break;
@@ -1729,10 +1732,10 @@ bool DBCFile::saveFile(QString fileName)
             switch (dbc_attributes[x].valType)
             {
             case ATTR_STRING:
-                defaultsOutput.append("\"" + dbc_attributes[x].defaultValue.toString() + "\";\n");
+                defaultsOutput.append("\"" + QString(dbc_attributes[x].defaultValue.toString()).replace('"', "\\\"") + "\";\n");
                 break;
             case ATTR_ENUM:
-                defaultsOutput.append("\"" + dbc_attributes[x].enumVals[dbc_attributes[x].defaultValue.toInt()] + "\";\n");
+                defaultsOutput.append("\"" + QString(dbc_attributes[x].enumVals[dbc_attributes[x].defaultValue.toInt()]).replace('"', "\\\"") + "\";\n");
                 break;
             case ATTR_INT:
                 defaultsOutput.append(QString::number(dbc_attributes[x].defaultValue.toLongLong()) + ";\n");

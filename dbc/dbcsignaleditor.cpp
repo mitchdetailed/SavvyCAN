@@ -6,6 +6,7 @@
 #include <QSettings>
 #include <QRandomGenerator>
 #include <QMessageBox>
+#include <QRegularExpression>
 #include <qevent.h>
 #include "helpwindow.h"
 
@@ -218,11 +219,11 @@ DBCSignalEditor::DBCSignalEditor(QWidget *parent) :
             [=]()
             {
                 if (currentSignal == nullptr) return;
-                if (currentSignal->comment != ui->txtComment->text().simplified().replace(' ','_'))
+                if (currentSignal->comment != ui->txtComment->text())
                 {
                     pushToUndoBuffer();
                     dbcFile->setDirtyFlag();
-                    currentSignal->comment = ui->txtComment->text().simplified().replace(' ', '_');
+                    currentSignal->comment = ui->txtComment->text();
                     emit updatedTreeInfo(currentSignal);
                 }
             });
@@ -231,11 +232,11 @@ DBCSignalEditor::DBCSignalEditor(QWidget *parent) :
             [=]()
             {
                 if (currentSignal == nullptr) return;
-                if (currentSignal->unitName != ui->txtUnitName->text().simplified().replace(' ','_'))
+                if (currentSignal->unitName != ui->txtUnitName->text())
                 {
                     pushToUndoBuffer();
                     dbcFile->setDirtyFlag();
-                    currentSignal->unitName = ui->txtUnitName->text().simplified().replace(' ', '_');
+                    currentSignal->unitName = ui->txtUnitName->text();
                 }
             });
 
@@ -269,7 +270,7 @@ DBCSignalEditor::DBCSignalEditor(QWidget *parent) :
             [=]()
             {
                 if (currentSignal == nullptr) return;
-                QString tempNameStr = ui->txtName->text().simplified().replace(' ', '_');
+                QString tempNameStr = ui->txtName->text().simplified().replace(QRegularExpression("[^A-Za-z0-9_]"), "_");
                 if (tempNameStr.length() == 0) return; //can't do that!
                 if (currentSignal->name != tempNameStr)
                 {
@@ -528,7 +529,7 @@ void DBCSignalEditor::onValuesCellChanged(int row,int col)
     }
     else if (col == 1)
     {
-        currentSignal->valList[row].descript = ui->valuesTable->item(row, col)->text().simplified().replace(' ', '_');
+        currentSignal->valList[row].descript = ui->valuesTable->item(row, col)->text();
     }
 }
 
