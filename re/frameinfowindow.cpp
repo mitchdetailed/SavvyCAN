@@ -413,14 +413,14 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
             if (thisFrame.frameId() == static_cast<uint32_t>(targettedID)) frameCache.append(thisFrame);
         }
 
-        if (frameCache.count() == 0) return; //nothing to do if there are no frames!
+        if (frameCache.size() == 0) return; //nothing to do if there are no frames!
 
         const unsigned char *data = reinterpret_cast<const unsigned char *>(frameCache.at(0).payload().constData());
         int dataLen = frameCache.at(0).payload().length();
 
         ui->treeDetails->clear();
 
-        if (frameCache.count() == 0) return;
+        if (frameCache.size() == 0) return;
 
         baseNode = new QTreeWidgetItem();
         baseNode->setText(0, QString("ID: ") + newID );
@@ -507,7 +507,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
         }
 
         tempItem = new QTreeWidgetItem();
-        tempItem->setText(0, tr("# of frames: ") + QString::number(frameCache.count(),10));
+        tempItem->setText(0, tr("# of frames: ") + QString::number(frameCache.size(),10));
         baseNode->addChild(tempItem);
 
         //clear out all the counters and accumulators
@@ -545,7 +545,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
         DBC_MESSAGE *msg = dbcHandler->findMessageForFilter(targettedID, nullptr);
 
         //then find all data points
-        for (int j = 0; j < frameCache.count(); j++)
+        for (int j = 0; j < frameCache.size(); j++)
         {
             data = reinterpret_cast<const unsigned char *>(frameCache.at(j).payload().constData());
             dataLen = frameCache.at(j).payload().length();
@@ -625,7 +625,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
         }
 
         //Divide all the bit flip heat values by the number of frames to get a ratio
-        for (int j = 0; j < 64; j++) bitFlipHeat[j] /= (double)frameCache.count();
+        for (int j = 0; j < 64; j++) bitFlipHeat[j] /= (double)frameCache.size();
 
         std::sort(sortedIntervals.begin(), sortedIntervals.end());
         int64_t intervalStdDiv = 0, intervalPctl5 = 0, intervalPctl95 = 0, intervalMean = 0, intervalVariance = 0;
@@ -668,8 +668,8 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
             }
         }
 
-        if (frameCache.count() > 1)
-            avgInterval = avgInterval / (frameCache.count() - 1);
+        if (frameCache.size() > 1)
+            avgInterval = avgInterval / (frameCache.size() - 1);
         else avgInterval = 0;
 
         //now that data processing is done, create all of our output
@@ -809,7 +809,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
             graphRef[graphs] = graphByte[graphs]->addGraph();
             graphByte[graphs]->graph()->setData(byteGraphX, byteGraphY[graphs]);
             graphByte[graphs]->graph()->setPen(bytePens[graphs]);
-            graphByte[graphs]->xAxis->setRange(0, byteGraphX.count());
+            graphByte[graphs]->xAxis->setRange(0, byteGraphX.size());
             graphByte[graphs]->replot();
         }
 

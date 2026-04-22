@@ -59,7 +59,7 @@ int main(int argc, char *argv[])
     QString shortLang = locale.name().left(2);
 
     if (QString translationDir = QCoreApplication::applicationDirPath() + "/translations"; !translator.load("SavvyCAN_" + lang, translationDir)) {
-        translator.load("SavvyCAN_" + shortLang, translationDir);
+        (void)translator.load("SavvyCAN_" + shortLang, translationDir);
     }
     a.installTranslator(&translator);
 

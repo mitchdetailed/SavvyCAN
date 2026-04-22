@@ -189,12 +189,12 @@ void FrameSenderWindow::updatedFrames(int numFrames)
 
 void FrameSenderWindow::processIncomingFrame(CANFrame *frame)
 {
-    for (int sd = 0; sd < sendingData.count(); sd++)
+    for (int sd = 0; sd < sendingData.size(); sd++)
     {
-        if (sendingData[sd].triggers.count() == 0) continue;
+        if (sendingData[sd].triggers.size() == 0) continue;
         if (!sendingData[sd].enabled) continue; // Skip if not enabled
         bool passedChecks = true;
-        for (int trig = 0; trig < sendingData[sd].triggers.count(); trig++)
+        for (int trig = 0; trig < sendingData[sd].triggers.size(); trig++)
         {
             Trigger *thisTrigger = &sendingData[sd].triggers[trig];
             //need to ensure that this trigger is actually related to frames incoming.
@@ -375,7 +375,7 @@ void FrameSenderWindow::saveSenderFile(QString filename)
         return;
     }
 
-    for (int c = 0; c < sendingData.count(); c++)
+    for (int c = 0; c < sendingData.size(); c++)
     {
         outString.clear();
         if (ui->tableSender->item(c, ST_COLS::SENDTAB_COL_EN)->checkState() == Qt::Checked)
@@ -482,7 +482,7 @@ void FrameSenderWindow::onCellDoubleTap(int row, int column)
         {
             createBlankRow();
         }
-        if (row >= sendingData.count())
+        if (row >= sendingData.size())
         {
             FrameSendData tempData;
             tempData.enabled = false;
@@ -541,22 +541,22 @@ void FrameSenderWindow::handleTick()
         int elapsed = elapsedTimer.restart();
         if (elapsed == 0) elapsed = 1;
         //Modifier modifier;
-        for (int i = 0; i < sendingData.count(); i++)
+        for (int i = 0; i < sendingData.size(); i++)
         {
             sendData = &sendingData[i];
             if (!sendData->enabled)
             {
-                if (sendData->triggers.count() > 0)
+                if (sendData->triggers.size() > 0)
                 {
-                    for (int j = 0; j < sendData->triggers.count(); j++)    //resetting currCount when line is disabled
+                    for (int j = 0; j < sendData->triggers.size(); j++)    //resetting currCount when line is disabled
                     {
                       sendData->triggers[j].currCount = 0;
                     }
                 }
                 continue; //abort any processing on this if it is not enabled.
             }
-            if (sendData->triggers.count() == 0) continue;
-            for (int j = 0; j < sendData->triggers.count(); j++)
+            if (sendData->triggers.size() == 0) continue;
+            for (int j = 0; j < sendData->triggers.size(); j++)
             {
                 trigger = &sendData->triggers[j];
                 if (trigger->maxCount > 0 && trigger->currCount >= trigger->maxCount) continue; //don't process if we've sent max frames we were supposed to
@@ -577,7 +577,7 @@ void FrameSenderWindow::handleTick()
         }
 
         //if we have any frames to send after the above then send as a batch
-        if (sendingList.count() > 0) 
+        if (sendingList.size() > 0) 
         {
             CANConManager::getInstance()->sendFrames(sendingList);
         }
@@ -604,14 +604,14 @@ void FrameSenderWindow::doModifiers(int idx)
     Modifier *mod;
     ModifierOp op;
 
-    if (sendData->modifiers.count() == 0) return; //if no modifiers just leave right now
+    if (sendData->modifiers.size() == 0) return; //if no modifiers just leave right now
 
     //qDebug() << "Executing mods";
 
-    for (int i = 0; i < sendData->modifiers.count(); i++)
+    for (int i = 0; i < sendData->modifiers.size(); i++)
     {
         mod = &sendData->modifiers[i];
-        for (int j = 0; j < mod->operations.count(); j++)
+        for (int j = 0; j < mod->operations.size(); j++)
         {
             op = mod->operations.at(j);
             if (op.first.ID == -1)
@@ -1015,7 +1015,7 @@ void FrameSenderWindow::processCellChange(int line, int col)
     DBC_MESSAGE *msg;
 
     //if this is a new line then create the base object for the line
-    if (line >= sendingData.count())
+    if (line >= sendingData.size())
     {
         FrameSendData tempData;
         tempData.enabled = false;
@@ -1129,8 +1129,8 @@ void FrameSenderWindow::processCellChange(int line, int col)
             tokens = ui->tableSender->item(line, ST_COLS::SENDTAB_COL_DATA)->text().split(" ", QString::SkipEmptyParts);
 #endif
             arr.clear();
-            arr.reserve(tokens.count());
-            for (int j = 0; j < tokens.count(); j++)
+            arr.reserve(tokens.size());
+            for (int j = 0; j < tokens.size(); j++)
             {
                 arr.append((uint8_t)Utility::ParseStringToNum(tokens[j]));
             }

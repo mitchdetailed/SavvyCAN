@@ -376,12 +376,12 @@ void CANDataGrid::paintGridCells()
                 {
                     if (prevBit)
                     {
-                        if ((signalColors.count() > 0) && (gridMode == GridMode::SIGNAL_VIEW)) painter->setBrush(blackHashBrush);
+                        if ((signalColors.size() > 0) && (gridMode == GridMode::SIGNAL_VIEW)) painter->setBrush(blackHashBrush);
                         else painter->setBrush(blackBrush);
                     }
                     else
                     {
-                        if ((signalColors.count() > 0) && (gridMode == GridMode::SIGNAL_VIEW)) painter->setBrush(greenHashBrush);
+                        if ((signalColors.size() > 0) && (gridMode == GridMode::SIGNAL_VIEW)) painter->setBrush(greenHashBrush);
                         else painter->setBrush(greenBrush);
                     }
                 }
@@ -451,7 +451,7 @@ void CANDataGrid::paintGridCells()
      * We already have a big bitmap that tells us which signals occupy which bits so every time there is a new
      * signal look ahead to see if there's room in the row to just run the signal name through as long as needed.
     */
-    if ( (signalNames.count() > 0) && (gridMode == GridMode::SIGNAL_VIEW) )
+    if ( (signalNames.size() > 0) && (gridMode == GridMode::SIGNAL_VIEW) )
     {
         painter->setFont(sigNameFont);
 

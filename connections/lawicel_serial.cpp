@@ -174,11 +174,11 @@ bool LAWICELSerial::piSendFrame(const CANFrame& frame)
     else {
         if (frame.hasExtendedFrameFormat())
         {
-            buildStr = QString::asprintf("T%08X%u", ID, frame.payload().length());
+            buildStr = QString::asprintf("T%08X%u", ID, (unsigned int)frame.payload().length());
         }
         else
         {
-            buildStr = QString::asprintf("t%03X%u", ID, frame.payload().length());
+            buildStr = QString::asprintf("t%03X%u", ID, (unsigned int)frame.payload().length());
         }
     }
     foreach (QChar chr, buildStr)
@@ -398,6 +398,7 @@ void LAWICELSerial::serialError(QSerialPort::SerialPortError err)
         killConnection = true;
         piStop();
         break;
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     case QSerialPort::ParityError:
         errMessage = "Parity error on serial port";
         break;
@@ -407,6 +408,7 @@ void LAWICELSerial::serialError(QSerialPort::SerialPortError err)
     case QSerialPort::BreakConditionError:
         errMessage = "Break error on serial port";
         break;
+#endif
     case QSerialPort::WriteError:
         errMessage = "Write error on serial port";
         piStop();
@@ -494,7 +496,7 @@ void LAWICELSerial::readSerialData()
         //qDebug() << c << "    " << QString::number(c, 16) << "     " << QString(c);
         debugBuild = debugBuild % QString::number(c, 16).rightJustified(2,'0') % " ";
         //procRXChar(c);
-        mBuildLine.append(c);
+        mBuildLine.append(static_cast<char>(c));
         if (c == 13) //all lawicel commands end in CR
         {
             qDebug() << "Got CR!";

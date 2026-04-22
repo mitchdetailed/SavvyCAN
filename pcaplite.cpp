@@ -153,7 +153,7 @@ const unsigned char *pcap_next_ng(pcap_t *p, struct pcap_pkthdr *h) {
 		                return (NULL);
                     }
 
-                } while(ftell(p->file) < fpos + bh.block_size - sizeof(bh.block_size));
+                } while(ftell(p->file) < fpos + (long)bh.block_size - (long)sizeof(bh.block_size));
 
                 if (fseek(p->file, sizeof(bh.block_size), SEEK_CUR)) {
                         //probably EOF

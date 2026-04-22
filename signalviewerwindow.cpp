@@ -92,7 +92,7 @@ void SignalViewerWindow::processFrame(CANFrame &frame)
 {
     QString sigString;
     DBC_SIGNAL *sig;
-    for (int i = 0; i < signalList.count(); i++)
+    for (int i = 0; i < signalList.size(); i++)
     {
         sig = signalList.at(i);
         if (!sig) return;
@@ -137,7 +137,7 @@ void SignalViewerWindow::loadNodes()
 
         QList<QString> names;
 
-        for (int x = 0; x < thisFile->dbc_nodes.count(); x++)
+        for (int x = 0; x < thisFile->dbc_nodes.size(); x++)
         {
             bool messagesInNode = false;
             for (int m = 0; m < thisFile->messageHandler->getCount(); m++)
@@ -155,12 +155,12 @@ void SignalViewerWindow::loadNodes()
             }
         }
 
-        if(names.count() > 0)
+        if(names.size() > 0)
         {
             names.sort();
             ui->cbNodes->addItem("----" + thisFile->getFilename());
             Utility::SetComboBoxItemEnabled(ui->cbNodes, ui->cbNodes->count() -1, false);
-            for(int i=0; i<names.count(); i++)
+            for(int i=0; i<names.size(); i++)
                 ui->cbNodes->addItem(names[i]);
         }
     }
@@ -299,7 +299,7 @@ void SignalViewerWindow::saveDefinitions()
             return;
 
         DBC_SIGNAL *sig;
-        for (int i = 0; i < signalList.count(); i++)
+        for (int i = 0; i < signalList.size(); i++)
         {
             sig = signalList.at(i);
 
@@ -385,14 +385,14 @@ void SignalViewerWindow::loadDefinitions(bool append)
         }
         inFile->close();
 
-        if(loadedSignals.count() > 0)
+        if(loadedSignals.size() > 0)
         {
             if(append == false)
             {
                 clearSignalsTable(false);
             }
 
-            for (int i=0; i<loadedSignals.count(); i++)
+            for (int i=0; i<loadedSignals.size(); i++)
             {
                 addSignal(loadedSignals[i]);
             }

@@ -1298,7 +1298,7 @@ bool FrameFileIO::saveCRTDFile(QString filename, const QVector<CANFrame>* frames
 
         frame = &frames->at(c);
         data = reinterpret_cast<const unsigned char *>(frame->payload().constData());
-        dataLen = frame->payload().count();
+        dataLen = frame->payload().size();
 
         outFile->write(QString::number(frame->timeStamp().microSeconds() / 1000000.0, 'f', 6).toUtf8());
         outFile->putChar(' ');
@@ -1788,7 +1788,7 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
                         {
                             for (int d = 9; d < (9 + payloadLen); d++)
                             {
-                                if (tokens.count() > d)
+                                if (tokens.size() > d)
                                 {
                                     bytes[d - 9] = static_cast<char>(tokens[d].toInt(nullptr, 16));
                                 }
@@ -1796,7 +1796,7 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
                                 {
                                     bytes[d - 9] = 0;
                                     foundErrors = true;
-                                    qDebug() << "D:" << d << " Count:" << tokens.count();
+                                    qDebug() << "D:" << d << " Count:" << tokens.size();
                                     qDebug() << "Expected byte missing! Original line: " << line;
                                 }
                             }
@@ -1806,7 +1806,7 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
                         {
                             for (int d = 10; d < (10 + payloadLen); d++)
                             {
-                                if (tokens.count() > d)
+                                if (tokens.size() > d)
                                 {
                                     bytes[d - 10] = static_cast<char>(tokens[d].toInt(nullptr, 16));
                                 }
@@ -1814,7 +1814,7 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
                                 {
                                     bytes[d - 10] = 0;
                                     foundErrors = true;
-                                    qDebug() << "D:" << d << " Count:" << tokens.count();
+                                    qDebug() << "D:" << d << " Count:" << tokens.size();
                                     qDebug() << "Expected byte missing! Original line: " << line;
                                 }
                             }
@@ -1854,7 +1854,7 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
                         if (tokens[4] == "r") thisFrame.setFrameType(QCanBusFrame::RemoteRequestFrame);
                         for (int d = 6; d < (6 + payloadLen); d++)
                         {
-                            if (tokens.count() > d)
+                            if (tokens.size() > d)
                             {
                                 bytes[d - 6] = static_cast<char>(tokens[d].toInt(nullptr, 16));
                             }
@@ -1862,7 +1862,7 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
                             {
                                 bytes[d - 6] = 0;
                                 foundErrors = true;
-                                qDebug() << "D:" << d << " Count:" << tokens.count();
+                                qDebug() << "D:" << d << " Count:" << tokens.size();
                                 qDebug() << "Expected byte missing! Original line: " << line;
                             }
                         }
@@ -1923,7 +1923,7 @@ bool FrameFileIO::saveCanalyzerASC(QString filename, const QVector<CANFrame>* fr
 
         frame = &frames->at(c);
         data = reinterpret_cast<const unsigned char *>(frame->payload().constData());
-        dataLen = frame->payload().count();
+        dataLen = frame->payload().size();
 
         uint64_t timeStamp = (frame->timeStamp().microSeconds() - offsetTime) / 1000000ull;
         int tsLen = QString::number(timeStamp).length();
@@ -2182,7 +2182,7 @@ bool FrameFileIO::saveNativeCSVFile(QString filename, const QVector<CANFrame>* f
 
         frame = &frames->at(c);
         data = reinterpret_cast<const unsigned char *>(frame->payload().constData());
-        dataLen = frame->payload().count();
+        dataLen = frame->payload().size();
 
         outFile->write(QString::number(frame->timeStamp().microSeconds()).toUtf8());
         outFile->putChar(44);
@@ -2274,7 +2274,7 @@ bool FrameFileIO::writeContinuousNative(const QVector<CANFrame>* frames, int beg
     {
         frame = &frames->at(c);
         data = reinterpret_cast<const unsigned char *>(frame->payload().constData());
-        dataLen = frame->payload().count();
+        dataLen = frame->payload().size();
 
         continuousFile.write(QString::number(frame->timeStamp().microSeconds()).toUtf8());
         continuousFile.putChar(44);
@@ -2342,7 +2342,7 @@ bool FrameFileIO::isGenericCSVFile(QString filename)
                 int ID = tokens[0].toInt(nullptr, 16);
                 if (ID < 1 || ID > 0x1FFFFFFF) isMatch = false;
 
-                if (tokens.count() < 2)
+                if (tokens.size() < 2)
                 {
                     isMatch = false;
                 }
@@ -2453,7 +2453,7 @@ bool FrameFileIO::saveGenericCSVFile(QString filename, const QVector<CANFrame>* 
 
         frame = &frames->at(c);
         data = reinterpret_cast<const unsigned char *>(frame->payload().constData());
-        dataLen = frame->payload().count();
+        dataLen = frame->payload().size();
 
         outFile->write(QString::number(frame->frameId(), 16).toUpper().rightJustified(8, '0').toUtf8());
         outFile->putChar(44);
@@ -2502,7 +2502,7 @@ bool FrameFileIO::isLogFile(QString filename)
                 if (tokens.length() >= 6)
                 {
                     QList<QByteArray> timeToks = tokens[0].split(':');
-                    if (timeToks.count() != 4) isMatch = false;
+                    if (timeToks.size() != 4) isMatch = false;
 
                     int ID = tokens[3].right(tokens[3].length() - 2).toInt(nullptr, 16);
                     if (ID < 1 || ID > 0x1FFFFFFF) isMatch = false;
@@ -2673,7 +2673,7 @@ bool FrameFileIO::saveLogFile(QString filename, const QVector<CANFrame>* frames)
 
         frame = &frames->at(c);
         data = reinterpret_cast<const unsigned char *>(frame->payload().constData());
-        dataLen = frame->payload().count();
+        dataLen = frame->payload().size();
 
         tempStamp = QDateTime::fromMSecsSinceEpoch(frame->timeStamp().microSeconds() / 1000);
         outFile->write(tempStamp.toString("hh:mm:ss:zzz").toUtf8());
@@ -2863,7 +2863,7 @@ bool FrameFileIO::saveIXXATFile(QString filename, const QVector<CANFrame>* frame
 
         frame = &frames->at(c);
         data = reinterpret_cast<const unsigned char *>(frame->payload().constData());
-        dataLen = frame->payload().count();
+        dataLen = frame->payload().size();
 
         tempStamp = QDateTime::fromMSecsSinceEpoch(frame->timeStamp().microSeconds() / 1000);
         outFile->write("\"" + tempStamp.toString("h:m:s.").toUtf8() + tempStamp.toString("z").rightJustified(3, '0').toUtf8() + "\"");
@@ -3043,7 +3043,7 @@ bool FrameFileIO::saveCANDOFile(QString filename, const QVector<CANFrame>* frame
 
         frame = &frames->at(c);
         inData = reinterpret_cast<const unsigned char *>(frame->payload().constData());
-        inDataLen = frame->payload().count();
+        inDataLen = frame->payload().size();
 
         for (int j = 0; j < 8; j++) data[4 + j] = (char)0xFF;
 
@@ -3243,7 +3243,7 @@ bool FrameFileIO::saveMicrochipFile(QString filename, const QVector<CANFrame>* f
 
         frame = &frames->at(c);
         data = reinterpret_cast<const unsigned char *>(frame->payload().constData());
-        dataLen = frame->payload().count();
+        dataLen = frame->payload().size();
 
         outFile->write(QString::number((frame->timeStamp().microSeconds() / 1000)).toUtf8());
         if (frame->isReceived) outFile->write(";RX;");
@@ -3297,7 +3297,7 @@ bool FrameFileIO::isTraceFile(QString filename)
                     if (tokens.length() > 3)
                     {
                         QList<QByteArray> timestampToks = tokens[1].split(':');
-                        if (timestampToks.count() != 4) isMatch = false;
+                        if (timestampToks.size() != 4) isMatch = false;
 
                         long ID = tokens[2].toLong(nullptr, 16);
                         if (ID < 1 || ID > 0x1FFFFFFF) isMatch = false;
@@ -3471,7 +3471,7 @@ bool FrameFileIO::saveTraceFile(QString filename, const QVector<CANFrame> * fram
 
         frame = &frames->at(c);
         data = reinterpret_cast<const unsigned char *>(frame->payload().constData());
-        dataLen = frame->payload().count();
+        dataLen = frame->payload().size();
 
          //1F D3 3F FF 08 FF E0 CB
         outFile->write(QString::number(lineCounter).rightJustified(10, ' ').toUtf8());
@@ -3544,7 +3544,7 @@ bool FrameFileIO::saveCanDumpFile(QString filename, const QVector<CANFrame> * fr
 
         frame = &frames->at(c);
         data = reinterpret_cast<const unsigned char *>(frame->payload().constData());
-        dataLen = frame->payload().count();
+        dataLen = frame->payload().size();
 
         outFile->write("(");
 
@@ -3587,7 +3587,6 @@ bool FrameFileIO::isCanDumpFile(QString filename)
     QRegularExpression IdValExp(QRegularExpression::anchoredPattern("^(\\S+)#(\\S+)$"));
     QRegularExpression valExp("(\\S{2})");
     int lineCounter = 0;
-    int pos = 0;
     bool isMatch = true;
     bool ret;
 
@@ -3608,7 +3607,7 @@ bool FrameFileIO::isCanDumpFile(QString filename)
                 /* tokenize */
                 tokens.clear();
                 tokens = line.simplified().split(' ');
-                if(tokens.count() < 3) isMatch = false;
+                if(tokens.size() < 3) isMatch = false;
 
                 /* timestamp */                
                 QRegularExpressionMatch timeExpMatched = timeExp.match(tokens[0]);
@@ -3623,7 +3622,7 @@ bool FrameFileIO::isCanDumpFile(QString filename)
                 {
                     //(1551774790.942758) can1 7A8 [8] F4 DC D1 83 0E 02 00 00
                     //     0               1     2   3  4 5  6  7  8  9  10 11
-                    if (tokens.count() < 4)
+                    if (tokens.size() < 4)
                     {
                         isMatch = false;
                         continue;
@@ -3641,7 +3640,7 @@ bool FrameFileIO::isCanDumpFile(QString filename)
                 {
                     /* ID & value */
                     //qDebug() << tokens[2];
-                    if (tokens.count() < 3)
+                    if (tokens.size() < 3)
                     {
                         isMatch = false;
                         continue;
@@ -3660,7 +3659,6 @@ bool FrameFileIO::isCanDumpFile(QString filename)
 
                     QString val= IdValExpMatched.captured(2);
 
-                    pos = 0;
                     int len = 0;
                     if (val.startsWith("R") && val.at(1).isDigit()) {
                         len = val.at(1).toLatin1() - '0';
@@ -3741,7 +3739,7 @@ bool FrameFileIO::loadCanDumpFile(QString filename, QVector<CANFrame>* frames)
             /* tokenize */
             tokens.clear();
             tokens = line.simplified().split(' ');
-            if(tokens.count()<3) continue;
+            if(tokens.size()<3) continue;
 
             /* timestamp */
             QRegularExpressionMatch timeExpMatched = timeExp.match(tokens[0]);
@@ -4222,7 +4220,7 @@ bool FrameFileIO::saveCabanaFile(QString filename, const QVector<CANFrame>* fram
 
         frame = &frames->at(c);
         data = reinterpret_cast<const unsigned char *>(frame->payload().constData());
-        dataLen = frame->payload().count();
+        dataLen = frame->payload().size();
 
         double tempTimeStamp = frame->timeStamp().microSeconds();
         tempTimeStamp /= 1000000;

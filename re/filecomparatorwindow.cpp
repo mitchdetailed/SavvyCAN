@@ -92,7 +92,7 @@ void FileComparatorWindow::loadInterestedFile()
     {
         ui->lblFirstFile->setText(resultingFileName);
         interestedFilename = resultingFileName;
-        if (interestedFrames.count() > 0 && referenceFrames.count() > 0) calculateDetails();
+        if (interestedFrames.size() > 0 && referenceFrames.size() > 0) calculateDetails();
     }
 
 }
@@ -107,7 +107,7 @@ void FileComparatorWindow::loadReferenceFile()
     if (FrameFileIO::loadFrameFile(resultingFileName, &referenceFrames))
     {
         ui->lblRefFrames->setText("Loaded frames: " + QString::number(referenceFrames.length()));
-        if (interestedFrames.count() > 0 && referenceFrames.count() > 0) calculateDetails();
+        if (interestedFrames.size() > 0 && referenceFrames.size() > 0) calculateDetails();
     }
 }
 
@@ -153,12 +153,12 @@ void FileComparatorWindow::calculateDetails()
     sharedBase->setText(0,"IDs found on both sides");
 
     //first we have to fill out the data structures to get ready to do the report
-    for (int x = 0; x < interestedFrames.count(); x++)
+    for (int x = 0; x < interestedFrames.size(); x++)
     {
         CANFrame frame = interestedFrames.at(x);
         DBC_MESSAGE *msg = dbcHandler->findMessage(frame.frameId());
         data = reinterpret_cast<const unsigned char *>(frame.payload().constData());
-        dataLen = frame.payload().count();
+        dataLen = frame.payload().size();
 
         if (interestedIDs.contains(frame.frameId())) //if we saw this ID before then add to the QList in there
         {
@@ -245,12 +245,12 @@ void FileComparatorWindow::calculateDetails()
 
     qApp->processEvents();
 
-    for (int x = 0; x < referenceFrames.count(); x++)
+    for (int x = 0; x < referenceFrames.size(); x++)
     {
         CANFrame frame = referenceFrames.at(x);
         DBC_MESSAGE *msg = dbcHandler->findMessage(frame.frameId());
         data = reinterpret_cast<const unsigned char *>(frame.payload().constData());
-        dataLen = frame.payload().count();
+        dataLen = frame.payload().size();
 
         if (referenceIDs.contains(frame.frameId())) //if we saw this ID before then add to the QList in there
         {

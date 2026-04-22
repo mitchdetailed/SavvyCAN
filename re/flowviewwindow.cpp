@@ -295,8 +295,8 @@ void FlowViewWindow::plottableDoubleClick(QCPAbstractPlottable* plottable, QMous
 {
     int id = 0;
     //apply transforms to get the X axis value where we double clicked
-    double coord = plottable->keyAxis()->pixelToCoord(event->localPos().x());
-    if (frameCache.count() > 0) id = frameCache[0].frameId();
+    double coord = plottable->keyAxis()->pixelToCoord(event->position().x());
+    if (frameCache.size() > 0) id = frameCache[0].frameId();
     if (secondsMode) emit sendCenterTimeID(id, coord);
     else emit sendCenterTimeID(id, coord / 1000000.0);
 }
@@ -322,7 +322,7 @@ void FlowViewWindow::gotCenterTimeID(uint32_t ID, double timestamp)
     }
 
     int bestIdx = -1;
-    for (int i = 0; i < frameCache.count(); i++)
+    for (int i = 0; i < frameCache.size(); i++)
     {
         if (frameCache[i].timeStamp().microSeconds() > t_stamp)
         {
@@ -478,7 +478,7 @@ void FlowViewWindow::updatedFrames(int numFrames)
     {
         if (numFrames > modelFrames->count()) return;
         unsigned int refID;
-        if (frameCache.count() > 0) refID = frameCache[0].frameId();
+        if (frameCache.size() > 0) refID = frameCache[0].frameId();
             else refID = 0;
         bool needRefresh = false;
         for (int i = modelFrames->count() - numFrames; i < modelFrames->count(); i++)
@@ -511,7 +511,7 @@ void FlowViewWindow::updatedFrames(int numFrames)
                     }
                     else
                     {
-                        newX[k].append(x[k].count());
+                        newX[k].append(x[k].size());
                     }
                     newY[k].append(data[k]);
                     needRefresh = true;
@@ -520,7 +520,7 @@ void FlowViewWindow::updatedFrames(int numFrames)
         }
         if (ui->cbLiveMode->checkState() == Qt::Checked)
         {
-            currentPosition = frameCache.count() - 1;
+            currentPosition = frameCache.size() - 1;
             memset(currBytes, 0, 64);
             memcpy(currBytes, frameCache.at(currentPosition).payload().data(), frameCache.at(currentPosition).payload().length());
             memcpy(refBytes, currBytes, 64);
@@ -558,7 +558,7 @@ void FlowViewWindow::createGraph(int byteNum)
 
     bool graphByTime = ui->cbTimeGraph->isChecked();
 
-    int numEntries = frameCache.count();
+    int numEntries = frameCache.size();
 
     x[byteNum].clear();
     y[byteNum].clear();
@@ -624,7 +624,7 @@ void FlowViewWindow::refreshIDList()
 
 void FlowViewWindow::updateFrameLabel()
 {
-    ui->lblNumFrames->setText(QString::number(currentPosition) + tr(" of ") + QString::number(frameCache.count()));
+    ui->lblNumFrames->setText(QString::number(currentPosition) + tr(" of ") + QString::number(frameCache.size()));
 }
 
 void FlowViewWindow::changeID(QString newID)
@@ -652,7 +652,7 @@ void FlowViewWindow::changeID(QString newID)
     ui->flowView->setBytesToDraw(maxBytes);
     currentPosition = 0;
 
-    if (frameCache.count() == 0) return;
+    if (frameCache.size() == 0) return;
 
     removeAllGraphs();
     //for (uint32_t c = 0; c < frameCache.at(0).len; c++)
@@ -767,7 +767,7 @@ void FlowViewWindow::timerTriggered()
     if (!ui->cbLoopPlayback->isChecked())
     {
         if (currentPosition == 0) playbackActive = false;
-        if (currentPosition == (frameCache.count() - 1)) playbackActive = false;
+        if (currentPosition == (frameCache.size() - 1)) playbackActive = false;
     }
 }
 
@@ -795,7 +795,7 @@ void FlowViewWindow::updateDataView()
     ui->flowView->setReference(refBytes, false);
     ui->flowView->updateData(currBytes, true);
 
-    ui->timelineSlider->setMaximum(frameCache.count() - 1);
+    ui->timelineSlider->setMaximum(frameCache.size() - 1);
     ui->timelineSlider->setValue(currentPosition);
 
     for (int i = 0; i < 8; i++)
@@ -815,7 +815,7 @@ void FlowViewWindow::updateDataView()
 }
 
 void FlowViewWindow::gotoFrame(int frame) {
-    if (frameCache.count() >= frame) currentPosition = frame;
+    if (frameCache.size() >= frame) currentPosition = frame;
     else currentPosition = 0;
 
     if (ui->cbSync->checkState() == Qt::Checked) emit sendCenterTimeID(frameCache[currentPosition].frameId(), frameCache[currentPosition].timeStamp().microSeconds() / 1000000.0);
@@ -826,13 +826,13 @@ void FlowViewWindow::updatePosition(bool forward)
 
     if (forward)
     {
-        if (currentPosition < (frameCache.count() - 1)) currentPosition++;
+        if (currentPosition < (frameCache.size() - 1)) currentPosition++;
         else if (ui->cbLoopPlayback->isChecked()) currentPosition = 0;
     }
     else
     {
         if (currentPosition > 0) currentPosition--;
-        else if (ui->cbLoopPlayback->isChecked()) currentPosition = frameCache.count() - 1;
+        else if (ui->cbLoopPlayback->isChecked()) currentPosition = frameCache.size() - 1;
     }
 
     if (ui->cbAutoRef->isChecked())
@@ -875,11 +875,11 @@ void FlowViewWindow::updatePosition(bool forward)
 
 void FlowViewWindow::updateGraphLocation()
 {
-    if (frameCache.count() == 0) return;
+    if (frameCache.size() == 0) return;
     int start = currentPosition - ui->graphRangeSlider->value();
     if (start < 0) start = 0;
     int end = currentPosition + ui->graphRangeSlider->value();
-    if (end >= frameCache.count()) end = frameCache.count() - 1;
+    if (end >= frameCache.size()) end = frameCache.size() - 1;
     if (ui->cbTimeGraph->isChecked())
     {
         if (secondsMode)

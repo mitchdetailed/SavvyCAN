@@ -287,7 +287,6 @@ DBCSignalEditor::DBCSignalEditor(QWidget *parent) :
             [=]()
             {
                 if (currentSignal == nullptr) return;
-                int temp;
                 if (currentSignal->multiplexDbcString(DBC_SIGNAL::MuxStringFormat_UI) != ui->txtMultiplexValues->text())
                 {
                     //TODO: could look up the multiplexor and ensure that the value is within a range that the multiplexor could return
@@ -449,7 +448,7 @@ void DBCSignalEditor::setFileIdx(int idx)
     if (idx < 0 || idx > dbcHandler->getFileCount() - 1) return;
     dbcFile = dbcHandler->getFileByIdx(idx);
 
-    for (int x = 0; x < dbcFile->dbc_nodes.count(); x++)
+    for (int x = 0; x < dbcFile->dbc_nodes.size(); x++)
     {
         ui->comboReceiver->addItem(dbcFile->dbc_nodes[x].name);
     }
@@ -741,7 +740,7 @@ void DBCSignalEditor::fillValueTable(DBC_SIGNAL *sig)
 
     ui->valuesTable->setEnabled(true);
 
-    for (int i = 0; i < sig->valList.count(); i++)
+    for (int i = 0; i < sig->valList.size(); i++)
     {
         QTableWidgetItem *val = new QTableWidgetItem(Utility::formatNumber((uint64_t)sig->valList[i].value));
         QTableWidgetItem *desc = new QTableWidgetItem(sig->valList[i].descript);

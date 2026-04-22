@@ -49,11 +49,11 @@ void TestCanCon::connectToDevice()
     conn_p->start();
 
     /* wait for a signal */
-    for(int i=0 ; (spy.count() != 1) && (i < 10) ; i++)
+    for(int i=0 ; (spy.size() != 1) && (i < 10) ; i++)
         QTest::qWait(500);
 
 
-    QCOMPARE(spy.count(), 1); // make sure the signal was emitted exactly one time
+    QCOMPARE(spy.size(), 1); // make sure the signal was emitted exactly one time
     QList<QVariant> arguments = spy.takeFirst(); // take the first signal
 
     QVERIFY(arguments.at(0).toInt() == CANCon::CONNECTED); // verify the first argument
@@ -156,7 +156,7 @@ void TestCanCon::filter_data()
     /* find 3 different ids */
     QVector<quint32> ids;
 
-    while( queue.peek() && ids.count()!=3 )
+    while( queue.peek() && ids.size()!=3 )
     {
         CANFrame* canf_p = queue.peek();
         QVERIFY(pValidateFrame(conn_p, canf_p));
@@ -167,7 +167,7 @@ void TestCanCon::filter_data()
         queue.dequeue();
     }
 
-    QCOMPARE(ids.count(), 3);
+    QCOMPARE(ids.size(), 3);
 
     /* stop connection */
     conn_p->stop();
@@ -237,7 +237,7 @@ void TestCanCon::filter()
     QTest::qWait(1000);
 
     if(signalReceived)
-        QVERIFY(spy.count()>0);
+        QVERIFY(spy.size()>0);
 
     int i;
     for(i=0 ; queue.peek() && i<1000 ; i++)

@@ -358,10 +358,10 @@ void FramePlaybackWindow::EndOfFrameCache()
     if (forward)
     {
         currentSeqNum++; //go forward in the sequence
-        if (currentSeqNum == seqItems.count()) //are we at the end of the sequence?
+        if (currentSeqNum == seqItems.size()) //are we at the end of the sequence?
         {
             //reset the loop figures for each sequence entry
-            for (int i = 0; i < seqItems.count(); i++) seqItems[i].currentLoopCount = 0;
+            for (int i = 0; i < seqItems.size(); i++) seqItems[i].currentLoopCount = 0;
             currentSeqNum = 0;
             if (ui->cbLoop->isChecked()) //go back to beginning if we're looping the sequence
             {
@@ -386,8 +386,8 @@ void FramePlaybackWindow::EndOfFrameCache()
         if (currentSeqNum == -1) //are we trying to go past the beginning?
         {
             //reset the loop figures for each sequence entry
-            for (int i = 0; i < seqItems.count(); i++) seqItems[i].currentLoopCount = 0;
-            currentSeqNum = seqItems.count() - 1;
+            for (int i = 0; i < seqItems.size(); i++) seqItems[i].currentLoopCount = 0;
+            currentSeqNum = seqItems.size() - 1;
             if (ui->cbLoop->isChecked()) //go back to the last sequence entry if we're looping
             {
 
@@ -432,9 +432,9 @@ void FramePlaybackWindow::updateFrameLabel()
     ui->lblCurrPlayback->setText(currentSeqItem->filename);
 
     if (wantPlaying && !isPlaying)
-        ui->lblPosition->setText(QString::number(currentPosition) + tr(" of ") + QString::number(seqItems[row].data.count()) + "  (WAITING)");
+        ui->lblPosition->setText(QString::number(currentPosition) + tr(" of ") + QString::number(seqItems[row].data.size()) + "  (WAITING)");
     else
-        ui->lblPosition->setText(QString::number(currentPosition) + tr(" of ") + QString::number(seqItems[row].data.count()));
+        ui->lblPosition->setText(QString::number(currentPosition) + tr(" of ") + QString::number(seqItems[row].data.size()));
 }
 
 void FramePlaybackWindow::seqTableCellClicked(int row, int col)
@@ -463,7 +463,7 @@ void FramePlaybackWindow::fillIDHash(SequenceItem &item)
 
     item.idFilters.clear();
 
-    for (int i = 0; i < item.data.count(); i++)
+    for (int i = 0; i < item.data.size(); i++)
     {
         id = item.data[i].frameId();
         if (!item.idFilters.contains(id))
@@ -497,7 +497,7 @@ void FramePlaybackWindow::btnDeleteCurrSeq()
 
     seqItems.removeAt(currentSeqNum);
     ui->tblSequence->removeRow(currentSeqNum);
-    if (seqItems.count() > 0)
+    if (seqItems.size() > 0)
     {
         currentSeqNum = 0;
         currentSeqItem = &seqItems[currentSeqNum];
@@ -611,7 +611,7 @@ void FramePlaybackWindow::btnStopClick()
     wantPlaying = false;
     haveIncomingTraffic = false;
     playbackObject.stopPlayback();
-    if (seqItems.count() > 0)
+    if (seqItems.size() > 0)
     {
         currentSeqNum = 0;
         currentSeqItem = &seqItems[currentSeqNum];
@@ -653,7 +653,7 @@ void FramePlaybackWindow::btnFwdOneClick()
 
 bool FramePlaybackWindow::checkNoSeqLoaded()
 {
-    if (seqItems.count() == 0)
+    if (seqItems.size() == 0)
     {
         QMessageBox::warning(this, "Warning", "Cannot begin playback until at\nleast one playback source is loaded.");
         return false;

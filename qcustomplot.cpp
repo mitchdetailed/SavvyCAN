@@ -32363,7 +32363,7 @@ void QCPPolarAxisRadial::draw(QCPPainter *painter)
       // possibly draw tick labels:
       if (!mTickVectorLabels.isEmpty())
       {
-        if ((!mRangeReversed && (i < mTickVectorLabels.count()-1 || mRadius-r > 10)) ||
+        if ((!mRangeReversed && (i < mTickVectorLabels.size()-1 || mRadius-r > 10)) ||
             (mRangeReversed && (i > 0 || mRadius-r > 10))) // skip last label if it's closer than 10 pixels to angular axis
           mLabelPainter.drawTickLabel(painter, tickPosition+tickNormal*mSubTickLengthOut, mTickVectorLabels.at(i));
       }
@@ -33088,7 +33088,7 @@ void QCPPolarAxisAngular::draw(QCPPainter *painter)
       // draw tick labels:
       if (!mTickVectorLabels.isEmpty())
       {
-        if (i < mTickVectorLabels.count()-1 || (mTickVectorCosSin.at(i)-mTickVectorCosSin.first()).manhattanLength() > 5/180.0*M_PI) // skip last label if it's closer than approx 5 degrees to first
+        if (i < mTickVectorLabels.size()-1 || (mTickVectorCosSin.at(i)-mTickVectorCosSin.first()).manhattanLength() > 5/180.0*M_PI) // skip last label if it's closer than approx 5 degrees to first
           mLabelPainter.drawTickLabel(painter, outerTick, mTickVectorLabels.at(i));
       }
     }

@@ -208,7 +208,7 @@ void ISOTP_InterpreterWindow::saveList()
                 return;
             }
 
-            int rows = messages.count();
+            int rows = messages.size();
             for (int r = 0 ; r < rows; r++)
             {
                 ISOTP_MESSAGE msg = messages.at(r);

@@ -175,7 +175,7 @@ void DBCMessageEditor::setFileIdx(int idx)
 
     suppressEditCallbacks = true;
     ui->comboSender->clear();
-    for (int x = 0; x < dbcFile->dbc_nodes.count(); x++)
+    for (int x = 0; x < dbcFile->dbc_nodes.size(); x++)
     {
         ui->comboSender->addItem(dbcFile->dbc_nodes[x].name);
     }
