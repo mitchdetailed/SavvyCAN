@@ -190,7 +190,7 @@ void GraphingWindow::updatedFrames(int numFrames)
         //now instead of removing the graphs regenerate them which will blank them out but leave them there in case
         //more traffic that matches comes in or someone otherwise loads more data
         ui->graphingView->clearGraphs(); //temporarily remove the graphs from the graph view
-        for (int i = 0; i < graphParams.count(); i++)
+        for (int i = 0; i < graphParams.size(); i++)
         {
             createGraph(graphParams[i], false); //regenerate each one
         }
@@ -203,7 +203,7 @@ void GraphingWindow::updatedFrames(int numFrames)
         //regenerate them instead
         ui->graphingView->clearGraphs(); //temporarily remove the graphs from the graph view
         //needScaleSetup = true;
-        for (int i = 0; i < graphParams.count(); i++)
+        for (int i = 0; i < graphParams.size(); i++)
         {
             createGraph(graphParams[i], false); //regenerate each one
         }
@@ -213,7 +213,7 @@ void GraphingWindow::updatedFrames(int numFrames)
     {  
         if (numFrames > modelFrames->count()) return;
 
-        for (int j = 0; j < graphParams.count(); j++)
+        for (int j = 0; j < graphParams.size(); j++)
         {
             appendedToGraph = false;
             x.clear();
@@ -263,7 +263,7 @@ void GraphingWindow::plottableClick(QCPAbstractPlottable* plottable, int dataIdx
     qDebug() << "plottableClick";
     double x, y;
     QCPGraph *graph = reinterpret_cast<QCPGraph *>(plottable);
-    graph->pixelsToCoords(event->localPos(), x, y);
+    graph->pixelsToCoords(event->position(), x, y);
     locationText->setText("X: " + QString::number(x, 'f', 3) + " Y: " + QString::number(y, 'f', 3));
 }
 
@@ -273,15 +273,15 @@ void GraphingWindow::plottableDoubleClick(QCPAbstractPlottable* plottable, int d
     qDebug() << "plottableDoubleClick";
     int id = 0;
     //apply transforms to get the X axis value where we double clicked
-    double coord = plottable->keyAxis()->pixelToCoord(event->localPos().x());
+    double coord = plottable->keyAxis()->pixelToCoord(event->position().x());
     id = plottable->property("id").toInt();
     if (Utility::timeStyle == TS_SECONDS) emit sendCenterTimeID(id, coord);
     else emit sendCenterTimeID(id, coord / 1000000.0);
 
     double x, y;
     QCPGraph *graph = reinterpret_cast<QCPGraph *>(plottable);
-    graph->pixelsToCoords(event->localPos(), x, y);
-    x = ui->graphingView->xAxis->pixelToCoord(event->localPos().x());
+    graph->pixelsToCoords(event->position(), x, y);
+    x = ui->graphingView->xAxis->pixelToCoord(event->position().x());
 
     itemTracer->setGraph(graph);
     itemTracer->setVisible(true);
@@ -298,7 +298,7 @@ void GraphingWindow::gotCenterTimeID(uint32_t ID, double timestamp)
     //its problematic to try to highlight a graph since we get the ID
     //and timestamp not the signal in question so there is no real way
     //to know which graph. But, if that changes here is a stub
-    //for (int i = 0; i < graphParams.count(); i++)
+    //for (int i = 0; i < graphParams.size(); i++)
     //{
     //}
 
@@ -504,9 +504,9 @@ void GraphingWindow::resetView()
 {
     double yminval=10000000.0, ymaxval = -1000000.0;
     double xminval=100000000000, xmaxval = -10000000000.0;
-    for (int i = 0; i < graphParams.count(); i++)
+    for (int i = 0; i < graphParams.size(); i++)
     {
-        for (int j = 0; j < graphParams[i].x.count(); j++)
+        for (int j = 0; j < graphParams[i].x.size(); j++)
         {
             if (graphParams[i].x[j] < xminval) xminval = graphParams[i].x[j];
             if (graphParams[i].x[j] > xmaxval) xmaxval = graphParams[i].x[j];
@@ -569,7 +569,7 @@ void GraphingWindow::removeSelectedGraph()
     if (ui->graphingView->selectedGraphs().size() > 0)
     {
         int idx = -1;
-        for (int i = 0; i < graphParams.count(); i++)
+        for (int i = 0; i < graphParams.size(); i++)
         {
             if (graphParams[i].ref == ui->graphingView->selectedGraphs().constFirst())
             {
@@ -592,7 +592,7 @@ void GraphingWindow::removeSelectedGraph()
 
         ui->graphingView->removeGraph(ui->graphingView->selectedGraphs().constFirst());
 
-        if (graphParams.count() == 0) needScaleSetup = true;
+        if (graphParams.size() == 0) needScaleSetup = true;
 
         ui->graphingView->replot();
     }
@@ -603,7 +603,7 @@ void GraphingWindow::editSelectedGraph()
     if (ui->graphingView->selectedGraphs().size() > 0)
     {
         int idx = -1;
-        for (int i = 0; i < graphParams.count(); i++)
+        for (int i = 0; i < graphParams.size(); i++)
         {
             if (graphParams[i].ref == ui->graphingView->selectedGraphs().constFirst())
             {
@@ -781,8 +781,8 @@ void GraphingWindow::saveSpreadsheet()
         int numGraphs = graphParams.length();
         for (auto && graph : graphParams) {
             xMin = std::min(xMin, graph.x[0]);
-            xMax = std::max(xMax, graph.x[graph.x.count() - 1]);
-            maxCount = std::max(maxCount, graph.x.count());
+            xMax = std::max(xMax, graph.x[graph.x.size() - 1]);
+            maxCount = std::max(maxCount, static_cast<int>(graph.x.size()));
         }
         qDebug() << "xMin: " << xMin;
         qDebug() << "xMax: " << xMax;
@@ -826,7 +826,7 @@ void GraphingWindow::saveSpreadsheet()
                     value = graphParams[k].y[indices[k]];
                 }
                 //2: The opposite, we're at the end of this graph but the slices keep going
-                else if (indices[k] == (graphParams[k].x.count() - 1) && graphParams[k].x[indices[k]] < currentX)
+                else if (indices[k] == (graphParams[k].x.size() - 1) && graphParams[k].x[indices[k]] < currentX)
                 {
                     value = graphParams[k].y[indices[k]];
                 }
@@ -1324,7 +1324,7 @@ void GraphingWindow::appendToGraph(GraphParams &params, CANFrame &frame, QVector
 
 void GraphingWindow::createGraph(GraphParams &params, bool createGraphParam)
 {
-    int64_t tempVal; //64 bit temp value.
+    int64_t tempVal = 0; //64 bit temp value.
     double yminval=10000000.0, ymaxval = -1000000.0;
     double xminval=10000000000.0, xmaxval = -10000000000.0;
     GraphParams *refParam = &params;
@@ -1349,7 +1349,7 @@ void GraphingWindow::createGraph(GraphParams &params, bool createGraphParam)
     //to fix weirdness where a graph that has no data won't be able to be edited, selected, or deleted properly
     //we'll check for the condition that there is nothing to graph and add a single dummy frame to the cache
     //that has all data bytes = 0. This allows the graph to be edited and deleted. No idea why you can't otherwise.
-    if (frameCache.count() == 0)
+    if (frameCache.size() == 0)
     {
         CANFrame dummy;
         dummy.setFrameId(params.ID);
@@ -1359,7 +1359,7 @@ void GraphingWindow::createGraph(GraphParams &params, bool createGraphParam)
         frameCache.append(dummy);
     }
 
-    int numEntries = frameCache.count() / params.stride;
+    int numEntries = frameCache.size() / params.stride;
     if (numEntries < 1) numEntries = 1; //could happen if stride is larger than frame count
 
     params.x.clear();

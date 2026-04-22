@@ -226,7 +226,7 @@ void RangeStateWindow::recalcButton()
     }
 
     progress.cancel();
-    qDebug() << "Found " << foundSignals.count() << " signals total.";
+    qDebug() << "Found " << foundSignals.size() << " signals total.";
 }
 
 /*
@@ -282,11 +282,11 @@ bool RangeStateWindow::processSignal(int startBit, int bitLength, int sensitivit
     int64_t highestValue = -1000000000000LL;
     int64_t lowestValue = 1000000000000LL;
     double lerpPoint = ((double)sensitivity - 10.0) / 240.0;
-    int numFrames = frameCache.count();
+    int numFrames = frameCache.size();
 
-    scaledVals.reserve(frameCache.count());
-    diff1.reserve(frameCache.count() - 1);
-    diff2.reserve(frameCache.count() - 2);
+    scaledVals.reserve(frameCache.size());
+    diff1.reserve(frameCache.size() - 1);
+    diff2.reserve(frameCache.size() - 2);
 
     int i;
 
@@ -319,7 +319,7 @@ bool RangeStateWindow::processSignal(int startBit, int bitLength, int sensitivit
         diff1.append(valu);
     }
 
-    for (i = 1; i < diff1.count(); i++)
+    for (i = 1; i < diff1.size(); i++)
     {
         valu = diff1[i-1] - diff1[i];
         diff2.append(valu);
@@ -331,7 +331,7 @@ bool RangeStateWindow::processSignal(int startBit, int bitLength, int sensitivit
     int comparisonValue = Utility::Lerp((double)range * 0.55, 0, lerpPoint);
     qDebug() << " 1st Delta comparisonvalue: " << comparisonValue;
     int overValues = 0;
-    for (i = 0; i < diff1.count(); i++)
+    for (i = 0; i < diff1.size(); i++)
     {
         if (abs(diff1[i]) > comparisonValue) overValues++;
     }
@@ -346,7 +346,7 @@ bool RangeStateWindow::processSignal(int startBit, int bitLength, int sensitivit
         maxOvers = Utility::Lerp(8, 2, lerpPoint); //really clamp down on second order over limits
         qDebug() << "2nd Delta comparisonvalue: " << comparisonValue;
         overValues = 0;
-        for (i = 0; i < diff2.count(); i++)
+        for (i = 0; i < diff2.size(); i++)
         {
             if (abs(diff2[i]) > comparisonValue) overValues++;
         }
@@ -399,7 +399,7 @@ void RangeStateWindow::createGraph(QVector<int> values)
     int tempVal;
     float minval=1000000, maxval = -100000;
 
-    int numEntries = values.count();
+    int numEntries = values.size();
 
     ui->graphSignal->clearGraphs();
 
@@ -472,7 +472,7 @@ void RangeStateWindow::clickedSignalList(int idx)
         if (modelFrames->at(j).frameId() == id) frameCache.append(modelFrames->at(j));
     }
 
-    int numFrames = frameCache.count();
+    int numFrames = frameCache.size();
     QVector<int> values;
     values.reserve(numFrames);
     for (int i = 0; i < numFrames; i++) values.append((int)((Utility::processIntegerSignal(frameCache.at(i).payload(), startBit, bitLength, !isBigEndian, isSigned))));

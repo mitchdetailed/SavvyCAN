@@ -922,7 +922,7 @@ void GVRetSerial::procRXChar(unsigned char c)
             mBusData[0].mBus.setSpeed(can0Baud);
             mBusData[0].mBus.setActive(can0Enabled);
             mBusData[0].mConfigured = true;
-            if (mBusData.count() > 1)
+            if (mBusData.size() > 1)
             {
                 mBusData[1].mBus.setSpeed(can1Baud);
                 mBusData[1].mBus.setActive(can1Enabled);

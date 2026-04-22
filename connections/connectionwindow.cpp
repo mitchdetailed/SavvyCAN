@@ -558,10 +558,10 @@ void ConnectionWindow::loadConnections()
     QVector<int> isCanFds = settings.value("connections/isCanFds_0").value<QVector<int>>();
     QVector<int> serialSpeeds = settings.value("connections/serialSpeeds").value<QVector<int>>();
     //don't load the connections if the three setting arrays above aren't all the same size.
-    if (portNames.count() != driverNames.count() || devTypes.count() != driverNames.count() ||  busSpeeds.count() != driverNames.count() || isCanFds.count() != driverNames.count() ||
-	DataRates.count() != driverNames.count() || serialSpeeds.count() != driverNames.count() ) return;
+    if (portNames.size() != driverNames.size() || devTypes.size() != driverNames.size() ||  busSpeeds.size() != driverNames.size() || isCanFds.size() != driverNames.size() ||
+	DataRates.size() != driverNames.size() || serialSpeeds.size() != driverNames.size() ) return;
 
-    for(int i = 0 ; i < portNames.count() ; i++)
+    for(int i = 0 ; i < portNames.size() ; i++)
     {
       CANConnection* conn_p = create((CANCon::type)devTypes[i], portNames[i], driverNames[i], serialSpeeds[i], busSpeeds[i], isCanFds[i] ? true : false, DataRates[i]);
         /* add connection to model */

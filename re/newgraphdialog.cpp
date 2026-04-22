@@ -329,7 +329,7 @@ void NewGraphDialog::loadNodes()
 
         QList<QString> names;
 
-        for (int x = 0; x < thisFile->dbc_nodes.count(); x++)
+        for (int x = 0; x < thisFile->dbc_nodes.size(); x++)
         {
             bool messagesInNode = false;
             for (int m = 0; m < thisFile->messageHandler->getCount(); m++)
@@ -347,12 +347,12 @@ void NewGraphDialog::loadNodes()
             }
         }
 
-        if(names.count() > 0)
+        if(names.size() > 0)
         {
             names.sort();
             ui->cbNodes->addItem("----" + thisFile->getFilename());
             Utility::SetComboBoxItemEnabled(ui->cbNodes, ui->cbNodes->count() -1, false);
-            for(int i=0; i<names.count(); i++)
+            for(int i=0; i<names.size(); i++)
                 ui->cbNodes->addItem(names[i]);
         }
     }

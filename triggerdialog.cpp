@@ -14,7 +14,7 @@ TriggerDialog::TriggerDialog(QList<Trigger> trigs, QWidget *parent) :
     ui->cmMsgID->setMinimumWidth(250);
 
     //if there are no triggers then create a default one
-    if (triggers.count() == 0)
+    if (triggers.size() == 0)
     {
         Trigger trig;
         trig.ID = 0;
@@ -343,7 +343,7 @@ void TriggerDialog::addNewTrigger()
 
 void TriggerDialog::deleteSelectedTrigger()
 {
-    if (triggers.count() == 1)
+    if (triggers.size() == 1)
     {
         QMessageBox::information(this, "Error", "Cannot delete the last trigger");
         return;

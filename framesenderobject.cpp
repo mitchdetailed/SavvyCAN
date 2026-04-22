@@ -136,7 +136,7 @@ void FrameSenderObject::removeSendRecord(int idx)
 */
 FrameSendData *FrameSenderObject::getSendRecordRef(int idx)
 {
-    if (idx < 0 || idx >= sendingData.count()) return nullptr;
+    if (idx < 0 || idx >= sendingData.size()) return nullptr;
     return &sendingData[idx];
 }
 
@@ -165,26 +165,26 @@ void FrameSenderObject::timerTriggered()
         //qDebug() << sendingLastTimeStamp;
         //qDebug() << "El: " << elapsed;
         statusCounter++;
-        for (int i = 0; i < sendingData.count(); i++)
+        for (int i = 0; i < sendingData.size(); i++)
         {
             sendData = &sendingData[i];
             if (!sendData->enabled)
             {
-                if (sendData->triggers.count() > 0)
+                if (sendData->triggers.size() > 0)
                 {
-                    for (int j = 0; j < sendData->triggers.count(); j++)    //resetting currCount when line is disabled
+                    for (int j = 0; j < sendData->triggers.size(); j++)    //resetting currCount when line is disabled
                     {
                         sendData->triggers[j].currCount = 0;
                     }
                 }
                 continue; //abort any processing on this if it is not enabled.
             }
-            if (sendData->triggers.count() == 0)
+            if (sendData->triggers.size() == 0)
             {
                 //qDebug() << "No triggers to process";
                 break;
             }
-            for (int j = 0; j < sendData->triggers.count(); j++)
+            for (int j = 0; j < sendData->triggers.size(); j++)
             {
                 trigger = &sendData->triggers[j];
                 //if ( (trigger->currCount >= trigger->maxCount) || (trigger->maxCount == -1) ) continue; //don't process if we've sent max frames we were supposed to
@@ -208,7 +208,7 @@ void FrameSenderObject::timerTriggered()
         }
 
         //if we have any frames to send after the above then send as a batch
-        if (sendingList.count() > 0) CANConManager::getInstance()->sendFrames(sendingList);
+        if (sendingList.size() > 0) CANConManager::getInstance()->sendFrames(sendingList);
         mutex.unlock();
     }
     else
@@ -269,11 +269,11 @@ void FrameSenderObject::updatedFrames(int numFrames)
 
 void FrameSenderObject::processIncomingFrame(CANFrame *frame)
 {
-    for (int sd = 0; sd < sendingData.count(); sd++)
+    for (int sd = 0; sd < sendingData.size(); sd++)
     {
-        if (sendingData[sd].triggers.count() == 0) continue;
+        if (sendingData[sd].triggers.size() == 0) continue;
         bool passedChecks = true;
-        for (int trig = 0; trig < sendingData[sd].triggers.count(); trig++)
+        for (int trig = 0; trig < sendingData[sd].triggers.size(); trig++)
         {
             Trigger *thisTrigger = &sendingData[sd].triggers[trig];
             //need to ensure that this trigger is actually related to frames incoming.
@@ -365,14 +365,14 @@ void FrameSenderObject::doModifiers(int idx)
     Modifier *mod;
     ModifierOp op;
 
-    if (sendData->modifiers.count() == 0) return; //if no modifiers just leave right now
+    if (sendData->modifiers.size() == 0) return; //if no modifiers just leave right now
 
     //qDebug() << "Executing mods";
 
-    for (int i = 0; i < sendData->modifiers.count(); i++)
+    for (int i = 0; i < sendData->modifiers.size(); i++)
     {
         mod = &sendData->modifiers[i];
-        for (int j = 0; j < mod->operations.count(); j++)
+        for (int j = 0; j < mod->operations.size(); j++)
         {
             op = mod->operations.at(j);
             if (op.first.ID == -1)

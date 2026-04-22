@@ -61,7 +61,7 @@ quint64 FramePlaybackObject::updatePosition(bool forward)
 
     if (forward)
     {
-        if (currentPosition < (currentSeqItem->data.count() - 1)) currentPosition++; //still in same file so keep going
+        if (currentPosition < (currentSeqItem->data.size() - 1)) currentPosition++; //still in same file so keep going
         else //hit the end of the current file
         {
             qDebug() << "hit end of current sequence";
@@ -82,7 +82,7 @@ quint64 FramePlaybackObject::updatePosition(bool forward)
         {
             qDebug() << "hit start of current sequence";
             currentSeqItem->currentLoopCount++;
-            currentPosition = currentSeqItem->data.count() - 1;
+            currentPosition = currentSeqItem->data.size() - 1;
             if (currentSeqItem->currentLoopCount == currentSeqItem->maxLoops) //have we looped enough times?
             {
                 playbackActive = false;
@@ -100,7 +100,7 @@ quint64 FramePlaybackObject::peekPosition(bool forward)
     int peekCurrentPosition = currentPosition;
     if (forward)
     {
-        if (peekCurrentPosition < (currentSeqItem->data.count() - 1)) peekCurrentPosition++; //still in same file so keep going
+        if (peekCurrentPosition < (currentSeqItem->data.size() - 1)) peekCurrentPosition++; //still in same file so keep going
         else //hit the end of the current file
         {
             return 0xFFFFFFFFFFFFFFFFull;
@@ -401,8 +401,8 @@ void FramePlaybackObject::timerTriggered()
         emit statusUpdate(currentPosition);
     }
 
-    //qDebug() << "sb: " << sendingBuffer.count();
-    if (sendingBuffer.count() > 0) CANConManager::getInstance()->sendFrames(sendingBuffer);
+    //qDebug() << "sb: " << sendingBuffer.size();
+    if (sendingBuffer.size() > 0) CANConManager::getInstance()->sendFrames(sendingBuffer);
 }
 
 

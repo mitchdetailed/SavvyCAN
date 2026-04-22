@@ -2,6 +2,7 @@
 #include "dbchandler.h"
 #include "utility.h"
 #include <QtMath>
+#include <cstring>
 
 DBC_MESSAGE::DBC_MESSAGE()
 {
@@ -108,7 +109,7 @@ bool DBC_SIGNAL::parseDbcMultiplexUiString(const QString &multiplexes, QString &
         bool ok = false;
         if (mux.contains(QChar('-'))) {
             const auto minMax = mux.split(QChar('-'));
-            if (minMax.count() != 2) {
+            if (minMax.size() != 2) {
                 errorString = QObject::tr("The %1 part contains more than one '-' sign").arg(mux);
                 return false;
             }
@@ -262,7 +263,9 @@ bool DBC_SIGNAL::processAsText(const CANFrame &frame, QString &outString, bool o
         //a 32 bit single precision float. That's evil incarnate but it is very fast and small
         //in terms of new code.
         result = Utility::processIntegerSignal(frame.payload(), startBit, 32, intelByteOrder, false);
-        endResult = (*((float *)(&result)) * factor) + bias; //look away! This is awful. I don't even know for sure if it works. Should test that.
+        float floatResult32;
+        memcpy(&floatResult32, &result, sizeof(floatResult32));
+        endResult = (floatResult32 * factor) + bias;
     }
     else //double precision float
     {
@@ -274,7 +277,9 @@ bool DBC_SIGNAL::processAsText(const CANFrame &frame, QString &outString, bool o
         //like the above, this is rotten and evil and wrong in so many ways. Force
         //calculation of a 64 bit integer and then cast it into a double.
         result = Utility::processIntegerSignal(frame.payload(), startBit, 64, intelByteOrder, false);
-        endResult = (*((double *)(&result)) * factor) + bias;
+        double doubleResult64;
+        memcpy(&doubleResult64, &result, sizeof(doubleResult64));
+        endResult = (doubleResult64 * factor) + bias;
     }
 
     outString = makePrettyOutput(endResult, result, outputName, isInteger, outputUnit);
@@ -284,9 +289,9 @@ bool DBC_SIGNAL::processAsText(const CANFrame &frame, QString &outString, bool o
 
 bool DBC_SIGNAL::getValueString(int64_t intVal, QString &outString)
 {
-    if (valList.count() > 0) //if this is a value list type then look it up and display the proper string
+    if (valList.size() > 0) //if this is a value list type then look it up and display the proper string
     {
-        for (int x = 0; x < valList.count(); x++)
+        for (int x = 0; x < valList.size(); x++)
         {
             if (valList.at(x).value == intVal)
             {
@@ -304,10 +309,10 @@ QString DBC_SIGNAL::makePrettyOutput(double floatVal, int64_t intVal, bool outpu
 
     if (outputName) outputString = name + ": ";
 
-    if (valList.count() > 0) //if this is a value list type then look it up and display the proper string
+    if (valList.size() > 0) //if this is a value list type then look it up and display the proper string
     {
         bool foundVal = false;
-        for (int x = 0; x < valList.count(); x++)
+        for (int x = 0; x < valList.size(); x++)
         {
             if (valList.at(x).value == intVal)
             {
@@ -404,7 +409,9 @@ bool DBC_SIGNAL::processAsDouble(const CANFrame &frame, double &outValue)
         //a 32 bit single precision float. That's evil incarnate but it is very fast and small
         //in terms of new code.
         result = Utility::processIntegerSignal(frame.payload(), startBit, 32, false, false);
-        endResult = (*((float *)(&result)) * factor) + bias;
+        float floatResult32;
+        memcpy(&floatResult32, &result, sizeof(floatResult32));
+        endResult = (floatResult32 * factor) + bias;
     }
     else //double precision float
     {
@@ -416,7 +423,9 @@ bool DBC_SIGNAL::processAsDouble(const CANFrame &frame, double &outValue)
         //like the above, this is rotten and evil and wrong in so many ways. Force
         //calculation of a 64 bit integer and then cast it into a double.
         result = Utility::processIntegerSignal(frame.payload(), startBit, 64, false, false);
-        endResult = (*((double *)(&result)) * factor) + bias;
+        double doubleResult64;
+        memcpy(&doubleResult64, &result, sizeof(doubleResult64));
+        endResult = (doubleResult64 * factor) + bias;
     }
     cachedValue = endResult;
     outValue = endResult;
@@ -439,7 +448,7 @@ DBC_ATTRIBUTE_VALUE *DBC_SIGNAL::findAttrValByName(QString name)
 DBC_ATTRIBUTE_VALUE *DBC_SIGNAL::findAttrValByIdx(int idx)
 {
     if (idx < 0) return nullptr;
-    if (idx >= attributes.count()) return nullptr;
+    if (idx >= attributes.size()) return nullptr;
     return &attributes[idx];
 }
 
@@ -459,7 +468,7 @@ DBC_ATTRIBUTE_VALUE *DBC_MESSAGE::findAttrValByName(QString name)
 DBC_ATTRIBUTE_VALUE *DBC_MESSAGE::findAttrValByIdx(int idx)
 {
     if (idx < 0) return nullptr;
-    if (idx >= attributes.count()) return nullptr;
+    if (idx >= attributes.size()) return nullptr;
     return &attributes[idx];
 }
 
@@ -479,6 +488,6 @@ DBC_ATTRIBUTE_VALUE *DBC_NODE::findAttrValByName(QString name)
 DBC_ATTRIBUTE_VALUE *DBC_NODE::findAttrValByIdx(int idx)
 {
     if (idx < 0) return nullptr;
-    if (idx >= attributes.count()) return nullptr;
+    if (idx >= attributes.size()) return nullptr;
     return &attributes[idx];
 }

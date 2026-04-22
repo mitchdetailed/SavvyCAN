@@ -615,7 +615,7 @@ static int findClosingMatch(const QTextDocument *doc, int cursorPosition)
         while (block.isValid()) {
             blockData = reinterpret_cast<JSBlockData*>(block.userData());
             if (blockData && !blockData->bracketPositions.isEmpty()) {
-                for (int c = 0; c < blockData->bracketPositions.count(); ++c) {
+                for (int c = 0; c < blockData->bracketPositions.size(); ++c) {
                     int absPos = block.position() + blockData->bracketPositions.at(c);
                     if (absPos <= cursorPosition)
                         continue;
@@ -642,7 +642,7 @@ static int findOpeningMatch(const QTextDocument *doc, int cursorPosition)
         while (block.isValid()) {
             blockData = reinterpret_cast<JSBlockData*>(block.userData());
             if (blockData && !blockData->bracketPositions.isEmpty()) {
-                for (int c = blockData->bracketPositions.count() - 1; c >= 0; --c) {
+                for (int c = blockData->bracketPositions.size() - 1; c >= 0; --c) {
                     int absPos = block.position() + blockData->bracketPositions.at(c);
                     if (absPos >= cursorPosition - 1)
                         continue;
@@ -992,7 +992,7 @@ void JSEdit::updateCursor()
         QList<QTextEdit::ExtraSelection> extraSelections;
         extraSelections.append(highlight);
 
-        for (int i = 0; i < d->matchPositions.count(); ++i) {
+        for (int i = 0; i < d->matchPositions.size(); ++i) {
             int pos = d->matchPositions.at(i);
             QTextEdit::ExtraSelection matchHighlight;
             matchHighlight.format.setBackground(d->bracketMatchColor);
@@ -1002,7 +1002,7 @@ void JSEdit::updateCursor()
             extraSelections.append(matchHighlight);
         }
 
-        for (int i = 0; i < d->errorPositions.count(); ++i) {
+        for (int i = 0; i < d->errorPositions.size(); ++i) {
             int pos = d->errorPositions.at(i);
             QTextEdit::ExtraSelection errorHighlight;
             errorHighlight.format.setBackground(d->bracketErrorColor);
@@ -1063,7 +1063,7 @@ void JSEdit::updateSidebar()
         if (block.isVisible()) {
             QRectF rect = blockBoundingGeometry(block).translated(contentOffset());
             if (sidebarRect.intersects(rect)) {
-                if (d->sidebar->lineNumbers.count() >= index)
+                if (d->sidebar->lineNumbers.size() >= index)
                     d->sidebar->lineNumbers.resize(index + 1);
                 d->sidebar->lineNumbers[index].position = rect.top();
                 d->sidebar->lineNumbers[index].number = block.blockNumber() + 1;

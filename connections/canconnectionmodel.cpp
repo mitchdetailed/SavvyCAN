@@ -60,7 +60,7 @@ int CANConnectionModel::rowCount(const QModelIndex &parent) const
 
     QList<CANConnection*>& conns = CANConManager::getInstance()->getConnections();
 
-    return conns.count();
+    return conns.size();
 }
 
 QVariant CANConnectionModel::data(const QModelIndex &index, int role) const

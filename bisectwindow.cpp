@@ -119,7 +119,7 @@ void BisectWindow::refreshIDList()
 void BisectWindow::refreshFrameNumbers()
 {
     ui->labelMainListNum->setText(QString::number(modelFrames->count()));
-    ui->labelSplitNum->setText(QString::number(splitFrames.count()));
+    ui->labelSplitNum->setText(QString::number(splitFrames.size()));
     ui->slideFrameNumber->setMaximum(modelFrames->count());
 }
 

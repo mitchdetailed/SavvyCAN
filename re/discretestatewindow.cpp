@@ -65,7 +65,7 @@ DiscreteStateWindow::~DiscreteStateWindow()
     removeEventFilter(this);
     timer->stop();
 
-    for (int i = 0; i < stateFrames.count(); i++)
+    for (int i = 0; i < stateFrames.size(); i++)
     {
         stateFrames[i]->clear();
         delete(stateFrames[i]);
@@ -265,7 +265,7 @@ void DiscreteStateWindow::handleStartButton()
         currToggleState = 0;
         currIteration = 0;
 
-        for (int i = stateFrames.count() - 1; i > 0; i--)
+        for (int i = stateFrames.size() - 1; i > 0; i--)
         {
             stateFrames[i]->clear();
             stateFrames.removeAt(i);

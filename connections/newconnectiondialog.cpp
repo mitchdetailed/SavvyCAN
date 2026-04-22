@@ -78,7 +78,7 @@ void NewConnectionDialog::handleDeviceTypeChanged()
     ui->cbPort->clear();
     canDevices = QCanBus::instance()->availableDevices(ui->cbDeviceType->currentText());
 
-    for (int i = 0; i < canDevices.count(); i++)
+    for (int i = 0; i < canDevices.size(); i++)
         ui->cbPort->addItem(canDevices[i].name());
 }
 
@@ -100,7 +100,7 @@ void NewConnectionDialog::selectLawicel()
     ui->cbPort->clear();
     ports = QSerialPortInfo::availablePorts();
 
-    for (int i = 0; i < ports.count(); i++)
+    for (int i = 0; i < ports.size(); i++)
         ui->cbPort->addItem(ports[i].portName());
 
     if (ui->cbCANSpeed->count() == 0)
@@ -152,7 +152,7 @@ void NewConnectionDialog::selectSerial()
     ui->cbPort->clear();
     ports = QSerialPortInfo::availablePorts();
 
-    for (int i = 0; i < ports.count(); i++)
+    for (int i = 0; i < ports.size(); i++)
         ui->cbPort->addItem(ports[i].portName());
 }
 
@@ -172,7 +172,7 @@ void NewConnectionDialog::selectSocketCan()
     ui->cbDeviceType->clear();
     QStringList plugins;
     plugins = QCanBus::instance()->plugins();
-    for (int i = 0; i < plugins.count(); i++)
+    for (int i = 0; i < plugins.size(); i++)
         ui->cbDeviceType->addItem(plugins[i]);
 
 }
@@ -418,7 +418,7 @@ CANCon::type NewConnectionDialog::getConnectionType()
 
 bool NewConnectionDialog::isSerialBusAvailable()
 {
-    if (QCanBus::instance()->plugins().count() > 0) return true;
+    if (QCanBus::instance()->plugins().size() > 0) return true;
     return false;
 }
 

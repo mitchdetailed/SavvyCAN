@@ -318,7 +318,7 @@ bool CANConnection::addTargettedFrame(int pBusId, uint32_t ID, uint32_t mask, QO
         mBusData[pBusId].mTargettedFrames.append(target);
     else
     {
-        for (int i = 0; i < mBusData.count(); i++) mBusData[i].mTargettedFrames.append(target);
+        for (int i = 0; i < mBusData.size(); i++) mBusData[i].mTargettedFrames.append(target);
     }
 
     return true;
@@ -368,7 +368,7 @@ void CANConnection::checkTargettedFrame(CANFrame &frame)
 {
     unsigned int maskedID;
     //qDebug() << "Got frame with ID " << frame.ID << " on bus " << frame.bus;
-    if (mBusData.count() == 0) return;
+    if (mBusData.size() == 0) return;
 
     int bus = frame.bus;
     if (bus > (mBusData.length() - 1)) bus = mBusData.length() - 1;

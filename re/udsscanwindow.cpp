@@ -274,8 +274,8 @@ void UDSScanWindow::saveScans()
         outFile.open(QIODevice::WriteOnly);
         QDataStream save(&outFile);
         save << 1; //file version
-        save << scanEntries.count();
-        for (int i = 0; i < scanEntries.count(); i++)
+        save << scanEntries.size();
+        for (int i = 0; i < scanEntries.size(); i++)
         {
             save << scanEntries[i].startID;
             save << scanEntries[i].endID;
@@ -571,7 +571,7 @@ void UDSScanWindow::sendOnBuses(UDS_MESSAGE test, int buses)
 void UDSScanWindow::scanAll()
 {
     sendingFrames.clear();
-    for (int i = 0; i < scanEntries.count(); i++)
+    for (int i = 0; i < scanEntries.size(); i++)
     {
         setupScan(i);
     }
@@ -913,7 +913,7 @@ void UDSScanWindow::timeOut()
 void UDSScanWindow::sendNextMsg()
 {
     currIdx++;
-    if (currIdx < sendingFrames.count())
+    if (currIdx < sendingFrames.size())
     {
         udsHandler->sendUDSFrame(sendingFrames[currIdx]);
         waitTimer->start();

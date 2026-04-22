@@ -100,7 +100,7 @@ void CANConManager::refreshCanList()
 {
     QObject* sender_p = QObject::sender();
 
-    if (mConns.count() == 0)
+    if (mConns.size() == 0)
     {
         tempFrames.clear();
         //TODO: Seems to crash under heavy load. Find out why.
@@ -207,7 +207,7 @@ bool CANConManager::sendFrame(const CANFrame& pFrame)
     int busBase = 0;
     CANFrame workingFrame = pFrame;
 
-    if (mConns.count() == 0)
+    if (mConns.size() == 0)
     {
         buslessFrames.append(pFrame);
         return true;

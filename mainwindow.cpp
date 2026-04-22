@@ -566,8 +566,8 @@ void MainWindow::processSenderCellChange(int line, int col)
         tokens = ui->tableSimpleSender->item(line, SIMP_COL::SC_COL_DATA)->text().split(" ", QString::SkipEmptyParts);
 #endif
         arr.clear();
-        arr.reserve(tokens.count());
-        for (int j = 0; j < tokens.count(); j++)
+        arr.reserve(tokens.size());
+        for (int j = 0; j < tokens.size(); j++)
         {
             arr.append((uint8_t)Utility::ParseStringToNum(tokens[j]));
         }
@@ -1150,7 +1150,7 @@ void MainWindow::handleLoadFile()
 
     if (!loadResult)
     {
-        if (tempFrames.count() > 0) //only ask if at least one frame was decoded.
+        if (tempFrames.size() > 0) //only ask if at least one frame was decoded.
         {
             confirmDialog = QMessageBox::question(this, "Error Loading", "Do you want to salvage what could be loaded?",
                                       QMessageBox::Yes|QMessageBox::No);
@@ -1193,7 +1193,7 @@ void MainWindow::handleDroppedFile(const QString &filename)
     
     if (!loadResult)
     {
-        if (loadedFrames.count() > 0) //only ask if at least one frame was decoded.
+        if (loadedFrames.size() > 0) //only ask if at least one frame was decoded.
         {
             QMessageBox::StandardButton confirmDialog = QMessageBox::question(this, "Error Loading", "Do you want to salvage what could be loaded?",
                                       QMessageBox::Yes|QMessageBox::No);
@@ -1402,7 +1402,7 @@ Data Bytes: 88 10 00 13 BB 00 06 00
     {
         frame = &frames->at(c);
         //data = reinterpret_cast<const unsigned char *>(frame->payload().constData());
-        dataLen = frame->payload().count();
+        dataLen = frame->payload().size();
 
         //add all column names
         if (dbcHandler != nullptr)
@@ -1415,7 +1415,7 @@ Data Bytes: 88 10 00 13 BB 00 06 00
                 {
                     if(j==0)
                     {
-                        for(int m=0; m<msgsAndColumns.count(); m++)
+                        for(int m=0; m<msgsAndColumns.size(); m++)
                         {
                             if(msgsAndColumns[m].first == msg->ID)
                                 found = true;
@@ -1459,7 +1459,7 @@ Data Bytes: 88 10 00 13 BB 00 06 00
         dataColumnsAdded = 0;
         frame = &frames->at(c);
         //data = reinterpret_cast<const unsigned char *>(frame->payload().constData());
-        dataLen = frame->payload().count();
+        dataLen = frame->payload().size();
 
         QString builderString;
         if (CSVAbsTime)
@@ -1496,7 +1496,7 @@ Data Bytes: 88 10 00 13 BB 00 06 00
                 {
                     if(j==0)
                     {
-                        for(int i = 0; i<msgsAndColumns.count(); i++)
+                        for(int i = 0; i<msgsAndColumns.size(); i++)
                         {
                             if(msgsAndColumns[i].first == msg->ID)
                             {
@@ -1546,7 +1546,7 @@ Data Bytes: 88 10 00 13 BB 00 06 00
     {
         frame = &frames->at(c);
         data = reinterpret_cast<const unsigned char *>(frame->payload().constData());
-        dataLen = frame->payload().count();
+        dataLen = frame->payload().size();
 
         QString builderString;
         builderString += tr("Time: ") + QString::number((frame->timeStamp().microSeconds() / 1000000.0), 'f', 6);

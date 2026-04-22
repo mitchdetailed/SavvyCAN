@@ -28,6 +28,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <QByteArray>
 #include <QtDebug>
 #include <QtGlobal>
+#include <QByteArrayView>
 #include <QDateTime>
 #include <QCryptographicHash>
 #include <QDataStream>
@@ -101,7 +102,7 @@ QByteArray SimpleCrypt::encryptToByteArray(QByteArray plaintext)
         flags |= CryptoFlagCompression;
     } else if (m_compressionMode == CompressionAuto) {
         QByteArray compressed = qCompress(ba, 9);
-        if (compressed.count() < ba.count()) {
+        if (compressed.size() < ba.size()) {
             ba = compressed;
             flags |= CryptoFlagCompression;
         }
@@ -111,7 +112,7 @@ QByteArray SimpleCrypt::encryptToByteArray(QByteArray plaintext)
     if (m_protectionMode == ProtectionChecksum) {
         flags |= CryptoFlagChecksum;
         QDataStream s(&integrityProtection, QIODevice::WriteOnly);
-        s << qChecksum(ba.constData(), ba.length());
+        s << qChecksum(QByteArrayView(ba));
     } else if (m_protectionMode == ProtectionHash) {
         flags |= CryptoFlagHash;
         QCryptographicHash hash(QCryptographicHash::Sha1);
@@ -131,7 +132,7 @@ QByteArray SimpleCrypt::encryptToByteArray(QByteArray plaintext)
     int pos(0);
     char lastChar(0);
 
-    int cnt = ba.count();
+    int cnt = ba.size();
 
     while (pos < cnt) {
         ba[pos] = ba.at(pos) ^ m_keyParts.at(pos % 8) ^ lastChar;
@@ -198,7 +199,7 @@ QByteArray SimpleCrypt::decryptToByteArray(QByteArray cypher)
 
     QByteArray ba = cypher;
 
-    if( cypher.count() < 3 )
+    if( cypher.size() < 3 )
         return QByteArray();
 
     char version = ba.at(0);
@@ -213,7 +214,7 @@ QByteArray SimpleCrypt::decryptToByteArray(QByteArray cypher)
 
     ba = ba.mid(2);
     int pos(0);
-    int cnt(ba.count());
+    int cnt(ba.size());
     char lastChar = 0;
 
     while (pos < cnt) {
@@ -237,7 +238,7 @@ QByteArray SimpleCrypt::decryptToByteArray(QByteArray cypher)
             s >> storedChecksum;
         }
         ba = ba.mid(2);
-        quint16 checksum = qChecksum(ba.constData(), ba.length());
+        quint16 checksum = qChecksum(QByteArrayView(ba));
         integrityOk = (checksum == storedChecksum);
     } else if (flags.testFlag(CryptoFlagHash)) {
         if (ba.length() < 20) {

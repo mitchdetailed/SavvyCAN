@@ -29,14 +29,14 @@ DBCNodeDuplicateEditor::DBCNodeDuplicateEditor(QWidget *parent) :
 
             if(newBase <= 0 || newBase > 0x1FFFFFFFul)
             {
-                QMessageBox::question(this, "Invalid Address", "The new address is outside of the valid range.",
+                QMessageBox::warning(this, "Invalid Address", "The new address is outside of the valid range.",
                                                   QMessageBox::Ok);
                 return;
             }
 
             if(newBase == lowestMsgId)
             {
-                QMessageBox::question(this, "Invalid Address", "The new address is the same as the original.",
+                QMessageBox::warning(this, "Invalid Address", "The new address is the same as the original.",
                                                   QMessageBox::Ok);
                 return;
             }
@@ -44,16 +44,16 @@ DBCNodeDuplicateEditor::DBCNodeDuplicateEditor(QWidget *parent) :
             int32_t rebaseDiff = newBase - lowestMsgId;
 
             QList<DBC_MESSAGE*> messagesForNode = dbcFile->messageHandler->findMsgsByNode(dbcNode);
-            if(messagesForNode.count() == 0)
+            if(messagesForNode.size() == 0)
             {
-                QMessageBox::question(this, "No Messages", "The node has no messages to duplicate.",
+                QMessageBox::warning(this, "No Messages", "The node has no messages to duplicate.",
                                                   QMessageBox::Ok);
                 return;
             }
 
             if(ui->lineNodeName->text().isEmpty())
             {
-                QMessageBox::question(this, "No Name", "The new node needs a name before it can be created.",
+                QMessageBox::warning(this, "No Name", "The new node needs a name before it can be created.",
                                                   QMessageBox::Ok);
                 return;
             }
@@ -65,24 +65,24 @@ DBCNodeDuplicateEditor::DBCNodeDuplicateEditor(QWidget *parent) :
 
             if(nodePtr == nullptr)
             {
-                QMessageBox::question(this, "Node Invalid", "There was an problem identifying the selected node.",
+                QMessageBox::warning(this, "Node Invalid", "There was an problem identifying the selected node.",
                                                   QMessageBox::Ok);
                 return;
             }
 
-            for (int i = 0; i < messagesForNode.count(); i++)
+            for (int i = 0; i < messagesForNode.size(); i++)
             {
                 int32_t newMsgId = messagesForNode[i]->ID + rebaseDiff;
 
                 if(newMsgId < 0 || newMsgId > 0x1FFFFFFFl)
                 {
-                    QMessageBox::question(this, "Invalid Address Range", "The new starting address would cause a message to be outside of the valid address range.",
+                    QMessageBox::warning(this, "Invalid Address Range", "The new starting address would cause a message to be outside of the valid address range.",
                                                       QMessageBox::Ok);
                     return;
                 }
             }
 
-            for (int i = 0; i < messagesForNode.count(); i++)
+            for (int i = 0; i < messagesForNode.size(); i++)
             {
                 int32_t newMsgId = messagesForNode[i]->ID + rebaseDiff;
                 emit cloneMessageToNode(nodePtr, messagesForNode[i], newMsgId);
@@ -183,12 +183,12 @@ bool DBCNodeDuplicateEditor::refreshView()
         QList<DBC_MESSAGE*> messagesForNode = dbcFile->messageHandler->findMsgsByNode(dbcNode);
         lowestMsgId = 0xFFFFFFFF;
 
-        if(messagesForNode.count() == 0)
+        if(messagesForNode.size() == 0)
         {
             return false;
         }
 
-        for (int i=0; i<messagesForNode.count(); i++)
+        for (int i=0; i<messagesForNode.size(); i++)
         {
             if(messagesForNode[i]->ID < lowestMsgId)
                 lowestMsgId = messagesForNode[i]->ID;
