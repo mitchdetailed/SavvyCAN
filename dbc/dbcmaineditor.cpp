@@ -290,26 +290,18 @@ void DBCMainEditor::onTreeDoubleClicked(const QModelIndex &index)
         msgEditor->show(); //show allows the rest of the forms to keep going
         break;
     case DBCItemTypes::SIG: //a signal
-        msgID = getParentMessageID(firstCol);
-        msg = dbcFile->messageHandler->findMsgByID(msgID);
-        QString nameString = firstCol->text(0);
-        if (nameString.contains("("))
-        {
-            nameString = nameString.split(")")[1].trimmed(); //remove (1-2) type stuff from beginning of string
-        }
-        nameString = nameString.split(" ")[0]; //get rid of [32m 8] type stuff after the name
-
-        sig = msg->sigHandler->findSignalByName(nameString);
-        if (sig)
-        {
-            sigEditor->setSignalRef(sig);
-            sigEditor->setMessageRef(msg);
-            sigEditor->setFileIdx(fileIdx);
-            //sigEditor->setWindowModality(Qt::WindowModal);
-            sigEditor->refreshView();
-            sigEditor->show();
-        }
+    {
+        sig = itemToSignal.value(firstCol, nullptr);
+        if (!sig || !sig->parentMessage) break; // unassigned signal — no editor yet
+        msg = sig->parentMessage;
+        sigEditor->setSignalRef(sig);
+        sigEditor->setMessageRef(msg);
+        sigEditor->setFileIdx(fileIdx);
+        //sigEditor->setWindowModality(Qt::WindowModal);
+        sigEditor->refreshView();
+        sigEditor->show();
         break;
+    }
     }
 }
 
@@ -404,9 +396,12 @@ void DBCMainEditor::refreshTree()
         dbcFile->dbc_nodes.append(newNode);
     }
 
+    DBC_NODE *defaultNode = dbcFile->findNodeByName("Vector__XXX");
+
     for (int n = 0; n < dbcFile->dbc_nodes.size(); n++)
     {
         DBC_NODE *node = &dbcFile->dbc_nodes[n];
+        if (node->name == "Vector__XXX") continue; // shown in Unassigned section below
         QTreeWidgetItem *nodeItem = new QTreeWidgetItem();
         QString nodeInfo = node->name;
         if (node->comment.size() > 0) nodeInfo.append(" - ").append(node->comment);
@@ -439,6 +434,64 @@ void DBCMainEditor::refreshTree()
         ui->treeDBC->addTopLevelItem(nodeItem);
     }
     ui->treeDBC->sortItems(0, Qt::SortOrder::AscendingOrder); //sort the display list for ease in viewing by mere mortals, helps me a lot.
+
+    // Build Unassigned section: messages with no real sender + orphan signals from parse
+    QList<DBC_MESSAGE*> unassignedMsgs;
+    for (int x = 0; x < dbcFile->messageHandler->getCount(); x++)
+    {
+        DBC_MESSAGE *msg = dbcFile->messageHandler->findMsgByIdx(x);
+        if (!msg->sender || msg->sender == defaultNode)
+            unassignedMsgs.append(msg);
+    }
+
+    bool hasUnassigned = !unassignedMsgs.isEmpty() || !dbcFile->unassignedSignals.isEmpty();
+    if (hasUnassigned)
+    {
+        QTreeWidgetItem *unassignedRoot = new QTreeWidgetItem();
+        unassignedRoot->setText(0, "Unassigned");
+        unassignedRoot->setIcon(0, nodeIcon);
+        unassignedRoot->setData(0, Qt::UserRole, DBCItemTypes::UNASSIGNED_GROUP);
+
+        if (!unassignedMsgs.isEmpty())
+        {
+            QTreeWidgetItem *msgGroup = new QTreeWidgetItem(unassignedRoot);
+            msgGroup->setText(0, "Unassigned Messages");
+            msgGroup->setIcon(0, messageIcon);
+            msgGroup->setData(0, Qt::UserRole, DBCItemTypes::UNASSIGNED_GROUP);
+            for (DBC_MESSAGE *msg : unassignedMsgs)
+            {
+                QTreeWidgetItem *msgItem = new QTreeWidgetItem(msgGroup);
+                QString msgInfo = Utility::formatCANID(msg->ID) + " " + msg->name;
+                if (msg->comment.size() > 0) msgInfo.append(" - ").append(msg->comment);
+                msgItem->setText(0, msgInfo);
+                msgItem->setIcon(0, messageIcon);
+                msgItem->setData(0, Qt::UserRole, DBCItemTypes::MESG);
+                messageToItem.insert(msg, msgItem);
+                itemToMessage.insert(msgItem, msg);
+                for (int i = 0; i < msg->sigHandler->getCount(); i++)
+                {
+                    DBC_SIGNAL *sig = msg->sigHandler->findSignalByIdx(i);
+                    if (sig->multiplexParent == nullptr) processSignalToTree(msgItem, sig);
+                }
+            }
+        }
+
+        if (!dbcFile->unassignedSignals.isEmpty())
+        {
+            QTreeWidgetItem *sigGroup = new QTreeWidgetItem(unassignedRoot);
+            sigGroup->setText(0, "Unassigned Signals");
+            sigGroup->setIcon(0, signalIcon);
+            sigGroup->setData(0, Qt::UserRole, DBCItemTypes::UNASSIGNED_GROUP);
+            for (int i = 0; i < dbcFile->unassignedSignals.size(); i++)
+            {
+                DBC_SIGNAL *sig = &dbcFile->unassignedSignals[i];
+                processSignalToTree(sigGroup, sig);
+            }
+        }
+
+        // Append after sort so Unassigned always appears at the bottom
+        ui->treeDBC->addTopLevelItem(unassignedRoot);
+    }
 }
 
 QString DBCMainEditor::createSignalText(DBC_SIGNAL *sig)
@@ -958,7 +1011,17 @@ void DBCMainEditor::deleteSignal(DBC_SIGNAL *sig)
     qDebug() << "Signal about to vanish.";
     if (!signalToItem.contains(sig)) return;
     QTreeWidgetItem *currItem = signalToItem[sig];
-    sig->parentMessage->sigHandler->removeSignal(sig);
+
+    if (!sig->parentMessage)
+    {
+        int idx = static_cast<int>(sig - dbcFile->unassignedSignals.data());
+        if (idx >= 0 && idx < dbcFile->unassignedSignals.size())
+            dbcFile->unassignedSignals.removeAt(idx);
+    }
+    else
+    {
+        sig->parentMessage->sigHandler->removeSignal(sig);
+    }
 
     itemToSignal.remove(currItem);
     signalToItem.remove(sig);

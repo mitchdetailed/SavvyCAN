@@ -342,6 +342,8 @@ DBCFile::DBCFile(const DBCFile& cpy) : QObject()
     dbc_value_tables.append(cpy.dbc_value_tables);
     dbc_attributes.clear();
     dbc_attributes.append(cpy.dbc_attributes);
+    unassignedSignals.clear();
+    unassignedSignals.append(cpy.unassignedSignals);
     isDirty = cpy.isDirty;
 
     // Remap sender/receiver pointers from cpy.dbc_nodes into this->dbc_nodes
@@ -548,6 +550,15 @@ DBC_MESSAGE* DBCFile::parseMessageLine(QString line)
         msg.len = match.captured(3).toUInt();
         msg.sender = findNodeByName(match.captured(4));
         if (!msg.sender) msg.sender = findNodeByIdx(0);
+
+        // Vector CANdb++ placeholder for signals with no real message — signals that follow
+        // will land in unassignedSignals via parseSignalLine's null-message path
+        if (msg.name == "VECTOR__INDEPENDENT_SIG_MSG")
+        {
+            msgPtr = nullptr;
+            return msgPtr;
+        }
+
         messageHandler->addMessage(msg);
         msgPtr = messageHandler->findMsgByID(msg.ID);
     }
@@ -678,7 +689,11 @@ DBC_SIGNAL* DBCFile::parseSignalLine(QString line, DBC_MESSAGE *msg)
             if (isMessageMultiplexor) msg->multiplexorSignal = msg->sigHandler->findSignalByName(sig.name);
             return msg->sigHandler->findSignalByName(sig.name);
         }
-        else return nullptr;
+        else
+        {
+            unassignedSignals.append(sig);
+            return &unassignedSignals.last();
+        }
     }
 
     return nullptr;
@@ -1053,8 +1068,15 @@ bool DBCFile::loadFile(QString fileName)
         {
             if (line.startsWith("BO_ ")) //defines a message
             {
-                currentMessage = parseMessageLine(line);
-                if (currentMessage == nullptr) numMsgFaults++;
+                if (line.contains("VECTOR__INDEPENDENT_SIG_MSG"))
+                {
+                    currentMessage = nullptr; // intentional placeholder — signals go to unassignedSignals
+                }
+                else
+                {
+                    currentMessage = parseMessageLine(line);
+                    if (currentMessage == nullptr) numMsgFaults++;
+                }
             }
             if (line.startsWith("SG_ ")) //defines a signal
             {
@@ -1683,6 +1705,47 @@ bool DBCFile::saveFile(QString fileName)
         //write it out every message so the string doesn't end up too huge
         outFile->write(msgOutput.toUtf8());
         msgOutput.clear(); //got to reset it after writing
+    }
+
+    // Write Vector CANdb++ placeholder message for unassigned signals
+    if (!unassignedSignals.isEmpty())
+    {
+        const quint32 indepMsgRawID = 3221225472u; // 0xC0000000 — Vector__INDEPENDENT_SIG_MSG convention
+        msgOutput.append("BO_ " + QString::number(indepMsgRawID) + " VECTOR__INDEPENDENT_SIG_MSG: 0 Vector__XXX\n");
+        for (int s = 0; s < unassignedSignals.size(); s++)
+        {
+            DBC_SIGNAL &sig = unassignedSignals[s];
+            msgOutput.append("   SG_ " + sig.name);
+            if (sig.isMultiplexed) msgOutput.append(" m" + QString::number(sig.getSimpleMultiplexValue()));
+            if (sig.isMultiplexor)
+            {
+                if (!sig.isMultiplexed) msgOutput.append(" ");
+                msgOutput.append("M");
+            }
+            msgOutput.append(" : " + QString::number(sig.startBit) + "|" + QString::number(sig.signalSize) + "@");
+            switch (sig.valType)
+            {
+            case SIGNED_INT:
+                msgOutput.append(sig.intelByteOrder ? "1-" : "0-"); break;
+            case SP_FLOAT:
+            case DP_FLOAT:
+            case UNSIGNED_INT:
+                msgOutput.append(sig.intelByteOrder ? "1+" : "0+"); break;
+            case STRING:
+                msgOutput.append("4-"); break;
+            default:
+                msgOutput.append("0-"); break;
+            }
+            msgOutput.append(" (" + QString::number(sig.factor) + "," + QString::number(sig.bias) + ") [" +
+                             QString::number(sig.min) + "|" + QString::number(sig.max) + "] \"" + sig.unitName +
+                             "\" " + (sig.receiver ? sig.receiver->name : QStringLiteral("Vector__XXX")) + "\n");
+            if (sig.comment.length() > 0)
+                commentsOutput.append("CM_ SG_ " + QString::number(indepMsgRawID) + " " + sig.name +
+                                      " \"" + QString(sig.comment).replace('"', "\\\"") + "\";\n");
+        }
+        msgOutput.append("\n");
+        outFile->write(msgOutput.toUtf8());
+        msgOutput.clear();
     }
 
     outFile->write(commentsOutput.toUtf8());
