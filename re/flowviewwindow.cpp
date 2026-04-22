@@ -607,7 +607,7 @@ void FlowViewWindow::createGraph(int byteNum)
 
 void FlowViewWindow::refreshIDList()
 {
-    int id;
+    quint32 id;
     for (int i = 0; i < modelFrames->count(); i++)
     {
         CANFrame thisFrame = modelFrames->at(i);
