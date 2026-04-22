@@ -10,6 +10,31 @@
 #include <qevent.h>
 #include "helpwindow.h"
 
+// For Motorola signals, DBC startBit is the MSB position. These helpers convert between
+// DBC startBit (MSB) and the true LSB position using the standard Motorola bit traversal
+// (decrement within byte, +15 jump across byte boundary).
+static int motorolaLSBfromStartBit(int startBit, int signalSize)
+{
+    int bit = startBit;
+    for (int i = 0; i < signalSize - 1; i++)
+    {
+        if (bit % 8 == 0) bit += 15;
+        else bit--;
+    }
+    return bit;
+}
+
+static int motorolaStartBitFromLSB(int lsb, int signalSize)
+{
+    int bit = lsb;
+    for (int i = 0; i < signalSize - 1; i++)
+    {
+        if (bit % 8 == 7) bit -= 15;
+        else bit++;
+    }
+    return bit;
+}
+
 DBCSignalEditor::DBCSignalEditor(QWidget *parent) :
     QDialog(parent),
     ui(new Ui::DBCSignalEditor)
@@ -262,6 +287,46 @@ DBCSignalEditor::DBCSignalEditor(QWidget *parent) :
                     dbcFile->setDirtyFlag();
                     currentSignal->signalSize = temp;
                     //fillSignalForm(currentSignal);
+                    refreshBitGrid();
+                }
+            });
+
+    connect(ui->txtStartBit, &QLineEdit::editingFinished,
+            [=]()
+            {
+                if (currentSignal == nullptr) return;
+                bool ok;
+                int lsb = ui->txtStartBit->text().toInt(&ok);
+                int maxBit = dbcMessage ? (int)(dbcMessage->len * 8) - 1 : 511;
+
+                auto revert = [&]() {
+                    if (currentSignal->intelByteOrder)
+                        ui->txtStartBit->setText(QString::number(currentSignal->startBit));
+                    else
+                        ui->txtStartBit->setText(QString::number(motorolaLSBfromStartBit(currentSignal->startBit, currentSignal->signalSize)));
+                };
+
+                if (!ok || lsb < 0 || lsb > maxBit) { revert(); return; }
+
+                int newDBCStartBit;
+                if (currentSignal->intelByteOrder)
+                {
+                    // LSB == DBC startBit for Intel; MSB end must still fit in message
+                    if (lsb + currentSignal->signalSize - 1 > maxBit) { revert(); return; }
+                    newDBCStartBit = lsb;
+                }
+                else
+                {
+                    // Convert LSB back to DBC startBit (MSB position for Motorola)
+                    newDBCStartBit = motorolaStartBitFromLSB(lsb, currentSignal->signalSize);
+                    if (newDBCStartBit < 0 || newDBCStartBit > maxBit) { revert(); return; }
+                }
+
+                if (currentSignal->startBit != newDBCStartBit)
+                {
+                    pushToUndoBuffer();
+                    dbcFile->setDirtyFlag();
+                    currentSignal->startBit = newDBCStartBit;
                     refreshBitGrid();
                 }
             });
@@ -567,6 +632,7 @@ void DBCSignalEditor::fillSignalForm(DBC_SIGNAL *sig)
         ui->txtName->setText("");
         ui->txtBias->setText("");
         ui->txtBitLength->setText("");
+        ui->txtStartBit->setText("");
         ui->txtComment->setText("");
         ui->txtMaxVal->setText("");
         ui->txtMinVal->setText("");
@@ -588,6 +654,11 @@ void DBCSignalEditor::fillSignalForm(DBC_SIGNAL *sig)
     ui->txtName->setText(sig->name);
     ui->txtBias->setText(QString::number(sig->bias));
     ui->txtBitLength->setText(QString::number(sig->signalSize));
+    {
+        int lsb = sig->intelByteOrder ? sig->startBit
+                                      : motorolaLSBfromStartBit(sig->startBit, sig->signalSize);
+        ui->txtStartBit->setText(QString::number(lsb));
+    }
     ui->txtMultiplexValues->setText(sig->multiplexDbcString(DBC_SIGNAL::MuxStringFormat_UI));
     ui->txtComment->setText(sig->comment);
     ui->txtMaxVal->setText(QString::number(sig->max));
@@ -719,7 +790,11 @@ void DBCSignalEditor::refreshBitGrid()
     }
 
     ui->bitfield->updateData(bitpattern, true);
-
+    {
+        int lsb = currentSignal->intelByteOrder ? currentSignal->startBit
+                                                : motorolaLSBfromStartBit(currentSignal->startBit, currentSignal->signalSize);
+        ui->txtStartBit->setText(QString::number(lsb));
+    }
 }
 
 /* fillValueTable also handles "enabled" state */
