@@ -78,6 +78,7 @@ public:
     DBC_VAL_TABLE *findValueTableByName(QString name);
     DBC_ATTRIBUTE *findAttributeByName(QString name, DBC_ATTRIBUTE_TYPE type = ATTR_TYPE_ANY);
     DBC_ATTRIBUTE *findAttributeByIdx(int idx);
+    void addAttribute(DBC_ATTRIBUTE &attr);
     void findAttributesByType(DBC_ATTRIBUTE_TYPE typ, QList<DBC_ATTRIBUTE> *list);
     bool saveFile(QString);
     bool loadFile(QString);
