@@ -488,6 +488,12 @@ DBC_ATTRIBUTE *DBCFile::findAttributeByIdx(int idx)
     return &dbc_attributes[idx];
 }
 
+void DBCFile::addAttribute(DBC_ATTRIBUTE &attr)
+{
+    if (!findAttributeByName(attr.name))
+        dbc_attributes.append(attr);
+}
+
 void DBCFile::findAttributesByType(DBC_ATTRIBUTE_TYPE typ, QList<DBC_ATTRIBUTE> *list)
 {
     if (!list) return;
@@ -1172,7 +1178,7 @@ bool DBCFile::loadFile(QString fileName)
                 {
                     //qDebug() << "Success";
                     attr.attrType = ATTR_TYPE_SIG;
-                    dbc_attributes.append(attr);
+                    addAttribute(attr);
                 }
             }
             else if (line.startsWith("BA_DEF_ BO_ ")) //definition of a message attribute
@@ -1183,7 +1189,7 @@ bool DBCFile::loadFile(QString fileName)
                 {
                     qDebug() << "Success";
                     attr.attrType = ATTR_TYPE_MESSAGE;
-                    dbc_attributes.append(attr);
+                    addAttribute(attr);
                 }
             }
             else if (line.startsWith("BA_DEF_ BU_ ")) //definition of a node attribute
@@ -1194,7 +1200,7 @@ bool DBCFile::loadFile(QString fileName)
                 {
                     //qDebug() << "Success";
                     attr.attrType = ATTR_TYPE_NODE;
-                    dbc_attributes.append(attr);
+                    addAttribute(attr);
                 }
             }
 
@@ -1206,7 +1212,7 @@ bool DBCFile::loadFile(QString fileName)
                 {
                     //qDebug() << "Success";
                     attr.attrType = ATTR_TYPE_GENERAL;
-                    dbc_attributes.append(attr);
+                    addAttribute(attr);
                 }
             }
 
@@ -1225,29 +1231,23 @@ bool DBCFile::loadFile(QString fileName)
     }
 
     //upon loading the file add our custom foreground and background color attributes if they don't exist already
-    if (!findAttributeByName("GenMsgBackgroundColor"))
-    {
-        attr.attrType = ATTR_TYPE_MESSAGE;
-        attr.defaultValue = QApplication::palette().color(QPalette::Base).name();
-        attr.enumVals.clear();
-        attr.lower = 0;
-        attr.upper = 0;
-        attr.name = "GenMsgBackgroundColor";
-        attr.valType = ATTR_STRING;
-        dbc_attributes.append(attr);
-    }
+    attr.attrType = ATTR_TYPE_MESSAGE;
+    attr.defaultValue = QApplication::palette().color(QPalette::Base).name();
+    attr.enumVals.clear();
+    attr.lower = 0;
+    attr.upper = 0;
+    attr.name = "GenMsgBackgroundColor";
+    attr.valType = ATTR_STRING;
+    addAttribute(attr);
 
-    if (!findAttributeByName("GenMsgForegroundColor"))
-    {
-        attr.attrType = ATTR_TYPE_MESSAGE;
-        attr.defaultValue = QApplication::palette().color(QPalette::WindowText).name();
-        attr.enumVals.clear();
-        attr.lower = 0;
-        attr.upper = 0;
-        attr.name = "GenMsgForegroundColor";
-        attr.valType = ATTR_STRING;
-        dbc_attributes.append(attr);
-    }
+    attr.attrType = ATTR_TYPE_MESSAGE;
+    attr.defaultValue = QApplication::palette().color(QPalette::WindowText).name();
+    attr.enumVals.clear();
+    attr.lower = 0;
+    attr.upper = 0;
+    attr.name = "GenMsgForegroundColor";
+    attr.valType = ATTR_STRING;
+    addAttribute(attr);
 
     DBC_ATTRIBUTE *mc_attr = findAttributeByName("matchingcriteria");
     if (mc_attr)
@@ -1859,7 +1859,7 @@ int DBCHandler::createBlankFile()
     attr.upper = 0;
     attr.name = "GenMsgBackgroundColor";
     attr.valType = ATTR_STRING;
-    newFile.dbc_attributes.append(attr);
+    newFile.addAttribute(attr);
 
     attr.attrType = ATTR_TYPE_MESSAGE;
     attr.defaultValue = QApplication::palette().color(QPalette::WindowText).name();
@@ -1869,7 +1869,7 @@ int DBCHandler::createBlankFile()
     attr.upper = 0;
     attr.name = "GenMsgForegroundColor";
     attr.valType = ATTR_STRING;
-    newFile.dbc_attributes.append(attr);
+    newFile.addAttribute(attr);
 
     attr.attrType = ATTR_TYPE_MESSAGE;
     attr.defaultValue = 0;
@@ -1878,7 +1878,7 @@ int DBCHandler::createBlankFile()
     attr.upper = 0;
     attr.name = "matchingcriteria";
     attr.valType = ATTR_INT;
-    newFile.dbc_attributes.append(attr);
+    newFile.addAttribute(attr);
 
     attr.attrType = ATTR_TYPE_MESSAGE;
     attr.defaultValue = 0;
@@ -1887,7 +1887,7 @@ int DBCHandler::createBlankFile()
     attr.upper = 0;
     attr.name = "filterlabeling";
     attr.valType = ATTR_INT;
-    newFile.dbc_attributes.append(attr);
+    newFile.addAttribute(attr);
 
     DBC_NODE falseNode;
     falseNode.name = "Vector__XXX";
@@ -2464,7 +2464,7 @@ DBCHandler::DBCHandler()
             attr.upper = 0;
             attr.name = "matchingcriteria";
             attr.valType = ATTR_INT;
-            file->dbc_attributes.append(attr);
+            file->addAttribute(attr);
             file->messageHandler->setMatchingCriteria(matchingCriteria);
 
             int filterLabeling = settings.value("DBC/FilterLabeling_" + QString::number(i),0).toInt();
@@ -2475,7 +2475,7 @@ DBCHandler::DBCHandler()
             attr.upper = 0;
             attr.name = "filterlabeling";
             attr.valType = ATTR_INT;
-            file->dbc_attributes.append(attr);
+            file->addAttribute(attr);
             file->messageHandler->setFilterLabeling(filterLabeling);
 
             qInfo() << "Loaded DBC file" << filename << " (bus:" << bus
