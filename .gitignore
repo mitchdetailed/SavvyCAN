@@ -50,3 +50,6 @@ SavvyCAN.pro.qtds
 .xcode
 SavvyCAN.xcodeproj
 .vscode
+
+# Local reference data
+/test reference files/

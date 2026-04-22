@@ -22,7 +22,8 @@ enum DBCItemTypes
 {
     NODE = 1,
     MESG = 2,
-    SIG = 3
+    SIG = 3,
+    UNASSIGNED_GROUP = 4
 };
 
 class DBCMainEditor : public QDialog

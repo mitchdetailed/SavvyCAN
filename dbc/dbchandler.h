@@ -97,6 +97,7 @@ public:
     QList<DBC_NODE> dbc_nodes;
     QList<DBC_VAL_TABLE> dbc_value_tables;
     QList<DBC_ATTRIBUTE> dbc_attributes;
+    QList<DBC_SIGNAL> unassignedSignals;
 private:
     QString fileName;
     QString filePath;
