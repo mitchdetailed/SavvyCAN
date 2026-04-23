@@ -199,6 +199,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
     elapsedTime = new QElapsedTimer;
     elapsedTime->start();
+    fpsCumulativeFrames = 0;
 
     isConnected = false;
     allowCapture = true;
@@ -1031,15 +1032,15 @@ void MainWindow::logReceivedFrame(CANConnection* conn, QVector<CANFrame> frames)
 void MainWindow::tickGUIUpdate()
 {
     rxFrames = model->sendBulkRefresh();
+    fpsCumulativeFrames += rxFrames;
     //if(rxFrames>0)
     //{
         int elapsed = elapsedTime->elapsed();
-        if(elapsed) {
-            framesPerSec = (framesPerSec + (rxFrames * 1000 / elapsed)) / 2;
+        if (elapsed >= 1000) {
+            framesPerSec = (fpsCumulativeFrames * 1000) / elapsed;
+            fpsCumulativeFrames = 0;
             elapsedTime->restart();
         }
-        else
-            framesPerSec = 0;
 
         ui->lbNumFrames->setText(QString::number(model->rowCount()));
         if (rxFrames > 0 && /*allowCapture && */ ui->cbAutoScroll->isChecked())

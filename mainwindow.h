@@ -159,6 +159,7 @@ private:
     QElapsedTimer *elapsedTime;
     FrameSenderObject *frameSender;
     int framesPerSec;
+    int fpsCumulativeFrames;
     int rxFrames;
     bool inhibitFilterUpdate;
     bool useHex;
