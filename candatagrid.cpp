@@ -77,12 +77,12 @@ CANDataGrid::CANDataGrid(QWidget *parent) :
             heatData[y * 8 + x] = 0;
         }
 
-    blackBrush = QBrush(Qt::black);
+    blackBrush = QBrush(QColor(0, 100, 0));
     whiteBrush = QBrush(Qt::white);
     redBrush = QBrush(Qt::red);
     greenBrush = QBrush(Qt::green);
-    greenHashBrush = QBrush(QColor(0, 0xB6, 0), Qt::BDiagPattern);
-    blackHashBrush = QBrush(QColor(0, 0, 0), Qt::FDiagPattern);
+    greenHashBrush = QBrush(QColor(0, 0xB6, 0), Qt::SolidPattern);
+    blackHashBrush = QBrush(QColor(0, 0xFF, 0), Qt::SolidPattern);
     grayBrush = QBrush(QColor(230,230,230));
     xOffset = 0;
     yOffset = 0;
@@ -399,8 +399,7 @@ void CANDataGrid::paintGridCells()
                             if (gridMode == GridMode::SIGNAL_VIEW) usedSigNum = getUsedSignalNum(bit);
                             if (usedSigNum == -1)
                             {
-                                grayBrush = QBrush(QColor(0xB6, 0xB6, 0xB6), Qt::BDiagPattern);
-                                painter->setBrush(grayBrush);
+                                painter->setBrush(whiteBrush);
                             }
                             else
                             {
@@ -417,8 +416,7 @@ void CANDataGrid::paintGridCells()
             switch (textStates[byteIdx][bitIdx])
             {
             case GridTextState::NORMAL:
-                if (thisBit && prevBit) painter->setPen(QPen(Qt::gray));
-                else painter->setPen(QPen(Qt::black));
+                painter->setPen(QPen(Qt::black));
                 painter->setFont(mainFont);
                 break;
             case GridTextState::BOLD_BLUE:
