@@ -473,7 +473,7 @@ QString UDS_HANDLER::getDetailedMessageAnalysis(const UDS_MESSAGE &msg)
             if (dataLen > 2)
             {
                 uint32_t id;
-                for (int i = 1; i < dataLen; i = i + 2)
+                for (int i = 1; i + 1 < dataLen; i = i + 2)
                 {
                     id = (data[i] * 256) + data[i+1];
                     buildString.append("\nID to read: " + Utility::formatHexNum(id));
@@ -547,7 +547,7 @@ QString UDS_HANDLER::getDetailedMessageAnalysis(const UDS_MESSAGE &msg)
             break;
         case UDS_SERVICES::ROUTINE_CTRL + 0x40:
             buildString.append("Routine Control: " + getLongDesc(UDS_ROUTINE_SUB, msg.subFunc));
-            if (dataLen > 2)
+            if (dataLen > 3)
             {
                 int routineID;
                 routineID = (data[2] * 256 + data[3]);
@@ -564,6 +564,11 @@ QString UDS_HANDLER::getDetailedMessageAnalysis(const UDS_MESSAGE &msg)
             break;
         case UDS_SERVICES::REQUEST_DOWNLOAD:
         case UDS_SERVICES::REQUEST_UPLOAD:
+            if (dataLen < 3)
+            {
+                buildString.append("Message too short to decode");
+                break;
+            }
             compType = data[1] >> 4;
             encType = data[1] & 0xF;
             buildString.append("Compression Type: " + QString::number(compType));
@@ -589,12 +594,14 @@ QString UDS_HANDLER::getDetailedMessageAnalysis(const UDS_MESSAGE &msg)
             break;
         case UDS_SERVICES::REQUEST_DOWNLOAD + 0x40:
         case UDS_SERVICES::REQUEST_UPLOAD + 0x40:
+            if (dataLen < 2) { buildString.append("Message too short to decode"); break; }
             dataSize = data[1] >> 4;
             buildString.append("\nMax Size of data block: 0x");
-            for (int i = 0; i < dataSize; i++) buildString.append(QString::number(data[2 + i], 16).toUpper().rightJustified(2,'0'));
+            for (int i = 0; i < dataSize && (2 + i) < dataLen; i++) buildString.append(QString::number(data[2 + i], 16).toUpper().rightJustified(2,'0'));
             break;
         case UDS_SERVICES::TRANSFER_DATA:
         case UDS_SERVICES::TRANSFER_DATA + 0x40:
+            if (dataLen < 2) { buildString.append("Message too short to decode"); break; }
             buildString.append("\nBlock Sequence: " + QString::number(data[1], 16) + "\nPayload: ");
             for (int i = 2; i < dataLen; i++)
             {

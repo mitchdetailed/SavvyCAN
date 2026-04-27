@@ -112,6 +112,7 @@ void ISOTP_HANDLER::updatedFrames(int numFrames)
     else if (numFrames == -2) //all new set of frames. Reset
     {
         messageBuffer.clear();
+        if (!modelFrames) return;
         for (int i = 0; i < modelFrames->length(); i++) processFrame(modelFrames->at(i));
     }
     else //just got some new frames. See if they are relevant.
@@ -169,6 +170,7 @@ void ISOTP_HANDLER::processFrame(const CANFrame &frame)
 
     if (useExtendedAddressing)
     {
+        if (frame.payload().size() < 2) return;
         ID = ID << 8;
         ID += data[0];
         frameType = data[1] >> 4;
@@ -176,6 +178,7 @@ void ISOTP_HANDLER::processFrame(const CANFrame &frame)
     }
     else
     {
+        if (frame.payload().isEmpty()) return;
         frameType = data[0] >> 4;
         frameLen = data[0] & 0xF;
     }
@@ -278,11 +281,15 @@ void ISOTP_HANDLER::processFrame(const CANFrame &frame)
         if (useExtendedAddressing)
         {
             if (ln > 6) ln = 6;
+            int available = qMax(0, frame.payload().size() - 2);
+            if (ln > available) ln = available;
             for (int j = 0; j < ln; j++) dataBytes.append(frame.payload()[j+2]);
         }
         else
         {
             if (ln > 7) ln = 7;
+            int available = qMax(0, frame.payload().size() - 1);
+            if (ln > available) ln = available;
             for (int j = 0; j < ln; j++) dataBytes.append(frame.payload()[j+1]);
         }
         pMsg->setPayload(dataBytes);

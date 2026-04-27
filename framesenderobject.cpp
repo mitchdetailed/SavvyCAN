@@ -96,7 +96,7 @@ void FrameSenderObject::stopSending()
 {
     /* make sure we execute in mThread context */
     if( mThread_p && (mThread_p != QThread::currentThread()) ) {
-        QMetaObject::invokeMethod(this, "stopPlayback",
+        QMetaObject::invokeMethod(this, "stopSending",
                                   Qt::BlockingQueuedConnection);
         return;
     }
@@ -126,6 +126,7 @@ void FrameSenderObject::removeSendRecord(int idx)
                                   Q_ARG(int, idx));
         return;
     }
+    if (idx < 0 || idx >= sendingData.size()) return;
     sendingData.removeAt(idx);
 }
 

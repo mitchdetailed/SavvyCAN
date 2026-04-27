@@ -3,6 +3,7 @@
 
 #include <Qt>
 #include <stdint.h>
+#include <atomic>
 #include <QByteArray>
 #include <QDateTime>
 #include <QDebug>
@@ -65,10 +66,11 @@ class Utility
 {
 public:
 
-    static bool decimalMode;
-    static TimeStyle timeStyle;
+    static std::atomic<bool> decimalMode;
+    static std::atomic<TimeStyle> timeStyle;
+    // timeFormat and fullyQualifiedNameSeperator are only written from the main thread;
+    // they are not individually protected — callers must not write from a worker thread.
     static QString timeFormat;
-
     static QString fullyQualifiedNameSeperator;
 
     static void SetComboBoxItemEnabled(QComboBox * comboBox, int index, bool enabled)
