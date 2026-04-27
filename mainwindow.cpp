@@ -826,12 +826,16 @@ QString MainWindow::getSignalNameFromPosition(QPoint pos)
     //clicked within the cell. Then find out which line that puts us over.
     QModelIndex idx = ui->canFramesView->indexAt(pos); //figure out where in the view we clicked (row, column)
     int fontHeight = ui->canFramesView->fontMetrics().height();
+    if (fontHeight <= 0) return QString(); // safety: font not yet initialised
     int cellBaseY = ui->canFramesView->rowViewportPosition(idx.row());
     int lineOffset = (pos.y() - cellBaseY) / fontHeight;
     qDebug() << "Offset: " << lineOffset;
-    QString lineText = idx.data().toString().split("\n")[lineOffset];
+    QStringList splitLines = idx.data().toString().split("\n");
+    if (lineOffset < 0 || lineOffset >= splitLines.size()) return QString();
+    QString lineText = splitLines[lineOffset];
     qDebug() << "Line Text: " << lineText;
-    return lineText.split(":")[0];
+    QStringList colonParts = lineText.split(":");
+    return colonParts.isEmpty() ? QString() : colonParts[0];
 }
 
 uint32_t MainWindow::getMessageIDFromPosition(QPoint pos)

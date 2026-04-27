@@ -847,10 +847,15 @@ void GraphingWindow::saveSpreadsheet()
                     // find index, where x >= currentX
                     int cursor = indices[k];
                     double span = graphParams[k].x[cursor+1] - graphParams[k].x[cursor];
-                    double progress = (currentX - graphParams[k].x[cursor]) / span;
-                    Q_ASSERT(progress >= 0.0 && progress <= 1.0);
-                    value = Utility::Lerp(graphParams[k].y[cursor], graphParams[k].y[cursor+1], progress);
-                    qDebug() << "Span: " << span << " Prog: " << progress << " Value: " << value;
+                    if (qFuzzyIsNull(span)) {
+                        // duplicate x values — just take the current y value
+                        value = graphParams[k].y[cursor];
+                    } else {
+                        double progress = (currentX - graphParams[k].x[cursor]) / span;
+                        Q_ASSERT(progress >= 0.0 && progress <= 1.0);
+                        value = Utility::Lerp(graphParams[k].y[cursor], graphParams[k].y[cursor+1], progress);
+                        qDebug() << "Span: " << span << " Prog: " << progress << " Value: " << value;
+                    }
                 }
                 outFile.putChar(',');
                 outFile.write(QString::number(value).toUtf8());

@@ -118,7 +118,8 @@ void FirmwareUploaderWindow::gotTargettedFrame(CANFrame frame)
             }
             else
             {
-                ui->progressBar->setValue((400 * currentSendingPosition) / firmwareSize);
+                if (firmwareSize > 0)
+                    ui->progressBar->setValue((400 * currentSendingPosition) / firmwareSize);
                 updateProgress();
                 sendFirmwareChunk();
             }

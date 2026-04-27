@@ -234,8 +234,10 @@ void TriggerDialog::regenerateCurrentListItem()
         trig.sigName = ui->cmSignal->currentText().trimmed();
     }
 
+    if (row < 0 || row >= triggers.size()) return;
     triggers[row] = trig;
-    ui->listTriggers->item(row)->setText(buildEntry(trig));
+    QListWidgetItem *listItem = ui->listTriggers->item(row);
+    if (listItem) listItem->setText(buildEntry(trig));
 }
 
 void TriggerDialog::FillDetails()
