@@ -469,16 +469,16 @@ QVariant CANFrameModel::data(const QModelIndex &index, int role) const
         switch(Column(index.column()))
         {
         case Column::TimeStamp:
-            return Qt::AlignRight;
+            return QVariant(Qt::AlignRight | Qt::AlignVCenter);
         case Column::FrameId:
         case Column::Direction:
         case Column::Extended:
         case Column::Bus:
         case Column::Remote:
         case Column::Length:
-            return Qt::AlignHCenter;
+            return QVariant(Qt::AlignHCenter | Qt::AlignVCenter);
         default:
-            return Qt::AlignLeft;
+            return QVariant(Qt::AlignLeft | Qt::AlignVCenter);
         }
     }
 

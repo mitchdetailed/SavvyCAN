@@ -397,10 +397,12 @@ void MainWindow::readSettings()
         ui->canFramesView->setColumnWidth(7, settings.value("Main/AsciiColumn", 50).toUInt()); //ascii
         //ui->canFramesView->setColumnWidth(8, settings.value("Main/DataColumn", 225).toUInt()); //data
     }
-    if (settings.value("Main/AutoScroll", false).toBool())
-    {
-        ui->cbAutoScroll->setChecked(true);
-    }
+    ui->cbAutoScroll->setChecked(settings.value("Main/AutoScroll", false).toBool());
+    ui->cbPersistentFilters->setChecked(settings.value("Main/PersistentFilters", false).toBool());
+    if (settings.value("Main/InterpretFrames", false).toBool())
+        ui->cbInterpret->setChecked(true);
+    if (settings.value("Main/OverwriteMode", false).toBool())
+        ui->cbOverwrite->setChecked(true);
     int fontSize = settings.value("Main/FontSize", 9).toUInt();
     QFont newFont = QFont(ui->canFramesView->font());
     newFont.setPointSize(fontSize);
@@ -469,6 +471,10 @@ void MainWindow::writeSettings()
         settings.setValue("Main/AsciiColumn", ui->canFramesView->columnWidth(7));
         //settings.setValue("Main/DataColumn", ui->canFramesView->columnWidth(8));
     }
+    settings.setValue("Main/AutoScroll", ui->cbAutoScroll->isChecked());
+    settings.setValue("Main/PersistentFilters", ui->cbPersistentFilters->isChecked());
+    settings.setValue("Main/InterpretFrames", ui->cbInterpret->isChecked());
+    settings.setValue("Main/OverwriteMode", ui->cbOverwrite->isChecked());
 }
 
 void MainWindow::onSenderCellChanged(int row, int col)
@@ -676,6 +682,7 @@ void MainWindow::expandAllRows()
 
     if (goAhead)
     {
+        ui->canFramesView->setWordWrap(true);
         ui->canFramesView->resizeRowsToContents();
 
         rowExpansionActive = true;
@@ -688,7 +695,10 @@ void MainWindow::manageRowExpansion()
     if(numRows < 20000)
     {
         if(rowExpansionActive && model->getInterpretMode())
+        {
+            ui->canFramesView->setWordWrap(true);
             ui->canFramesView->resizeRowsToContents();
+        }
     }
     else
     {
@@ -718,6 +728,7 @@ void MainWindow::collapseAllRows()
 
     if (goAhead)
     {
+        ui->canFramesView->setWordWrap(false);
         for (int i = 0; i < numRows; i++) ui->canFramesView->setRowHeight(i, normalRowHeight);
 
         rowExpansionActive = false;

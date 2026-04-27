@@ -157,6 +157,7 @@ void FramePlaybackWindow::readSettings()
     }
     ui->spinPlaySpeed->setValue(settings.value("Playback/DefSpeed", 5).toInt());
     ui->comboCANBus->setCurrentIndex(settings.value("Playback/SendingBus", 0).toInt());
+    ui->cbOriginalTiming->setChecked(settings.value("Playback/UseOriginalTiming", true).toBool());
 
     calculateWhichBus();
 }
@@ -170,6 +171,7 @@ void FramePlaybackWindow::writeSettings()
         settings.setValue("Playback/WindowSize", size());
         settings.setValue("Playback/WindowPos", pos());
     }
+    settings.setValue("Playback/UseOriginalTiming", ui->cbOriginalTiming->isChecked());
 }
 
 void FramePlaybackWindow::contextMenuFilters(QPoint pos)
