@@ -445,6 +445,10 @@ void MainWindow::readUpdateableSettings()
 
     CSVAbsTime = settings.value("Main/CSVAbsTime", false).toBool();
 
+    int refreshHz = settings.value("Main/RefreshRateHz", 4).toInt();
+    refreshHz = qBound(4, refreshHz, 100);
+    updateTimer.setInterval(1000 / refreshHz);
+
     if (settings.value("Main/FilterLabeling", false).toBool())
         ui->listFilters->setMaximumWidth(250);
     else

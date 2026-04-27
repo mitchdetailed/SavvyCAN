@@ -2,6 +2,7 @@
 #define CANFRAMEMODEL_H
 
 #include <QAbstractTableModel>
+#include <QHash>
 #include <QList>
 #include <QVector>
 #include <QDebug>
@@ -103,6 +104,10 @@ private:
     uint32_t preallocSize;
     bool sortDirAsc;
     int bytesPerLine;
+    QHash<uint64_t, int> overwriteIndex;
+    int lastFilteredUpdateCount;
+    bool hasAnyDisabledFilter;
+    bool hasAnyDisabledBusFilter;
 };
 
 
