@@ -86,6 +86,9 @@ CANFrameModel::CANFrameModel(QObject *parent)
     timeFormat =  "MMM-dd HH:mm:ss.zzz";
     sortDirAsc = false;
     bytesPerLine = 8;
+    lastFilteredUpdateCount = 0;
+    hasAnyDisabledFilter = false;
+    hasAnyDisabledBusFilter = false;
 }
 
 void CANFrameModel::setBytesPerLine(int bpl)
@@ -217,6 +220,12 @@ void CANFrameModel::setFilterState(unsigned int ID, bool state)
 {
     if (!filters.contains(ID)) return;
     filters[ID] = state;
+    if (!state) {
+        hasAnyDisabledFilter = true;
+    } else {
+        hasAnyDisabledFilter = false;
+        for (auto const &val : filters) { if (!val) { hasAnyDisabledFilter = true; break; } }
+    }
     sendRefresh();
 }
 
@@ -224,6 +233,12 @@ void CANFrameModel::setBusFilterState(unsigned int BusID, bool state)
 {
     if (!busFilters.contains(BusID)) return;
     busFilters[BusID] = state;
+    if (!state) {
+        hasAnyDisabledBusFilter = true;
+    } else {
+        hasAnyDisabledBusFilter = false;
+        for (auto const &val : busFilters) { if (!val) { hasAnyDisabledBusFilter = true; break; } }
+    }
     sendRefresh();
 }
 
@@ -234,6 +249,7 @@ void CANFrameModel::setAllFilters(bool state)
     {
         it.value() = state;
     }
+    hasAnyDisabledFilter = !state;
     sendRefresh();
 }
 
@@ -367,7 +383,7 @@ void CANFrameModel::recalcOverwrite()
     //Look at the current list of frames and turn it into just a list of unique IDs
     QHash<uint64_t, CANFrame> overWriteFrames;
     uint64_t idAugmented; //id in lower 29 bits, bus number shifted up 29 bits
-    foreach(CANFrame frame, frames)
+    foreach(const CANFrame& frame, frames)
     {
         if (frame.frameType() != frame.DataFrame) continue;
 
@@ -375,17 +391,18 @@ void CANFrameModel::recalcOverwrite()
         idAugmented = idAugmented + (frame.bus << 29ull);
         if (filters[frame.frameId()] && busFilters[frame.bus])
         {
+            CANFrame mutableFrame = frame; // copy only for frames that will be stored
             if (!overWriteFrames.contains(idAugmented))
             {
-                frame.timedelta = 0;
-                frame.frameCount = 1;
-                overWriteFrames.insert(idAugmented, frame);
+                mutableFrame.timedelta = 0;
+                mutableFrame.frameCount = 1;
+                overWriteFrames.insert(idAugmented, mutableFrame);
             }
             else
             {
-                frame.timedelta = frame.timeStamp().microSeconds() - overWriteFrames[idAugmented].timeStamp().microSeconds();
-                frame.frameCount = overWriteFrames[idAugmented].frameCount + 1;
-                overWriteFrames[idAugmented] = frame;
+                mutableFrame.timedelta = frame.timeStamp().microSeconds() - overWriteFrames[idAugmented].timeStamp().microSeconds();
+                mutableFrame.frameCount = overWriteFrames[idAugmented].frameCount + 1;
+                overWriteFrames[idAugmented] = mutableFrame;
             }
         }
     }
@@ -397,6 +414,12 @@ void CANFrameModel::recalcOverwrite()
     filteredFrames.clear();
     filteredFrames.append(overWriteFrames.values().toVector());
     filteredFrames.reserve(preallocSize);
+    overwriteIndex.clear();
+    for (int i = 0; i < filteredFrames.size(); i++)
+    {
+        uint64_t augID = (uint64_t)filteredFrames[i].frameId() | ((uint64_t)filteredFrames[i].bus << 29ull);
+        overwriteIndex[augID] = i;
+    }
 
     /*for (int i = 0; i < frames.size(); i++)
     {
@@ -413,7 +436,6 @@ void CANFrameModel::recalcOverwrite()
 QVariant CANFrameModel::data(const QModelIndex &index, int role) const
 {
     QString tempString;
-    CANFrame thisFrame;
     QVariant ts;
 
     if (!index.isValid())
@@ -422,7 +444,7 @@ QVariant CANFrameModel::data(const QModelIndex &index, int role) const
     if (index.row() >= (filteredFrames.size()))
         return QVariant();
 
-    thisFrame = filteredFrames.at(index.row());
+    const CANFrame &thisFrame = filteredFrames.at(index.row());
 
     const unsigned char *data = reinterpret_cast<const unsigned char *>(thisFrame.payload().constData());
     int dataLen = thisFrame.payload().size();
@@ -493,10 +515,10 @@ QVariant CANFrameModel::data(const QModelIndex &index, int role) const
                 return QString::number(thisFrame.timedelta);
             }
             else ts = Utility::formatTimestamp(thisFrame.timeStamp().microSeconds());
-            if (ts.typeId() == QMetaType::Double) return QString::number(ts.toDouble(), 'f', 5); //never scientific notation, 5 decimal places
-            if (ts.typeId() == QMetaType::LongLong) return QString::number(ts.toLongLong()); //never scientific notion, all digits shown
-            if (ts.typeId() == QMetaType::QDateTime) return ts.toDateTime().toString(timeFormat); //custom set format for dates and times
-            return Utility::formatTimestamp(thisFrame.timeStamp().microSeconds());
+            if (ts.typeId() == QMetaType::Double) return QString::number(ts.toDouble(), 'f', 5);
+            if (ts.typeId() == QMetaType::ULongLong) return QString::number(ts.toULongLong());
+            if (ts.typeId() == QMetaType::QDateTime) return ts.toDateTime().toString(timeFormat);
+            return ts;
         case Column::FrameId:
             return Utility::formatCANID(thisFrame.frameId(), thisFrame.hasExtendedFrameFormat());
         case Column::Extended:
@@ -650,26 +672,12 @@ QVariant CANFrameModel::headerData(int section, Qt::Orientation orientation,
 
 bool CANFrameModel::any_filters_are_configured(void)
 {
-    for (auto const &val : filters)
-    {
-        if (val == true)
-            continue;
-        else
-            return true;
-    }
-    return false;
+    return hasAnyDisabledFilter;
 }
 
 bool CANFrameModel::any_busfilters_are_configured(void)
 {
-    for (auto const &val : busFilters)
-    {
-        if (val == true)
-            continue;
-        else
-            return true;
-    }
-    return false;
+    return hasAnyDisabledBusFilter;
 }
 
 
@@ -688,10 +696,12 @@ void CANFrameModel::addFrame(const CANFrame& frame, bool autoRefresh = false)
     if (!filters.contains(tempFrame.frameId()))
     {
         // if there are any filters already configured, leave the new filter disabled
-        if (any_filters_are_configured())
+        if (hasAnyDisabledFilter) {
             filters.insert(tempFrame.frameId(), false);
-        else
+            // hasAnyDisabledFilter stays true
+        } else {
             filters.insert(tempFrame.frameId(), true);
+        }
         needFilterRefresh = true;
     }
 
@@ -699,10 +709,12 @@ void CANFrameModel::addFrame(const CANFrame& frame, bool autoRefresh = false)
     if (!busFilters.contains(tempFrame.bus))
     {
         // if there are any busFilters already configured, leave the new filter disabled
-        if (any_busfilters_are_configured())
+        if (hasAnyDisabledBusFilter) {
             busFilters.insert(tempFrame.bus, false);
-        else
+            // hasAnyDisabledBusFilter stays true
+        } else {
             busFilters.insert(tempFrame.bus, true);
+        }
         needFilterRefresh = true;
     }
 
@@ -717,6 +729,7 @@ void CANFrameModel::addFrame(const CANFrame& frame, bool autoRefresh = false)
                 if (autoRefresh) beginInsertRows(QModelIndex(), filteredFrames.size(), filteredFrames.size());
                 tempFrame.frameCount = 1;
                 filteredFrames.append(tempFrame);
+                lastFilteredUpdateCount++;
                 if (autoRefresh) endInsertRows();
             }
         }
@@ -727,54 +740,27 @@ void CANFrameModel::addFrame(const CANFrame& frame, bool autoRefresh = false)
     }
     else //yes, overwrite dups
     {
-        bool found = false;
-//        for (int i = 0; i < frames.size(); i++)
-//        {
-//            if ( (frames[i].frameId() == tempFrame.frameId()) && (frames[i].bus == tempFrame.bus) )
-//            {
-//                tempFrame.frameCount = frames[i].frameCount + 1;
-//                tempFrame.timedelta = tempFrame.timeStamp().microSeconds() - frames[i].timeStamp().microSeconds();
-//                frames.replace(i, tempFrame);
-//                found = true;
-//                break;
-//            }
-//        }
-        for (int i = 0; i < filteredFrames.size(); i++)
+        const uint64_t augID = (uint64_t)tempFrame.frameId() | ((uint64_t)tempFrame.bus << 29ull);
+        if (overwriteIndex.contains(augID))
         {
-            if ( (filteredFrames[i].frameId() == tempFrame.frameId()) && (filteredFrames[i].bus == tempFrame.bus) )
-            {
-                tempFrame.frameCount = filteredFrames[i].frameCount + 1;
-                tempFrame.timedelta = tempFrame.timeStamp().microSeconds() - filteredFrames[i].timeStamp().microSeconds();
-                filteredFrames.replace(i, tempFrame);
-                found = true;
-                break;
-            }
+            int idx = overwriteIndex[augID];
+            tempFrame.frameCount = filteredFrames[idx].frameCount + 1;
+            tempFrame.timedelta = tempFrame.timeStamp().microSeconds() - filteredFrames[idx].timeStamp().microSeconds();
+            filteredFrames.replace(idx, tempFrame);
         }
-        frames.append(tempFrame);
-        if (!found)
+        else
         {
-            //frames.append(tempFrame);
             if (filters[tempFrame.frameId()] && busFilters[tempFrame.bus])
             {
                 if (autoRefresh) beginInsertRows(QModelIndex(), filteredFrames.size(), filteredFrames.size());
                 tempFrame.frameCount = 1;
                 tempFrame.timedelta = 0;
+                overwriteIndex[augID] = filteredFrames.size();
                 filteredFrames.append(tempFrame);
                 if (autoRefresh) endInsertRows();
             }
         }
-        else
-        {
-            for (int j = 0; j < filteredFrames.size(); j++)
-            {
-                if ( (filteredFrames[j].frameId() == tempFrame.frameId()) && (filteredFrames[j].bus == tempFrame.bus) )
-                {
-                    if (autoRefresh) beginResetModel();
-                    filteredFrames.replace(j, tempFrame);
-                    if (autoRefresh) endResetModel();
-                }
-            }
-        }
+        frames.append(tempFrame);
     }
 
     mutex.unlock();
@@ -801,17 +787,22 @@ void CANFrameModel::addFrames(const CANConnection*, const QVector<CANFrame>& pFr
         filteredFrames.remove(0, toRemove);
         endRemoveRows();
         qDebug() << "filteredFrames removed, new count: " << filteredFrames.length();
+        lastFilteredUpdateCount = 0;
+        if (overwriteDups)
+        {
+            overwriteIndex.clear();
+            for (int i = 0; i < filteredFrames.size(); i++)
+            {
+                uint64_t augID = (uint64_t)filteredFrames[i].frameId() | ((uint64_t)filteredFrames[i].bus << 29ull);
+                overwriteIndex[augID] = i;
+            }
+        }
         mutex.unlock();
     }
 
     foreach(const CANFrame& frame, pFrames)
     {
         addFrame(frame);
-    }
-    if (overwriteDups) //if in overwrite mode we'll update every time frames come in
-    {
-        beginResetModel();
-        endResetModel();
     }
 }
 
@@ -841,6 +832,7 @@ void CANFrameModel::sendRefresh()
         filteredFrames.append(tempContainer);
         filteredFrames.reserve(preallocSize);
         lastUpdateNumFrames = 0;
+        lastFilteredUpdateCount = 0;
         endResetModel();
         mutex.unlock();
     }
@@ -857,19 +849,14 @@ void CANFrameModel::sendRefresh(int pos)
 //have to send thousands of messages per second
 int CANFrameModel::sendBulkRefresh()
 {
-    //int num = filteredFrames.size() - lastUpdateNumFrames;
     if (lastUpdateNumFrames <= 0) return 0;
-
-    if (lastUpdateNumFrames == 0 && !overwriteDups) return 0;
-    //if (filteredFrames.size() == 0) return 0;
-
-    //qDebug() << "Bulk refresh of " << lastUpdateNumFrames;
 
     beginResetModel();
     endResetModel();
 
     int num = lastUpdateNumFrames;
     lastUpdateNumFrames = 0;
+    lastFilteredUpdateCount = 0;
 
     return num;
 }
@@ -889,6 +876,13 @@ void CANFrameModel::clearFrames()
     filteredFrames.reserve(preallocSize);
     this->endResetModel();
     lastUpdateNumFrames = 0;
+    lastFilteredUpdateCount = 0;
+    overwriteIndex.clear();
+    if (!filtersPersistDuringClear)
+    {
+        hasAnyDisabledFilter = false;
+        hasAnyDisabledBusFilter = false;
+    }
     mutex.unlock();
 
     emit updatedFiltersList();
@@ -924,6 +918,7 @@ void CANFrameModel::insertFrames(const QVector<CANFrame> &newFrames)
         {
             insertedFiltered++;
             filteredFrames.append(newFrames[i]);
+            lastFilteredUpdateCount++;
         }
     }
     lastUpdateNumFrames = newFrames.size();
@@ -975,6 +970,8 @@ void CANFrameModel::loadFilterFile(QString filename)
     }
     inFile->close();
 
+    hasAnyDisabledFilter = false;
+    for (auto const &val : filters) { if (!val) { hasAnyDisabledFilter = true; break; } }
     sendRefresh();
 
     emit updatedFiltersList();

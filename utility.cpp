@@ -1,6 +1,6 @@
 #include "utility.h"
 
-std::atomic<bool> Utility::decimalMode{false};
+bool Utility::decimalMode = false;
 QString Utility::timeFormat = "MMM-dd HH:mm:ss.zzz";
-std::atomic<TimeStyle> Utility::timeStyle{TS_MICROS};
+TimeStyle Utility::timeStyle = TS_MICROS;
 QString Utility::fullyQualifiedNameSeperator = "::";

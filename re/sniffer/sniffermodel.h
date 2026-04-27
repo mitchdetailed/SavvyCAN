@@ -5,6 +5,7 @@
 #include <QModelIndex>
 #include <QVariant>
 #include <QTimer>
+#include <QVector>
 
 #include "can_structs.h"
 #include "connections/canconnection.h"
@@ -61,6 +62,8 @@ signals:
 private:
     QMap<quint32, SnifferItem*> mMap;
     QMap<quint32, SnifferItem*> mFilters;
+    QVector<quint32>            mOrderedKeys;
+    QVector<quint32>            mFilteredKeys;
     bool                        mFilter;
     bool                        mNeverExpire;
     bool                        mFadeInactive;

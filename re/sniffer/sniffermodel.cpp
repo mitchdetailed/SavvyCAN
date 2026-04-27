@@ -1,6 +1,7 @@
 #include <QDebug>
 #include <Qt>
 #include <QApplication>
+#include <algorithm>
 #include "sniffermodel.h"
 #include "snifferwindow.h"
 #include "SnifferDelegate.h"
@@ -171,17 +172,15 @@ QModelIndex SnifferModel::index(int row, int column, const QModelIndex &parent) 
     if (parent.isValid())
         return QModelIndex();
 
+    const QVector<quint32>& keys = mFilter ? mFilteredKeys : mOrderedKeys;
     const QMap<quint32, SnifferItem*>& map = mFilter ? mFilters : mMap;
 
-    if(column>tc::LAST || row>=map.size())
+    if (column > tc::LAST || row >= keys.size())
         return QModelIndex();
 
-    /* ugly but I can't find best without creating a list to keep indexes */
-    QMap<quint32, SnifferItem*>::const_iterator iter;
-    int i;
-    for(iter = map.begin(), i=0 ; i<row ; ++i, ++iter);
-
-    return createIndex(row, column, iter.value());
+    SnifferItem *item = map.value(keys[row], nullptr);
+    if (!item) return QModelIndex();
+    return createIndex(row, column, item);
 }
 
 
@@ -226,6 +225,8 @@ void SnifferModel::clear()
     qDeleteAll(mMap);
     mMap.clear();
     mFilters.clear();
+    mOrderedKeys.clear();
+    mFilteredKeys.clear();
     mFilter = false;
     endResetModel();
 }
@@ -262,11 +263,13 @@ void SnifferModel::refresh()
         beginResetModel();
         foreach(quint32 id, toRemove)
         {
-            /* remove element */
             item = mMap.take(id);
             mFilters.remove(id);
             delete item;
-            /* send notification */
+            auto oit = std::lower_bound(mOrderedKeys.begin(), mOrderedKeys.end(), id);
+            if (oit != mOrderedKeys.end() && *oit == id) mOrderedKeys.erase(oit);
+            auto fit = std::lower_bound(mFilteredKeys.begin(), mFilteredKeys.end(), id);
+            if (fit != mFilteredKeys.end() && *fit == id) mFilteredKeys.erase(fit);
             emit idChange(id, false);
         }
         endResetModel();
@@ -284,26 +287,37 @@ void SnifferModel::filter(fltType pType, int pId)
     switch(pType)
     {
         case fltType::NONE:
-            /* erase everything */
             mFilter = true;
             mFilters.clear();
+            mFilteredKeys.clear();
             break;
         case fltType::ADD:
-            /* add filter to list */
             mFilter = true;
-            mFilters[pId] = mMap[pId];
+            mFilters[(quint32)pId] = mMap[(quint32)pId];
+            {
+                auto it = std::lower_bound(mFilteredKeys.begin(), mFilteredKeys.end(), (quint32)pId);
+                if (it == mFilteredKeys.end() || *it != (quint32)pId)
+                    mFilteredKeys.insert(it, (quint32)pId);
+            }
             break;
         case fltType::REMOVE:
-            /* remove filter */
             if(!mFilter)
+            {
                 mFilters = mMap;
+                mFilteredKeys = mOrderedKeys;
+            }
             mFilter = true;
-            mFilters.remove(pId);
+            mFilters.remove((quint32)pId);
+            {
+                auto it = std::lower_bound(mFilteredKeys.begin(), mFilteredKeys.end(), (quint32)pId);
+                if (it != mFilteredKeys.end() && *it == (quint32)pId)
+                    mFilteredKeys.erase(it);
+            }
             break;
         case fltType::ALL:
-            /* stop filtering */
             mFilter = false;
             mFilters.clear();
+            mFilteredKeys.clear();
             break;
     }
     endResetModel();
@@ -318,20 +332,21 @@ void SnifferModel::update(CANConnection*, QVector<CANFrame>& pFrames)
 {
     foreach(const CANFrame& frame, pFrames)
     {
-        if(!mMap.contains(frame.frameId()))
+        quint32 fid = frame.frameId();
+        if(!mMap.contains(fid))
         {
-            int index = std::distance(mMap.begin(), mMap.lowerBound(frame.frameId()));
-            /* add the frame */
-            beginInsertRows(QModelIndex(), index, index);
-            mMap[frame.frameId()] = new SnifferItem(frame, mTimeSequence);
-            mMap[frame.frameId()]->update(frame, mTimeSequence, mMuteNotched);
+            auto it = std::lower_bound(mOrderedKeys.begin(), mOrderedKeys.end(), fid);
+            int insertRow = static_cast<int>(it - mOrderedKeys.begin());
+            beginInsertRows(QModelIndex(), insertRow, insertRow);
+            mMap[fid] = new SnifferItem(frame, mTimeSequence);
+            mMap[fid]->update(frame, mTimeSequence, mMuteNotched);
+            mOrderedKeys.insert(it, fid);
             endInsertRows();
 
-            emit idChange(frame.frameId(), true);
+            emit idChange(fid, true);
         }
         else
-            //updateData
-            mMap[frame.frameId()]->update(frame, mTimeSequence, mMuteNotched);
+            mMap[fid]->update(frame, mTimeSequence, mMuteNotched);
     }
 }
 

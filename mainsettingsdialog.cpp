@@ -157,6 +157,7 @@ MainSettingsDialog::MainSettingsDialog(QWidget *parent) :
 
     ui->spinMaximumFrames->setValue(settings.value("Main/MaximumFrames", maxFramesDefault).toInt());
     ui->spinBytesPerLine->setValue(settings.value("Main/BytesPerLine", 8).toInt());
+    ui->spinRefreshRate->setValue(settings.value("Main/RefreshRateHz", 4).toInt());
 
     //just for simplicity they all call the same function and that function updates all settings at once
     connect(ui->comboLanguage, SIGNAL(currentIndexChanged(int)), this, SLOT(updateSettings()));
@@ -190,6 +191,7 @@ MainSettingsDialog::MainSettingsDialog(QWidget *parent) :
     connect(ui->spinMaximumFrames, SIGNAL(valueChanged(int)), this, SLOT(updateSettings()));
     connect(ui->cbFontFixedWidth, SIGNAL(toggled(bool)), this, SLOT(updateSettings()));
     connect(ui->spinBytesPerLine, SIGNAL(valueChanged(int)), this, SLOT(updateSettings()));
+    connect(ui->spinRefreshRate, SIGNAL(valueChanged(int)), this, SLOT(updateSettings()));
 
     installEventFilter(this);
 }
@@ -260,6 +262,7 @@ void MainSettingsDialog::updateSettings()
     settings.setValue("Main/IgnoreDBCColors", ui->cbIgnoreDBCColors->isChecked());
     settings.setValue("Main/MaximumFrames", ui->spinMaximumFrames->value());
     settings.setValue("Main/BytesPerLine", ui->spinBytesPerLine->value());
+    settings.setValue("Main/RefreshRateHz", ui->spinRefreshRate->value());
     settings.setValue("Main/FontFixedWidth", ui->cbFontFixedWidth->isChecked());
     settings.setValue("Main/ColorsByCanId", ui->cbColorsByCanId->isChecked());
 
