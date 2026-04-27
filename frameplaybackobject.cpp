@@ -26,7 +26,7 @@ FramePlaybackObject::~FramePlaybackObject()
 quint64 FramePlaybackObject::updatePosition(bool forward)
 {
     //qDebug() << "updatePosition";
-    if (!currentSeqItem) {
+    if (!currentSeqItem || currentSeqItem->data.isEmpty()) {
         playbackTimer->stop(); //pushing this button halts automatic playback
         playbackActive = false;
         currentPosition = 0;
@@ -97,6 +97,7 @@ quint64 FramePlaybackObject::updatePosition(bool forward)
 
 quint64 FramePlaybackObject::peekPosition(bool forward)
 {
+    if (!currentSeqItem || currentSeqItem->data.isEmpty()) return 0xFFFFFFFFFFFFFFFFull;
     int peekCurrentPosition = currentPosition;
     if (forward)
     {
@@ -195,7 +196,7 @@ void FramePlaybackObject::startPlaybackForward()
     playbackActive = true;
     playbackForward = true;
 
-    if (useOrigTiming)
+    if (useOrigTiming && currentSeqItem && !currentSeqItem->data.isEmpty())
     {
         playbackTimer->setInterval(1);
         playbackElapsed.start();
@@ -217,7 +218,7 @@ void FramePlaybackObject::startPlaybackBackward()
 
     playbackActive = true;
     playbackForward = false;
-    if (useOrigTiming)
+    if (useOrigTiming && currentSeqItem && !currentSeqItem->data.isEmpty())
     {
         playbackElapsed.start();
         playbackTimer->setInterval(1);

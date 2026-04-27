@@ -390,7 +390,8 @@ void FrameSenderObject::doModifiers(int idx)
                 shadowReg = first & second;
                 break;
             case DIVISION:
-                shadowReg = first / second;
+                if (second != 0) shadowReg = first / second;
+                else shadowReg = 0; // Prevent divide by zero crash
                 break;
             case MULTIPLICATION:
                 shadowReg = first * second;
@@ -405,13 +406,17 @@ void FrameSenderObject::doModifiers(int idx)
                 shadowReg = first ^ second;
                 break;
             case MOD:
-                shadowReg = first % second;
+                if (second != 0) shadowReg = first % second;
+                else shadowReg = 0; // Prevent divide by zero crash
+                break;
             }
         }
         //Finally, drop the result into the proper data byte
         QByteArray newArr(sendData->payload());
-        newArr[mod->destByte] = (char) shadowReg;
-        sendData->setPayload(newArr);
+        if (mod->destByte >= 0 && mod->destByte < newArr.length()) {
+            newArr[mod->destByte] = (char) shadowReg;
+            sendData->setPayload(newArr);
+        }
     }
 }
 
@@ -425,6 +430,7 @@ int FrameSenderObject::fetchOperand(int idx, ModifierOperand op)
     }
     else if (op.ID == -2) //fetch data from a data byte within the output frame
     {
+        if (op.databyte < 0 || op.databyte >= sendingData.at(idx).payload().length()) return 0;
         if (op.notOper) return ~((unsigned char)sendingData.at(idx).payload()[op.databyte]);
         else return (unsigned char)sendingData.at(idx).payload()[op.databyte];
     }
@@ -433,6 +439,7 @@ int FrameSenderObject::fetchOperand(int idx, ModifierOperand op)
         tempFrame = lookupFrame(op.ID, op.bus);
         if (tempFrame != nullptr)
         {
+            if (op.databyte < 0 || op.databyte >= tempFrame->payload().length()) return 0;
             if (op.notOper) return ~((unsigned char)tempFrame->payload()[op.databyte]);
             else return (unsigned char)tempFrame->payload()[op.databyte];
         }

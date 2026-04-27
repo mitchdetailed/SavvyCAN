@@ -270,261 +270,205 @@ bool FrameFileIO::loadFrameFile(QString &fileName, QVector<CANFrame>* frameCache
 //whether a file could be loaded or not by a given loader. The loader return is still used in case the guess was wrong.
 bool FrameFileIO::autoDetectLoadFile(QString filename, QVector<CANFrame>* frames)
 {
-    qDebug() << "Attempting Canalyzer BLF";
-    if (isCanalyzerBLF(filename))
+    // Step 1: Extension-based pre-filter
+    // Only attempt parsers whose file type is compatible with the extension.
+    // Any extension not in the known set is rejected immediately with a
+    // helpful message rather than blindly running every parser.
+
+    QFileInfo fi(filename);
+    QString ext = fi.suffix().toLower();
+
+    static const QSet<QString> knownExtensions = {
+        QLatin1String("csv"), QLatin1String("crt"), QLatin1String("crtd"),
+        QLatin1String("log"), QLatin1String("can"), QLatin1String("trace"),
+        QLatin1String("avc"), QLatin1String("evc"), QLatin1String("qcc"),
+        QLatin1String("trc"), QLatin1String("txt"), QLatin1String("asc"),
+        QLatin1String("blf"), QLatin1String("pcap"), QLatin1String("pcapng")
+    };
+
+    if (!knownExtensions.contains(ext))
     {
-        if (loadCanalyzerBLF(filename, frames))
-        {
-            qDebug() << "Loaded as Canalyzer BLF successfully!";
-            return true;
+        QMessageBox msgBox;
+        msgBox.setIcon(QMessageBox::Warning);
+        msgBox.setWindowTitle("Unknown File Type");
+        msgBox.setText(QString("The file extension '.%1' is not a recognised CAN log format.\n\n"
+                               "Please select the correct format manually from the file type list.").arg(ext));
+        msgBox.exec();
+        qDebug() << "autoDetect rejected unknown extension:" << ext;
+        return false;
+    }
+
+    // Step 2: Binary / magic-byte formats (extension-independent)
+    // These use file headers so they are safe to probe first.
+
+    if (ext == QLatin1String("blf"))
+    {
+        qDebug() << "Attempting Canalyzer BLF";
+        if (isCanalyzerBLF(filename) && loadCanalyzerBLF(filename, frames)) {
+            qDebug() << "Loaded as Canalyzer BLF successfully!"; return true;
         }
     }
 
-    qDebug() << "Attempting native CSV";
-    if (isNativeCSVFile(filename))
+    if (ext == QLatin1String("pcap") || ext == QLatin1String("pcapng"))
     {
-        if (loadNativeCSVFile(filename, frames))
-        {
-            qDebug() << "Loaded as native CSV successfully!";
-            return true;
+        qDebug() << "Attempting Wireshark SocketCAN";
+        if (isWiresharkSocketCANFile(filename) && loadWiresharkSocketCANFile(filename, frames)) {
+            qDebug() << "Loaded as Wireshark SocketCAN successfully!"; return true;
+        }
+        qDebug() << "Attempting Wireshark generic";
+        if (isWiresharkFile(filename) && loadWiresharkFile(filename, frames)) {
+            qDebug() << "Loaded as Wireshark Log successfully!"; return true;
         }
     }
 
-    // Attempt to load socket CAN first to avoid generic wireshark logic catching it
-    qDebug() << "Attempting Wireshark Socket CAN Log";
-    if (isWiresharkSocketCANFile(filename))
+    if (ext == QLatin1String("can"))
     {
-        if (loadWiresharkSocketCANFile(filename, frames))
-        {
-            qDebug() << "Loaded as Wireshark SocketCAN Log successfully!";
-            return true;
+        qDebug() << "Attempting Tesla AP Snapshot";
+        if (isTeslaAPFile(filename) && loadTeslaAPFile(filename, frames)) {
+            qDebug() << "Loaded as Tesla AP Snapshot successfully!"; return true;
+        }
+        qDebug() << "Attempting CANServer Binary Log";
+        if (isCANServerFile(filename) && loadCANServerFile(filename, frames)) {
+            qDebug() << "Loaded as CANServer Binary Log successfully!"; return true;
+        }
+        qDebug() << "Attempting Microchip Log";
+        if (isMicrochipFile(filename) && loadMicrochipFile(filename, frames)) {
+            qDebug() << "Loaded as Microchip successfully!"; return true;
+        }
+        qDebug() << "Attempting CAN-DO Log";
+        if (isCANDOFile(filename) && loadCANDOFile(filename, frames)) {
+            qDebug() << "Loaded as CAN-DO successfully!"; return true;
         }
     }
 
-    // This and the decoder above were both moved above TeslaAPFile as they match based on magic numbers and sometimes these files were falling into the TeslaAP decoder
-    qDebug() << "Attempting Wireshark Log";
-    if (isWiresharkFile(filename))
+    // Step 3: Text formats - only attempt parsers whose extensions match
+
+    if (ext == QLatin1String("asc"))
     {
-        if (loadWiresharkFile(filename, frames))
-        {
-            qDebug() << "Loaded as Wireshark Log successfully!";
-            return true;
+        qDebug() << "Attempting CANalyzer ASC";
+        if (isCanalyzerASC(filename) && loadCanalyzerASC(filename, frames)) {
+            qDebug() << "Loaded as CANalyzer ASC successfully!"; return true;
         }
     }
 
-    qDebug() << "Attempting Tesla AP Snapshot";
-    if (isTeslaAPFile(filename))
+    if (ext == QLatin1String("crt") || ext == QLatin1String("crtd"))
     {
-        if (loadTeslaAPFile(filename, frames))
-        {
-            qDebug() << "Loaded as Tesla AP Snapshot successfully!";
-            return true;
+        qDebug() << "Attempting CRTD";
+        if (isCRTDFile(filename) && loadCRTDFile(filename, frames)) {
+            qDebug() << "Loaded as CRTD successfully!"; return true;
         }
     }
 
-    qDebug() << "Attempting CANServer Binary Log";
-    if (isCANServerFile(filename))
+    if (ext == QLatin1String("trace"))
     {
-        if (loadCANServerFile(filename, frames))
-        {
-            qDebug() << "Loaded as CANServer Binary Log successfully!";
-            return true;
+        qDebug() << "Attempting Vector Trace file";
+        if (isTraceFile(filename) && loadTraceFile(filename, frames)) {
+            qDebug() << "Loaded as Trace successfully!"; return true;
         }
     }
 
-    qDebug() << "Attempting canalyzer ASC";
-    if (isCanalyzerASC(filename))
+    if (ext == QLatin1String("trc"))
     {
-        if (loadCanalyzerASC(filename, frames))
-        {
-            qDebug() << "Loaded as Canalyzer ASC successfully!";
-            return true;
+        qDebug() << "Attempting PCAN Viewer";
+        if (isPCANFile(filename) && loadPCANFile(filename, frames)) {
+            qDebug() << "Loaded as PCAN successfully!"; return true;
+        }
+        qDebug() << "Attempting CARBUS Analyzer";
+        if (isCARBUSAnalyzerFile(filename) && loadCARBUSAnalyzerFile(filename, frames)) {
+            qDebug() << "Loaded as CARBUS Analyzer successfully!"; return true;
+        }
+        qDebug() << "Attempting CANHacker";
+        if (isCANHackerFile(filename) && loadCANHackerFile(filename, frames)) {
+            qDebug() << "Loaded as CANHacker successfully!"; return true;
         }
     }
 
-    qDebug() << "Attempting CRTD";
-    if (isCRTDFile(filename))
+    if (ext == QLatin1String("log"))
     {
-        if (loadCRTDFile(filename, frames))
-        {
-            qDebug() << "Loaded as CRTD successfully!";
-            return true;
+        qDebug() << "Attempting BusMaster Log";
+        if (isLogFile(filename) && loadLogFile(filename, frames)) {
+            qDebug() << "Loaded as BusMaster Log successfully!"; return true;
+        }
+        qDebug() << "Attempting Candump/Kayak";
+        if (isCanDumpFile(filename) && loadCanDumpFile(filename, frames)) {
+            qDebug() << "Loaded as Candump/Kayak successfully!"; return true;
+        }
+        qDebug() << "Attempting Microchip Log";
+        if (isMicrochipFile(filename) && loadMicrochipFile(filename, frames)) {
+            qDebug() << "Loaded as Microchip successfully!"; return true;
+        }
+        qDebug() << "Attempting CANServer Binary Log";
+        if (isCANServerFile(filename) && loadCANServerFile(filename, frames)) {
+            qDebug() << "Loaded as CANServer Binary Log successfully!"; return true;
         }
     }
 
-
-    qDebug() << "Attempting trace file";
-    if (isTraceFile(filename))
+    if (ext == QLatin1String("txt"))
     {
-        if (loadTraceFile(filename, frames))
+        qDebug() << "Attempting Kvaser Log";
+        if (isKvaserFile(filename))
         {
-            qDebug() << "Loaded as trace successfully!";
-            return true;
+            if (loadKvaserFile(filename, frames, true))  { qDebug() << "Loaded as Kvaser HEX!"; return true; }
+            if (loadKvaserFile(filename, frames, false)) { qDebug() << "Loaded as Kvaser Decimal!"; return true; }
+        }
+        qDebug() << "Attempting CLX000";
+        if (isCLX000File(filename) && loadCLX000File(filename, frames)) {
+            qDebug() << "Loaded as CLX000 successfully!"; return true;
+        }
+        qDebug() << "Attempting CANDump Lawicel";
+        if (isLawicelFile(filename) && loadLawicelFile(filename, frames)) {
+            qDebug() << "Loaded as Lawicel successfully!"; return true;
         }
     }
 
-    qDebug() << "Attempting vehicle spy";
-    if (isVehicleSpyFile(filename))
+    if (ext == QLatin1String("avc") || ext == QLatin1String("evc") || ext == QLatin1String("qcc"))
     {
-        if (loadVehicleSpyFile(filename, frames))
-        {
-            qDebug() << "Loaded as vehicle spy successfully!";
-            return true;
+        qDebug() << "Attempting CAN-DO Log";
+        if (isCANDOFile(filename) && loadCANDOFile(filename, frames)) {
+            qDebug() << "Loaded as CAN-DO successfully!"; return true;
         }
     }
 
-    qDebug() << "Attempting candump";
-    if (isCanDumpFile(filename))
+    if (ext == QLatin1String("csv"))
     {
-        if (loadCanDumpFile(filename, frames))
-        {
-            qDebug() << "Loaded as candump successfully!";
-            return true;
+        qDebug() << "Attempting native GVRET CSV";
+        if (isNativeCSVFile(filename) && loadNativeCSVFile(filename, frames)) {
+            qDebug() << "Loaded as native GVRET CSV successfully!"; return true;
+        }
+        qDebug() << "Attempting Vehicle Spy CSV";
+        if (isVehicleSpyFile(filename) && loadVehicleSpyFile(filename, frames)) {
+            qDebug() << "Loaded as Vehicle Spy successfully!"; return true;
+        }
+        qDebug() << "Attempting IXXAT MiniLog CSV";
+        if (isIXXATFile(filename) && loadIXXATFile(filename, frames)) {
+            qDebug() << "Loaded as IXXAT successfully!"; return true;
+        }
+        qDebug() << "Attempting Cabana CSV";
+        if (isCabanaFile(filename) && loadCabanaFile(filename, frames)) {
+            qDebug() << "Loaded as Cabana successfully!"; return true;
+        }
+        qDebug() << "Attempting CANOpen Magic CSV";
+        if (isCANOpenFile(filename) && loadCANOpenFile(filename, frames)) {
+            qDebug() << "Loaded as CANOpen Magic successfully!"; return true;
+        }
+        qDebug() << "Attempting generic ID/Data CSV";
+        if (isGenericCSVFile(filename) && loadGenericCSVFile(filename, frames)) {
+            qDebug() << "Loaded as generic CSV successfully!"; return true;
         }
     }
 
-    qDebug() << "Attempting 'CARBUS Analyzer'";
-    if (isCARBUSAnalyzerFile(filename))
-    {
-        if (loadCARBUSAnalyzerFile(filename, frames))
-        {
-            qDebug() << "Loaded as 'CARBUS Analyzer' successfully!";
-            return true;
-        }
-    }
-
-    qDebug() << "Attempting canhacker";
-    if (isCANHackerFile(filename))
-    {
-        if (loadCANHackerFile(filename, frames))
-        {
-            qDebug() << "Loaded as CANHacker successfully!";
-            return true;
-        }
-    }
-
-    qDebug() << "Attempting cabana";
-    if (isCabanaFile(filename))
-    {
-        if (loadCabanaFile(filename, frames))
-        {
-            qDebug() << "Loaded as Cabana successfully!";
-            return true;
-        }
-    }
-
-    qDebug() << "Attempting canopen";
-    if (isCANOpenFile(filename))
-    {
-        if (loadCANOpenFile(filename, frames))
-        {
-            qDebug() << "Loaded as CANOpen Magic successfully!";
-            return true;
-        }
-    }
-
-    qDebug() << "Attempting busmaster log";
-    if (isLogFile(filename))
-    {
-        if (loadLogFile(filename, frames))
-        {
-            qDebug() << "Loaded as Busmaster Log successfully!";
-            return true;
-        }
-    }
-
-    qDebug() << "Attempting pcan";
-    if (isPCANFile(filename))
-    {
-        if (loadPCANFile(filename, frames))
-        {
-            qDebug() << "Loaded as PCAN successfully!";
-            return true;
-        }
-    }
-
-    qDebug() << "Attempting ixxat";
-    if (isIXXATFile(filename))
-    {
-        if (loadIXXATFile(filename, frames))
-        {
-            qDebug() << "Loaded as IXXAT successfully!";
-            return true;
-        }
-    }
-
-    qDebug() << "Attempting microchip";
-    if (isMicrochipFile(filename))
-    {
-        if (loadMicrochipFile(filename, frames))
-        {
-            qDebug() << "Loaded as microchip successfully!";
-            return true;
-        }
-    }
-
-    qDebug() << "Attempting CANDo";
-    if (isCANDOFile(filename))
-    {
-        if (loadCANDOFile(filename, frames))
-        {
-            qDebug() << "Loaded as CANDO successfully!";
-            return true;
-        }
-    }
-
-    qDebug() << "Attempting kvaser";
-    if (isKvaserFile(filename))
-    {
-        if (loadKvaserFile(filename, frames,true))
-        {
-            qDebug() << "Loaded as Kvaser HEX successfully!";
-            return true;
-        }
-        if (loadKvaserFile(filename, frames,false))
-        {
-            qDebug() << "Loaded as KVaser Decimal successfully!";
-            return true;
-        }
-    }
-
-    qDebug() << "Attempting CLX000";
-    if (isCLX000File(filename))
-    {
-        if (loadCLX000File(filename, frames))
-        {
-            qDebug() << "Loaded as CLX000 successfully!";
-            return true;
-        }
-    }
-
-    qDebug() << "Attempting lawicel";
-    if (isLawicelFile(filename))
-    {
-        if (loadLawicelFile(filename, frames))
-        {
-            qDebug() << "Loaded as lawicel successfully!";
-            return true;
-        }
-    }
-
-    qDebug() << "Attempting generic CSV";
-    if (isGenericCSVFile(filename))
-    {
-        if (loadGenericCSVFile(filename, frames))
-        {
-            qDebug() << "Loaded as generic CSV successfully!";
-            return true;
-        }
-    }
-
+    // Step 4: Nothing matched
     QMessageBox msgBox;
-    msgBox.setText("Could not autodetect the file type.\rPlease try to manually select the file format.");
+    msgBox.setIcon(QMessageBox::Warning);
+    msgBox.setWindowTitle("Format Not Recognised");
+    msgBox.setText(QString("Could not identify the log format for file:\n%1\n\n"
+                           "The extension '.%2' is known but no parser accepted this file.\n"
+                           "Please try selecting the format manually from the file type list.")
+                   .arg(fi.fileName()).arg(ext));
     msgBox.exec();
-    qDebug() << "Nothing worked... sorry...";
+    qDebug() << "autoDetect: no parser matched for" << filename;
     return false;
 }
-
 
 bool FrameFileIO::isVehicleSpyFile(QString filename)
 {
@@ -882,7 +826,7 @@ bool FrameFileIO::loadCARBUSAnalyzerFile(QString filename, QVector<CANFrame>* fr
         if (line.length() > 2)
         {
             QList<QString> tokens = line.split(QRegularExpression("\\s+"));
-            if (tokens.length() > 3)
+            if (tokens.length() >= 5)
             {
                 QString time = tokens[0].replace(",", "");
                 int64_t timeStamp = time.toInt();
@@ -897,17 +841,25 @@ bool FrameFileIO::loadCARBUSAnalyzerFile(QString filename, QVector<CANFrame>* fr
                 thisFrame.setFrameId(static_cast<uint32_t>(tokens[3].toInt(nullptr, 16)));
                 thisFrame.setExtendedFrameFormat(thisFrame.frameId() > 0x7FF);
                 int numBytes = tokens[4].toInt(nullptr, 16);
-                QByteArray bytes(numBytes , 0);
-                for (int d = 0; d < numBytes; d++)
+                
+                if (tokens.length() >= 5 + numBytes)
                 {
-                    if (tokens[d + 5] != "")
+                    QByteArray bytes(numBytes , 0);
+                    for (int d = 0; d < numBytes; d++)
                     {
-                        bytes[d] = static_cast<unsigned char>(tokens[d + 5].toInt(nullptr, 16));
+                        if (tokens[d + 5] != "")
+                        {
+                            bytes[d] = static_cast<unsigned char>(tokens[d + 5].toInt(nullptr, 16));
+                        }
+                        else bytes[d] = 0;
                     }
-                    else bytes[d] = 0;
+                    thisFrame.setPayload(bytes);
+                    frames->append(thisFrame);
                 }
-                thisFrame.setPayload(bytes);
-                frames->append(thisFrame);
+                else
+                {
+                    foundErrors = true;
+                }
             }
             else
             {
@@ -1768,7 +1720,14 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
                             thisFrame.setExtendedFrameFormat(thisFrame.frameId() > 0x7FF);  //some .asc files have extended IDs without 'x'
                         }
 
-                        int payloadLen = tokens[8].toInt();
+                        int payloadLen = 0;
+                        if (tokens.length() > 8) {
+                            payloadLen = tokens[8].toInt();
+                        } else {
+                            foundErrors = true;
+                            continue;
+                        }
+                        
                         qDebug() << "PayloadLen: " << payloadLen << " Tokens: " << tokens;
                         QByteArray bytes(payloadLen, 0);
                         if (payloadLen > 64)
@@ -2588,37 +2547,41 @@ bool FrameFileIO::loadLogFile(QString filename, QVector<CANFrame>* frames)
             if (tokens.length() >= 6)
             {
                 QList<QByteArray> timeToks = tokens[0].split(':');
-                uint64_t timeStamp = (timeToks[0].toUInt() * (1000ul * 1000ul * 60ul * 60ul)) + (timeToks[1].toUInt() * (1000ul * 1000ul * 60ul))
-                      + (timeToks[2].toUInt() * (1000ul * 1000ul)) + (timeToks[3].toUInt() * 100ul);
-                thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, timeStamp));
-                if (tokens[1].at(0) == 'R') thisFrame.isReceived = true;
-                    else thisFrame.isReceived = false;
-                thisFrame.setFrameId(tokens[3].right(tokens[3].length() - 2).toUInt(nullptr, 16));
-                if (tokens[4] == "S") {
-                    thisFrame.setExtendedFrameFormat(false);
-                    thisFrame.setFrameType(QCanBusFrame::DataFrame);
-                } else if (tokens[4] == "X") {
-                    thisFrame.setExtendedFrameFormat(true);
-                    thisFrame.setFrameType(QCanBusFrame::DataFrame);
-                } else if (tokens[4] == "SR") {
-                    thisFrame.setExtendedFrameFormat(false);
-                    thisFrame.setFrameType(QCanBusFrame::RemoteRequestFrame);
-                } else { // XR
-                    thisFrame.setExtendedFrameFormat(true);
-                    thisFrame.setFrameType(QCanBusFrame::RemoteRequestFrame);
-                }
-                thisFrame.bus = tokens[2].toInt();
+                if (timeToks.length() >= 4)
+                {
+                    uint64_t timeStamp = (timeToks[0].toUInt() * (1000ul * 1000ul * 60ul * 60ul)) + (timeToks[1].toUInt() * (1000ul * 1000ul * 60ul))
+                          + (timeToks[2].toUInt() * (1000ul * 1000ul)) + (timeToks[3].toUInt() * 100ul);
+                    thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, timeStamp));
+                    if (tokens[1].at(0) == 'R') thisFrame.isReceived = true;
+                        else thisFrame.isReceived = false;
+                    thisFrame.setFrameId(tokens[3].right(tokens[3].length() - 2).toUInt(nullptr, 16));
+                    if (tokens[4] == "S") {
+                        thisFrame.setExtendedFrameFormat(false);
+                        thisFrame.setFrameType(QCanBusFrame::DataFrame);
+                    } else if (tokens[4] == "X") {
+                        thisFrame.setExtendedFrameFormat(true);
+                        thisFrame.setFrameType(QCanBusFrame::DataFrame);
+                    } else if (tokens[4] == "SR") {
+                        thisFrame.setExtendedFrameFormat(false);
+                        thisFrame.setFrameType(QCanBusFrame::RemoteRequestFrame);
+                    } else { // XR
+                        thisFrame.setExtendedFrameFormat(true);
+                        thisFrame.setFrameType(QCanBusFrame::RemoteRequestFrame);
+                    }
+                    thisFrame.bus = tokens[2].toInt();
 
-                int lng = tokens[5].toInt();
-                if (lng > 8) lng = 8;
-                if (lng < 0) lng = 0;
-                QByteArray bytes(lng, 0);
-                if (thisFrame.frameType() != QCanBusFrame::RemoteRequestFrame) {
-                    for (int d = 0; d < lng; d++)
-                        bytes[d] = static_cast<char>(tokens[d + 6].toInt(nullptr, 16));
+                    int lng = tokens[5].toInt();
+                    if (lng > 8) lng = 8;
+                    if (lng < 0) lng = 0;
+                    QByteArray bytes(lng, 0);
+                    if (thisFrame.frameType() != QCanBusFrame::RemoteRequestFrame) {
+                        for (int d = 0; d < lng; d++)
+                            bytes[d] = static_cast<char>(tokens[d + 6].toInt(nullptr, 16));
+                    }
+                    thisFrame.setPayload(bytes);
+                    frames->append(thisFrame);
                 }
-                thisFrame.setPayload(bytes);
-                frames->append(thisFrame);
+                else foundErrors = true;
             }
             else foundErrors = true;
         }
@@ -3294,7 +3257,7 @@ bool FrameFileIO::isTraceFile(QString filename)
                 else
                 {
                     QList<QByteArray> tokens = line.split('\t');
-                    if (tokens.length() > 3)
+                    if (tokens.length() >= 5)
                     {
                         QList<QByteArray> timestampToks = tokens[1].split(':');
                         if (timestampToks.size() != 4) isMatch = false;
@@ -3385,14 +3348,20 @@ bool FrameFileIO::loadTraceFile(QString filename, QVector<CANFrame>* frames)
             else
             {
                 QList<QByteArray> tokens = line.split('\t');
-                if (tokens.length() > 3)
+                if (tokens.length() >= 5)
                 {
                     QList<QByteArray> timestampToks = tokens[1].split(':');
-
-                    timeStamp = timestampToks[0].toInt() * 1000000l * 60 * 60;
-                    timeStamp += timestampToks[1].toInt() * 1000000l * 60;
-                    timeStamp += timestampToks[2].toInt() * 1000000l;
-                    timeStamp += timestampToks[3].toInt() * 100;
+                    
+                    if (timestampToks.length() >= 4) {
+                        timeStamp = timestampToks[0].toInt() * 1000000l * 60 * 60;
+                        timeStamp += timestampToks[1].toInt() * 1000000l * 60;
+                        timeStamp += timestampToks[2].toInt() * 1000000l;
+                        timeStamp += timestampToks[3].toInt() * 100;
+                    } else {
+                        timeStamp = 0; // Or whatever fallback
+                        foundErrors = true;
+                        continue;
+                    }
 
                     thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint32_t>(timeStamp)));
 
@@ -3405,8 +3374,8 @@ bool FrameFileIO::loadTraceFile(QString filename, QVector<CANFrame>* frames)
                     if (numBytes > 8) numBytes = 8;
                     QByteArray bytes(numBytes, 0);
                     QList<QByteArray> dataToks = tokens[4].split(' ');
-                    //if (numBytes > dataToks.length()) thisFrame.payload().resize(dataToks.length());
-                    for (int d = 0; d < numBytes; d++) bytes[d] = static_cast<char>(dataToks[d].toInt(nullptr, 16));
+                    int limit = qMin(numBytes, (int)dataToks.length());
+                    for (int d = 0; d < limit; d++) bytes[d] = static_cast<char>(dataToks[d].toInt(nullptr, 16));
                     thisFrame.setPayload(bytes);
                     frames->append(thisFrame);
                 }

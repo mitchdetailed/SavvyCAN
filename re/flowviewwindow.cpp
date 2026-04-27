@@ -341,7 +341,7 @@ void FlowViewWindow::gotCenterTimeID(uint32_t ID, double timestamp)
 
         memset(currBytes, 0, 8); //first zero out all 8 bytes
 
-        memcpy(currBytes, frameCache.at(currentPosition).payload().data(), frameCache.at(currentPosition).payload().length());
+        memcpy(currBytes, frameCache.at(currentPosition).payload().data(), qMin<int>(frameCache.at(currentPosition).payload().length(), 64));
 
         updateDataView();
     }
@@ -522,7 +522,7 @@ void FlowViewWindow::updatedFrames(int numFrames)
         {
             currentPosition = frameCache.size() - 1;
             memset(currBytes, 0, 64);
-            memcpy(currBytes, frameCache.at(currentPosition).payload().data(), frameCache.at(currentPosition).payload().length());
+            memcpy(currBytes, frameCache.at(currentPosition).payload().data(), qMin<int>(frameCache.at(currentPosition).payload().length(), 64));
             memcpy(refBytes, currBytes, 64);
 
         }
@@ -664,7 +664,7 @@ void FlowViewWindow::changeID(QString newID)
     updateGraphLocation();
 
     memset(currBytes, 0, 64);
-    memcpy(currBytes, frameCache.at(currentPosition).payload().constData(), frameCache.at(currentPosition).payload().length());
+    memcpy(currBytes, frameCache.at(currentPosition).payload().constData(), qMin<int>(frameCache.at(currentPosition).payload().length(), 64));
     memcpy(refBytes, currBytes, 64);
 
     updateDataView();
@@ -712,7 +712,7 @@ void FlowViewWindow::btnStopClick()
     currentPosition = 0;
 
     memset(currBytes, 0, 64);
-    memcpy(currBytes, frameCache.at(currentPosition).payload().constData(), frameCache.at(currentPosition).payload().length());
+    memcpy(currBytes, frameCache.at(currentPosition).payload().constData(), qMin<int>(frameCache.at(currentPosition).payload().length(), 64));
     memcpy(refBytes, currBytes, 64);
 
     updateFrameLabel();
@@ -867,7 +867,7 @@ void FlowViewWindow::updatePosition(bool forward)
         }
     }
     memset(currBytes, 0, 64);
-    memcpy(currBytes, frameCache.at(currentPosition).payload().constData(), frameCache.at(currentPosition).payload().length());
+    memcpy(currBytes, frameCache.at(currentPosition).payload().constData(), qMin<int>(frameCache.at(currentPosition).payload().length(), 64));
 
     if (ui->cbSync->checkState() == Qt::Checked) emit sendCenterTimeID(frameCache[currentPosition].frameId(), frameCache[currentPosition].timeStamp().microSeconds() / 1000000.0);
     ui->timelineSlider->setValue(currentPosition);

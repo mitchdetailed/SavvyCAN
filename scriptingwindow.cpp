@@ -275,7 +275,7 @@ void ScriptingWindow::deleteCurrentScript()
         ui->listLoadedScripts->takeItem(sel);
         thisScript = scripts.at(sel);
         scripts.removeAt(sel);
-        delete thisScript;  //causes a seg fault. Seems to be due to currently running javascript code. No idea how to stop code from running
+        thisScript->deleteLater();
         thisScript = nullptr;
         currentScript = nullptr;
 

@@ -71,7 +71,7 @@ void CANConManager::replace(int idx, CANConnection* pConn_p)
 {
     CANConnection *original = mConns[idx];
     mConns.replace(idx, pConn_p);
-    delete original; original = NULL;
+    original->deleteLater(); original = NULL;
 }
 
 //Get total number of buses currently registered with the program
@@ -103,10 +103,13 @@ void CANConManager::refreshCanList()
     if (mConns.size() == 0)
     {
         tempFrames.clear();
-        //TODO: Seems to crash under heavy load. Find out why.
+        buslessMutex.lock();
         if(buslessFrames.size()) {            
             tempFrames = buslessFrames; //make a copy and pass that copy
             buslessFrames.clear(); //delete all frames from the original
+        }
+        buslessMutex.unlock();
+        if(tempFrames.size()) {
             emit framesReceived(nullptr, tempFrames);
         }
         return;
@@ -209,7 +212,9 @@ bool CANConManager::sendFrame(const CANFrame& pFrame)
 
     if (mConns.size() == 0)
     {
+        buslessMutex.lock();
         buslessFrames.append(pFrame);
+        buslessMutex.unlock();
         return true;
     }
 
