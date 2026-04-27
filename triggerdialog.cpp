@@ -43,10 +43,12 @@ TriggerDialog::TriggerDialog(QList<Trigger> trigs, QWidget *parent) :
     for (int i = 0; i < numFiles; i++)
     {
         DBCFile *file = dbcHandler->getFileByIdx(i);
+        if (!file) continue;
         int numMsgs = file->messageHandler->getCount();
         for (int j = 0; j < numMsgs; j++)
         {
             DBC_MESSAGE *msg = file->messageHandler->findMsgByIdx(j);
+            if (!msg) continue;
             entries.append(("0x" + QString::number(msg->ID, 16) + " ("  + msg->name + ")"));
         }
     }

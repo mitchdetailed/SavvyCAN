@@ -131,6 +131,8 @@ public: //TODO: Clean up this class so that not everything is public. There is o
     QList<DBC_ATTRIBUTE_VALUE> attributes;
     QList<DBC_VAL_ENUM_ENTRY> valList;
     DBC_SIGNAL *self;
+    int maxIntDigits = 0;  // tracks widest integer-part seen (for sticky decimal alignment)
+    int maxFracDigits = 0; // tracks widest fractional-part seen (for sticky decimal alignment)
 
     bool processAsText(const CANFrame &frame, QString &outString, bool outputName = true, bool outputUnit = true);
     bool processAsInt(const CANFrame &frame, int32_t &outValue);
