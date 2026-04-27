@@ -23,22 +23,22 @@ ScriptContainer::~ScriptContainer()
     {
         scriptText = "";
         compileScript();
-        //delete scriptEngine;   //doing this here seems to cause a crash. No crash if you don't.
-        //scriptEngine = nullptr;
+        scriptEngine->deleteLater();
+        scriptEngine = nullptr;
     }
     if (canHelper)
     {
-        delete canHelper;
+        canHelper->deleteLater();
         canHelper = nullptr;
     }
     if (isoHelper)
     {
-        delete isoHelper;
+        isoHelper->deleteLater();
         isoHelper = nullptr;
     }
     if (udsHelper)
     {
-        delete udsHelper;
+        udsHelper->deleteLater();
         udsHelper = nullptr;
     }
     qDebug() << "end of destruct";

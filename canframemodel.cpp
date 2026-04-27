@@ -343,11 +343,11 @@ void CANFrameModel::qSortCANFrameDesc(QVector<CANFrame> *frames, Column column, 
 
 void CANFrameModel::sortByColumn(int column)
 {
+    mutex.lock();
     sortDirAsc = !sortDirAsc;
     if (sortDirAsc) qSortCANFrameAsc(&filteredFrames, Column(column), 0, filteredFrames.size()-1);
     else qSortCANFrameDesc(&filteredFrames, Column(column), 0, filteredFrames.size()-1);
 
-    mutex.lock();
     beginResetModel();
     endResetModel();
     mutex.unlock();
@@ -794,8 +794,11 @@ void CANFrameModel::addFrames(const CANConnection*, const QVector<CANFrame>& pFr
     if(filteredFrames.length() > filteredFrames.capacity() * 0.99)
     {
         mutex.lock();
-        qDebug() << "filteredFrames count: " << filteredFrames.length() << " of " << filteredFrames.capacity() << " capacity, removing first " << (int)(filteredFrames.capacity() * 0.05) << " frames";
-        filteredFrames.remove(0, (int)(filteredFrames.capacity() * 0.05));
+        int toRemove = (int)(filteredFrames.capacity() * 0.05);
+        qDebug() << "filteredFrames count: " << filteredFrames.length() << " of " << filteredFrames.capacity() << " capacity, removing first " << toRemove << " frames";
+        beginRemoveRows(QModelIndex(), 0, toRemove - 1);
+        filteredFrames.remove(0, toRemove);
+        endRemoveRows();
         qDebug() << "filteredFrames removed, new count: " << filteredFrames.length();
         mutex.unlock();
     }
@@ -932,6 +935,7 @@ void CANFrameModel::insertFrames(const QVector<CANFrame> &newFrames)
 
 int CANFrameModel::getIndexFromTimeID(unsigned int ID, double timestamp)
 {
+    mutex.lock();
     int bestIndex = -1;
     int64_t intTimeStamp = static_cast<int64_t> (timestamp * 1000000l);
     for (int i = 0; i < frames.size(); i++)
@@ -942,6 +946,7 @@ int CANFrameModel::getIndexFromTimeID(unsigned int ID, double timestamp)
             else break; //drop out of loop as soon as we pass the proper timestamp
         }
     }
+    mutex.unlock();
     return bestIndex;
 }
 

@@ -355,7 +355,7 @@ void SignalViewerWindow::loadDefinitions(bool append)
 
                 DBC_SIGNAL *sig;
 
-                if (tokens[0] == "SV1") //signal viewer save format v1
+                if (tokens[0] == "SV1" && tokens.size() > 3) //signal viewer save format v1
                 {
                     // = tokens[1].toUInt(nullptr, 16);
 

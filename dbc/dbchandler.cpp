@@ -2076,20 +2076,24 @@ DBCFile* DBCHandler::loadSecretCSVFile(QString filename)
                 if (tokens[9].startsWith("E = N")) //not a value table, instead do scaling and bias
                 {
                     QList<QByteArray> scalingToks = tokens[9].simplified().split(' ');
-                    sig.factor = scalingToks[4].toDouble();
-                    if (scalingToks.size() > 5)
-                    {
-                        if (scalingToks[5] == "+")
+                    if (scalingToks.length() >= 5) {
+                        sig.factor = scalingToks[4].toDouble();
+                        if (scalingToks.size() >= 7)
                         {
-                            sig.bias = scalingToks[6].toDouble();
+                            if (scalingToks[5] == "+")
+                            {
+                                sig.bias = scalingToks[6].toDouble();
+                            }
+                            if (scalingToks[5] == "-")
+                            {
+                                sig.bias = scalingToks[6].toDouble() * 1.0;
+                            }
                         }
-                        if (scalingToks[5] == "-")
+                        else
                         {
-                            sig.bias = scalingToks[6].toDouble() * 1.0;
+                            sig.bias = 0;
                         }
-                    }
-                    else
-                    {
+                    } else {
                         sig.factor = 1;
                         sig.bias = 0;
                     }
@@ -2098,10 +2102,12 @@ DBCFile* DBCHandler::loadSecretCSVFile(QString filename)
                 {
                     //$0=Inactive
                     QList<QByteArray> valToks = tokens[9].simplified().mid(1).split('=');
-                    DBC_VAL_ENUM_ENTRY entry;
-                    entry.value = valToks[0].toInt();
-                    entry.descript = valToks[1];
-                    sig.valList.append(entry);
+                    if (valToks.length() >= 2) {
+                        DBC_VAL_ENUM_ENTRY entry;
+                        entry.value = valToks[0].toInt();
+                        entry.descript = valToks[1];
+                        sig.valList.append(entry);
+                    }
                 }
                 pMsg->sigHandler->addSignal(sig);
                 pSig = pMsg->sigHandler->findSignalByIdx(pMsg->sigHandler->getCount()-1);
@@ -2130,32 +2136,38 @@ DBCFile* DBCHandler::loadSecretCSVFile(QString filename)
                 if (tokens[9].startsWith("E = N")) //not a value table, instead do scaling and bias
                 {
                     QList<QByteArray> scalingToks = tokens[9].simplified().split(' ');
-                    sig.factor = scalingToks[4].toDouble();
-                    if (scalingToks.size() > 5)
-                    {
-                        if (scalingToks[5] == "+")
+                    if (scalingToks.length() >= 5) {
+                        sig.factor = scalingToks[4].toDouble();
+                        if (scalingToks.size() >= 7)
                         {
-                            sig.bias = scalingToks[6].toDouble();
+                            if (scalingToks[5] == "+")
+                            {
+                                sig.bias = scalingToks[6].toDouble();
+                            }
+                            if (scalingToks[5] == "-")
+                            {
+                                sig.bias = scalingToks[6].toDouble() * 1.0;
+                            }
                         }
-                        if (scalingToks[5] == "-")
+                        else
                         {
-                            sig.bias = scalingToks[6].toDouble() * 1.0;
+                            sig.bias = 0;
                         }
-                    }
-                    else
-                    {
-                        sig.bias = 0;
+                    } else {
                         sig.factor = 1;
+                        sig.bias = 0;
                     }
                 }
                 else if (tokens[9].startsWith("$")) //one or more values table entries
                 {
                     //$0=Inactive
                     QList<QByteArray> valToks = tokens[9].simplified().mid(1).split('=');
-                    DBC_VAL_ENUM_ENTRY entry;
-                    entry.value = valToks[0].toInt();
-                    entry.descript = valToks[1];
-                    sig.valList.append(entry);
+                    if (valToks.length() >= 2) {
+                        DBC_VAL_ENUM_ENTRY entry;
+                        entry.value = valToks[0].toInt();
+                        entry.descript = valToks[1];
+                        sig.valList.append(entry);
+                    }
                 }
                 pMsg->sigHandler->addSignal(sig);
                 pSig = pMsg->sigHandler->findSignalByIdx(pMsg->sigHandler->getCount()-1);
@@ -2164,10 +2176,12 @@ DBCFile* DBCHandler::loadSecretCSVFile(QString filename)
             {
                 //$0=Inactive
                 QList<QByteArray> valToks = tokens[9].simplified().mid(1).split('=');
-                DBC_VAL_ENUM_ENTRY entry;
-                entry.value = valToks[0].toInt();
-                entry.descript = valToks[1];
-                pSig->valList.append(entry);
+                if (valToks.length() >= 2) {
+                    DBC_VAL_ENUM_ENTRY entry;
+                    entry.value = valToks[0].toInt();
+                    entry.descript = valToks[1];
+                    pSig->valList.append(entry);
+                }
             }
         }
     }
@@ -2212,11 +2226,12 @@ DBCFile* DBCHandler::loadJSONFile(QString filename)
          {
              qDebug() << iter.key();
              DBC_MESSAGE msg;
-             msg.ID = static_cast<uint32_t>(iter->toObject().find("message_id").value().toInt());
+             QJsonObject msgObj = iter->toObject();
+             msg.ID = static_cast<uint32_t>(msgObj.value("message_id").toInt());
              msg.name = QString(iter.key().toUtf8());
-             msg.len = static_cast<unsigned int>(iter->toObject().find("length_bytes").value().toInt());
+             msg.len = static_cast<unsigned int>(msgObj.value("length_bytes").toInt());
              msg.sender = thisFile->findNodeByIdx(0);
-             QString nodeName = iter->toObject().find("originNode").value().toString();
+             QString nodeName = msgObj.value("originNode").toString();
              msg.sender = thisFile->findNodeByName(nodeName);
              msg.bgColor = QColor(thisFile->findAttributeByName("GenMsgBackgroundColor")->defaultValue.toString());
              msg.fgColor = QColor(thisFile->findAttributeByName("GenMsgForegroundColor")->defaultValue.toString());
@@ -2236,7 +2251,7 @@ DBCFile* DBCHandler::loadJSONFile(QString filename)
                  return nullptr;
              }
 
-             QJsonObject jsonSigs = iter->toObject().find("signals").value().toObject();
+             QJsonObject jsonSigs = msgObj.value("signals").toObject();
              QJsonObject::iterator sigIter;
              for (sigIter = jsonSigs.begin(); sigIter != jsonSigs.end(); sigIter++)
              {
@@ -2248,22 +2263,22 @@ DBCFile* DBCHandler::loadJSONFile(QString filename)
                     qDebug() << "EMPTY!?";
                 }
                 sig.name = QString(sigIter.key().toUtf8());
-                sig.factor = sigObj.find("scale").value().toDouble();
-                sig.bias = sigObj.find("offset").value().toDouble();
-                sig.max = sigObj.find("max").value().toDouble();
-                sig.min = sigObj.find("min").value().toDouble();
-                sig.startBit = sigObj.find("start_position").value().toInt();
-                sig.unitName = sigObj.find("units").value().toString();
-                sig.signalSize = sigObj.find("width").value().toInt();
+                sig.factor = sigObj.value("scale").toDouble(1.0);
+                sig.bias = sigObj.value("offset").toDouble(0.0);
+                sig.max = sigObj.value("max").toDouble(0.0);
+                sig.min = sigObj.value("min").toDouble(0.0);
+                sig.startBit = sigObj.value("start_position").toInt();
+                sig.unitName = sigObj.value("units").toString();
+                sig.signalSize = sigObj.value("width").toInt();
                 sig.isMultiplexed = false;
                 sig.isMultiplexor = false;
                 sig.parentMessage = pMsg;
-                if (!sigObj.find("mux_id")->isUndefined())
+                if (!sigObj.value("mux_id").isUndefined())
                 {
-                    QJsonValue muxVal = sigObj.find("mux_id").value();
+                    QJsonValue muxVal = sigObj.value("mux_id");
                     sig.addMultiplexRange(muxVal.toInt(), muxVal.toInt());
                 }
-                QJsonValue muxerVal = sigObj.find("is_muxer").value();
+                QJsonValue muxerVal = sigObj.value("is_muxer");
                 if (!muxerVal.isNull())
                 {
                     if (muxerVal.toBool())
@@ -2272,7 +2287,7 @@ DBCFile* DBCHandler::loadJSONFile(QString filename)
                     }
                 }
 
-                QJsonObject valuesObj = sigObj.find("value_description")->toObject();
+                QJsonObject valuesObj = sigObj.value("value_description").toObject();
                 if (!valuesObj.isEmpty())
                 {
                     QJsonObject::iterator valIter;
@@ -2285,7 +2300,7 @@ DBCFile* DBCHandler::loadJSONFile(QString filename)
                     }
                 }
 
-                QJsonArray rxArray = sigObj.find("receivers")->toArray();
+                QJsonArray rxArray = sigObj.value("receivers").toArray();
                 if (rxArray.size() < 1) sig.receiver = thisFile->findNodeByIdx(0);
                 else
                 {
@@ -2300,13 +2315,13 @@ DBCFile* DBCHandler::loadJSONFile(QString filename)
                     }
                     if (!sig.receiver) sig.receiver = thisFile->findNodeByIdx(0);
                 }
-                if (!sigObj.find("endianness").value().toString().compare("BIG"))
+                if (!sigObj.value("endianness").toString().compare("BIG"))
                 {
                     sig.intelByteOrder = false;
                 }
                 else sig.intelByteOrder = true;
 
-                if (!sigObj.find("signedness").value().toString().compare("UNSIGNED"))
+                if (!sigObj.value("signedness").toString().compare("UNSIGNED"))
                 {
                     sig.valType = DBC_SIG_VAL_TYPE::UNSIGNED_INT;
                 }

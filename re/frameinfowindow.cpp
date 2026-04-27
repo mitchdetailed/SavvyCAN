@@ -645,7 +645,8 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
             intervalPctl5 = sortedIntervals[static_cast<unsigned int>(floor(0.05 * sortedIntervals.size()))];
             intervalPctl95 = sortedIntervals[static_cast<unsigned int>(floor(0.95 * sortedIntervals.size()))];
 
-            uint64_t step = static_cast<unsigned int>(ceil((maxInterval - minInterval) / numIntervalHistBars));
+            uint64_t step = static_cast<unsigned int>(ceil((maxInterval - minInterval) / (double)numIntervalHistBars));
+            if (step == 0) step = 1;
             qDebug() << "Step: " << step << " minInt: " << minInterval << " maxInt: " << maxInterval;
             unsigned int index = 0;
             int counter = 0;
