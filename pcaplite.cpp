@@ -140,7 +140,7 @@ const unsigned char *pcap_next_ng(pcap_t *p, struct pcap_pkthdr *h) {
 		                    return (NULL);
 	                    }
                         //check if time resolution option
-                        if (0x09 == oh.option_type) {
+                        if (0x09 == oh.option_type && option_file_length >= sizeof(unsigned int)) {
                             unsigned int res = *(unsigned int*)pcap_buffer;
                             if ((0x80000000 & res) == 0) {
                                 timestamp_multiplier = 1/pow(10, res); 
@@ -170,8 +170,11 @@ const unsigned char *pcap_next_ng(pcap_t *p, struct pcap_pkthdr *h) {
         }
     } while (bh.block_type != ENCHANCED_PACKET_BLOCK);
 
+    if (bh.cap_len > sizeof(pcap_buffer)) {
+        return (NULL);
+    }
     h->caplen = bh.cap_len;
-    
+
     double timestamp = ((unsigned long long)bh.timestamp_hi << 32 | bh.timestamp_lo) * timestamp_multiplier;
     double fractional, integer;
 
@@ -214,6 +217,10 @@ const unsigned char *pcap_next(pcap_t *p, struct pcap_pkthdr *h)
 
     h->caplen = *(unsigned int*)(pcap_buffer + PCAP_CAP_FRAME_LENGTH_OFFSET);
     h->len = *(unsigned int*)(pcap_buffer + PCAP_FRAME_LENGTH_OFFSET);
+
+    if (h->caplen > sizeof(pcap_buffer)) {
+        return (NULL);
+    }
 
     bytes_read = fread(pcap_buffer, 1, h->caplen, p->file);
     if (bytes_read != h->caplen) {

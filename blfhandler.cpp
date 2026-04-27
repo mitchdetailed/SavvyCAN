@@ -103,19 +103,21 @@ bool BLFHandler::loadBLF(QString filename, QVector<CANFrame>* frames)
                         fileData = uncompressedData.mid(pos + sizeof(BLF_OBJ_HEADER_BASE) + sizeof(BLF_OBJ_HEADER_V1), obj.header.base.objSize - sizeof(BLF_OBJ_HEADER_BASE) - sizeof(BLF_OBJ_HEADER_V1));
                         if (obj.header.base.objType == BLF_CAN_MSG)
                         {
+                            if (fileData.size() < (int)sizeof(BLF_CAN_OBJ)) { pos += obj.header.base.objSize + (obj.header.base.objSize % 4); break; }
                             memcpy(&canObject, fileData.constData(), sizeof(BLF_CAN_OBJ));
                             CANFrame frame;
                             frame.bus = canObject.channel;
                             frame.setExtendedFrameFormat((canObject.id & 0x80000000ull)?true:false);
                             frame.setFrameId(canObject.id & 0x1FFFFFFFull);
                             frame.isReceived = true;
-                            QByteArray bytes(canObject.dlc, 0);
+                            int safeDlc = qMin((int)canObject.dlc, (int)sizeof(canObject.data));
+                            QByteArray bytes(safeDlc, 0);
 
                             if (canObject.flags & BLF_REMOTE_FLAG) {
                                 frame.setFrameType(QCanBusFrame::RemoteRequestFrame);
                             } else {
                                 frame.setFrameType(QCanBusFrame::DataFrame);
-                                for (int i = 0; i < canObject.dlc; i++) bytes[i] = canObject.data[i];
+                                for (int i = 0; i < safeDlc; i++) bytes[i] = canObject.data[i];
                             }
                             frame.setPayload(bytes);
                             //Should we divide by a thousand or a million? Unsure here. It appears some logs are stamped in microseconds and some in milliseconds?
@@ -124,19 +126,21 @@ bool BLFHandler::loadBLF(QString filename, QVector<CANFrame>* frames)
                         }
                         else if (obj.header.base.objType == BLF_CAN_MSG2)
                         {
+                            if (fileData.size() < (int)sizeof(BLF_CAN_OBJ2)) { pos += obj.header.base.objSize + (obj.header.base.objSize % 4); break; }
                             memcpy(&canObject2, fileData.constData(), sizeof(BLF_CAN_OBJ2));
                             CANFrame frame;
                             frame.bus = canObject2.channel;
                             frame.setExtendedFrameFormat((canObject2.id & 0x80000000ull)?true:false);
                             frame.setFrameId(canObject2.id & 0x1FFFFFFFull);
                             frame.isReceived = true;
-                            QByteArray bytes(canObject2.dlc, 0);
+                            int safeDlc2 = qMin((int)canObject2.dlc, (int)sizeof(canObject2.data));
+                            QByteArray bytes(safeDlc2, 0);
 
                             if (canObject2.flags & BLF_REMOTE_FLAG) {
                                 frame.setFrameType(QCanBusFrame::RemoteRequestFrame);
                             } else {
                                 frame.setFrameType(QCanBusFrame::DataFrame);
-                                for (int i = 0; i < canObject2.dlc; i++) bytes[i] = canObject2.data[i];
+                                for (int i = 0; i < safeDlc2; i++) bytes[i] = canObject2.data[i];
                             }
                             frame.setPayload(bytes);
                             //Should we divide by a thousand or a million? Unsure here. It appears some logs are stamped in microseconds and some in milliseconds?
@@ -146,8 +150,6 @@ bool BLFHandler::loadBLF(QString filename, QVector<CANFrame>* frames)
                         else
                         {
                             qDebug() << "Not a can frame! ObjType: " << obj.header.base.objType;
-                            if (obj.header.base.objType > 0xFFFF)
-                                return false;
                         }
                         pos += obj.header.base.objSize + (obj.header.base.objSize % 4);
                     }

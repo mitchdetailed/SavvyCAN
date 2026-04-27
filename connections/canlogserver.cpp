@@ -71,12 +71,19 @@ void CanLogServer::readNetworkData()
                 QString qstrPayload = lstMsg[1];
                 // Check ID size
                 if(qstrId.size() <= 4 || qstrId.size() == 8){
+                    bool idOk = false, tsOk = false;
+                    quint32 frameId = qstrId.toUInt(&idOk, 16);
+                    quint64 frameTs = qstrTs.toULongLong(&tsOk);
+                    if (!idOk || !tsOk) {
+                        qDebug() << "canlogserver: failed to parse frame - id:" << qstrId << "ts:" << qstrTs;
+                        continue;
+                    }
                     // Prepare the frame
                     CANFrame* frame_p = getQueue().get();
                     // Check for frame existence
                     if(frame_p){
                         // Set frame ID
-                        frame_p->setFrameId(qstrId.toInt(nullptr, 16));
+                        frame_p->setFrameId(frameId);
                         // Extended frame
                         frame_p->setExtendedFrameFormat(frame_p->frameId() > 0x7FF);
                         // Set bus id
@@ -86,7 +93,7 @@ void CanLogServer::readNetworkData()
                         // Frame is recived
                         frame_p->isReceived = true;
                         // Set timestamp
-                        frame_p->setTimeStamp(QCanBusFrame::TimeStamp(0, qstrTs.toULongLong()));
+                        frame_p->setTimeStamp(QCanBusFrame::TimeStamp(0, frameTs));
                         // Set payload
                         frame_p->setPayload(QByteArray::fromHex(qstrPayload.toUtf8()));
                         // Elaborate frame

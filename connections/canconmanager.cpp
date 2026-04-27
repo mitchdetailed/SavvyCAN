@@ -69,6 +69,7 @@ void CANConManager::remove(CANConnection* pConn_p)
 
 void CANConManager::replace(int idx, CANConnection* pConn_p)
 {
+    if (idx < 0 || idx >= mConns.size()) return;
     CANConnection *original = mConns[idx];
     mConns.replace(idx, pConn_p);
     original->deleteLater(); original = NULL;
