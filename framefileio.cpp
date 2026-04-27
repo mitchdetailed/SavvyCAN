@@ -1424,7 +1424,7 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
                             thisFrame.setFrameType(QCanBusFrame::DataFrame);
                             for (int d = 0; d < numBytes; d++)
                             {
-                                if (tokens[d + 5] != "")
+                                if ((d + 5) < tokens.length() && tokens[d + 5] != "")
                                 {
                                     bytes[d] = static_cast<char>(tokens[d + 5].toInt(nullptr, 16));
                                 }
@@ -1475,7 +1475,7 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
                             thisFrame.setFrameType(QCanBusFrame::DataFrame);
                             for (int d = 0; d < numBytes; d++)
                             {
-                                if (tokens[d + 7] != "")
+                                if ((d + 7) < tokens.length() && tokens[d + 7] != "")
                                 {
                                     bytes[d] = static_cast<char>(tokens[d + 7].toInt(nullptr, 16));
                                 }
@@ -1517,7 +1517,7 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
                             thisFrame.setFrameType(QCanBusFrame::DataFrame);
                             for (int d = 0; d < numBytes; d++)
                             {
-                                if (tokens[d + 6] != "")
+                                if ((d + 6) < tokens.length() && tokens[d + 6] != "")
                                 {
                                     bytes[d] = static_cast<char>(tokens[d + 6].toInt(nullptr, 16));
                                 }
@@ -1569,7 +1569,7 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
                             thisFrame.setFrameType(QCanBusFrame::DataFrame);
                             for (int d = 0; d < numBytes; d++)
                             {
-                                if (tokens[d + 8] != "")
+                                if ((d + 8) < tokens.length() && tokens[d + 8] != "")
                                 {
                                     bytes[d] = static_cast<char>(tokens[d + 8].toInt(nullptr, 16));
                                 }

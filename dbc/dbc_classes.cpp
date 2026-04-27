@@ -312,7 +312,7 @@ QString DBC_SIGNAL::makePrettyOutput(double floatVal, int64_t intVal, bool outpu
 {
     QString outputString;
 
-    if (outputName) outputString = name + ": ";
+    if (outputName) outputString = name + " ";
 
     if (valList.size() > 0) //if this is a value list type then look it up and display the proper string
     {
@@ -331,8 +331,51 @@ QString DBC_SIGNAL::makePrettyOutput(double floatVal, int64_t intVal, bool outpu
     }
     else //otherwise display the actual number and unit (if it exists)
     {
-       outputString += (isInteger ? QString::number(intVal) : QString::number(floatVal));
-       if (outputUnit) outputString += " " + unitName;
+        QString numStr = isInteger ? QString::number(intVal) : QString::number(floatVal);
+
+        // Apply sticky-decimal alignment only for plain decimal strings (not scientific notation)
+        if (!numStr.contains('e') && !numStr.contains('E'))
+        {
+            int dotPos = numStr.indexOf('.');
+            QString intPart, fracPart;
+            if (dotPos >= 0)
+            {
+                intPart = numStr.left(dotPos);
+                fracPart = numStr.mid(dotPos + 1);
+            }
+            else
+            {
+                intPart = numStr;
+                fracPart = QString();
+            }
+
+            // Maximums only ever grow (decimal place can shift right, never left)
+            if (intPart.length() > maxIntDigits) maxIntDigits = intPart.length();
+            if (fracPart.length() > maxFracDigits) maxFracDigits = fracPart.length();
+
+            // Pad integer part with leading spaces
+            QString paddedNum = QString(maxIntDigits - intPart.length(), ' ') + intPart;
+
+            // Pad fractional part with trailing spaces to keep decimal column fixed
+            if (maxFracDigits > 0)
+            {
+                if (fracPart.isEmpty())
+                    paddedNum += QString(1 + maxFracDigits, ' '); // placeholder for '.' and frac digits
+                else
+                {
+                    paddedNum += '.' + fracPart;
+                    paddedNum += QString(maxFracDigits - fracPart.length(), ' ');
+                }
+            }
+
+            outputString += paddedNum;
+        }
+        else
+        {
+            outputString += numStr; // scientific notation: no alignment applied
+        }
+
+        if (outputUnit) outputString += " " + unitName;
     }
     return outputString;
 }

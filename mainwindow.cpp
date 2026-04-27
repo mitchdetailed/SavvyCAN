@@ -1429,7 +1429,8 @@ Data Bytes: 88 10 00 13 BB 00 06 00
                     if(found == false)
                     {
                         QString temp;
-                        if (msg->sigHandler->findSignalByIdx(j)->processAsText(*frame, temp))
+                        DBC_SIGNAL *sigPtr = msg->sigHandler->findSignalByIdx(j);
+                        if (sigPtr && sigPtr->processAsText(*frame, temp))
                         {
                             builderString.append(msg->sigHandler->findSignalByIdx(j)->name);
                             builderString.append(",");
@@ -1513,7 +1514,8 @@ Data Bytes: 88 10 00 13 BB 00 06 00
                     }
 
                     QString temp;
-                    if (msg->sigHandler->findSignalByIdx(j)->processAsText(*frame, temp, false, false))
+                    DBC_SIGNAL *sigPtr = msg->sigHandler->findSignalByIdx(j);
+                    if (sigPtr && sigPtr->processAsText(*frame, temp, false, false))
                     {
                         builderString.append(temp);
                         builderString.append(",");
@@ -1577,7 +1579,8 @@ Data Bytes: 88 10 00 13 BB 00 06 00
                 {
 
                     QString temp;
-                    if (msg->sigHandler->findSignalByIdx(j)->processAsText(*frame, temp))
+                    DBC_SIGNAL *sigPtr = msg->sigHandler->findSignalByIdx(j);
+                    if (sigPtr && sigPtr->processAsText(*frame, temp))
                     {
                         builderString.append("\t" + temp);
                         builderString.append("\n");

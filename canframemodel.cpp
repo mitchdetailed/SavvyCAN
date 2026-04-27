@@ -576,6 +576,7 @@ QVariant CANFrameModel::data(const QModelIndex &index, int role) const
                     {                        
                         QString sigString;
                         DBC_SIGNAL* sig = msg->sigHandler->findSignalByIdx(j);
+                        if (!sig) continue; // guard against null return (malformed DBC or index mismatch)
 
                         if ( (sig->multiplexParent == nullptr) && sig->processAsText(thisFrame, sigString))
                         {
