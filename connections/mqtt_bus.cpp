@@ -58,7 +58,12 @@ void MQTT_BUS::piStarted()
     }
     else
     {
-        QHostAddress hAddr = QHostInfo::fromName(host).addresses()[0];
+        QList<QHostAddress> addresses = QHostInfo::fromName(host).addresses();
+        if (addresses.isEmpty()) {
+            sendDebug("Failed to resolve hostname: " + host);
+            return;
+        }
+        QHostAddress hAddr = addresses[0];
         sendDebug("IP Address of Host: " + hAddr.toString());
         mqttClient = new QMQTT::Client(hAddr, port);
     }
@@ -288,7 +293,11 @@ void MQTT_BUS::clientMessageReceived(const QMQTT::Message& message)
     CANFrame* frame_p = getQueue().get();
     if(frame_p)
     {
-        uint32_t frameID = message.topic().split("/")[1].toInt();
+        QStringList topicParts = message.topic().split("/");
+        if (topicParts.size() < 2) {
+            return; // malformed topic — do not commit the frame slot
+        }
+        uint32_t frameID = topicParts[1].toUInt();
 
         QByteArray timeStampBytes = message.payload().left(8);
         uint64_t timeStamp = qFromLittleEndian<uint64_t>(timeStampBytes.data());

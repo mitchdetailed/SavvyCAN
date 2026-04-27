@@ -358,16 +358,12 @@ void FramePlaybackWindow::EndOfFrameCache()
     if (forward)
     {
         currentSeqNum++; //go forward in the sequence
-        if (currentSeqNum == seqItems.size()) //are we at the end of the sequence?
+        if (currentSeqNum >= seqItems.size()) //are we at the end of the sequence?
         {
             //reset the loop figures for each sequence entry
             for (int i = 0; i < seqItems.size(); i++) seqItems[i].currentLoopCount = 0;
             currentSeqNum = 0;
-            if (ui->cbLoop->isChecked()) //go back to beginning if we're looping the sequence
-            {
-
-            }
-            else //not looping so stop playback entirely
+            if (!ui->cbLoop->isChecked()) //not looping so stop playback entirely
             {
                 isPlaying = false;
                 wantPlaying = false;
@@ -375,24 +371,23 @@ void FramePlaybackWindow::EndOfFrameCache()
                 playbackObject.stopPlayback();
             }
         }
-        currentSeqItem = &seqItems[currentSeqNum];
-        playbackObject.setSequenceObject(currentSeqItem);
-        if (isPlaying) playbackObject.startPlaybackForward();
-        ui->tblSequence->setCurrentCell(currentSeqNum, 0);
+        if (currentSeqNum >= 0 && currentSeqNum < seqItems.size())
+        {
+            currentSeqItem = &seqItems[currentSeqNum];
+            playbackObject.setSequenceObject(currentSeqItem);
+            if (isPlaying) playbackObject.startPlaybackForward();
+            ui->tblSequence->setCurrentCell(currentSeqNum, 0);
+        }
     }
     else
     {
         currentSeqNum--; //go backward in the sequence
-        if (currentSeqNum == -1) //are we trying to go past the beginning?
+        if (currentSeqNum < 0) //are we trying to go past the beginning?
         {
             //reset the loop figures for each sequence entry
             for (int i = 0; i < seqItems.size(); i++) seqItems[i].currentLoopCount = 0;
             currentSeqNum = seqItems.size() - 1;
-            if (ui->cbLoop->isChecked()) //go back to the last sequence entry if we're looping
-            {
-
-            }
-            else //not looping so stop playback entirely
+            if (!ui->cbLoop->isChecked()) //not looping so stop playback entirely
             {
                 isPlaying = false;
                 wantPlaying = false;
@@ -400,10 +395,13 @@ void FramePlaybackWindow::EndOfFrameCache()
                 playbackObject.stopPlayback();
             }
         }
-        currentSeqItem = &seqItems[currentSeqNum];
-        playbackObject.setSequenceObject(currentSeqItem);
-        if (isPlaying) playbackObject.startPlaybackBackward();
-        ui->tblSequence->setCurrentCell(currentSeqNum, 0);
+        if (currentSeqNum >= 0 && currentSeqNum < seqItems.size())
+        {
+            currentSeqItem = &seqItems[currentSeqNum];
+            playbackObject.setSequenceObject(currentSeqItem);
+            if (isPlaying) playbackObject.startPlaybackBackward();
+            ui->tblSequence->setCurrentCell(currentSeqNum, 0);
+        }
     }
 }
 
@@ -422,7 +420,7 @@ void FramePlaybackWindow::updateFrameLabel()
         ui->tblSequence->setCurrentCell(row, 0);
     }
 
-    if (row == -1)
+    if (row == -1 || currentSeqItem == nullptr)
     {
         ui->lblCurrPlayback->setText("");
         ui->lblPosition->setText("");
@@ -684,6 +682,7 @@ void FramePlaybackWindow::changeSendingBus(int newIdx)
 
 void FramePlaybackWindow::changeIDFiltering(QListWidgetItem *item)
 {
+    if (!currentSeqItem) return;
     qDebug() << "Changed ID filter " << item->text() << " : " << item->checkState();
     int ID = FilterUtility::getIdAsInt(item);
     currentSeqItem->idFilters[ID] = (item->checkState() == Qt::Checked) ? true : false;
@@ -691,6 +690,7 @@ void FramePlaybackWindow::changeIDFiltering(QListWidgetItem *item)
 
 void FramePlaybackWindow::btnSelectAllClick()
 {
+    if (!currentSeqItem) return;
     for (int i = 0; i < ui->listID->count(); i++)
     {
         QListWidgetItem *item = ui->listID->item(i);
@@ -701,6 +701,7 @@ void FramePlaybackWindow::btnSelectAllClick()
 
 void FramePlaybackWindow::btnSelectNoneClick()
 {
+    if (!currentSeqItem) return;
     for (int i = 0; i < ui->listID->count(); i++)
     {
         QListWidgetItem *item = ui->listID->item(i);
