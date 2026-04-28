@@ -29,7 +29,8 @@ bool DBC_SIGNAL::isSignalInMessage(const CANFrame &frame)
     if (isMultiplexor && !isMultiplexed) return true; //the root multiplexor is always in the message.
     if (isMultiplexed)
     {
-        if (parentMessage->multiplexorSignal != nullptr)
+        if (parentMessage && parentMessage->multiplexorSignal != nullptr
+                && multiplexParent != nullptr && multiplexParent->parentMessage != nullptr)
         {
             if (multiplexParent->isSignalInMessage(frame)) //parent is in message so check if value is correct
             {

@@ -65,8 +65,37 @@ void SignalViewerWindow::updatedFrames(int numFrames)
 {
     CANFrame thisFrame;
 
-    if (numFrames == -1) //all frames deleted. Don't care
+    if (numFrames == -1) //all frames deleted, or a new file was loaded
     {
+        if (modelFrames->count() > 0)
+        {
+            // For each tracked signal, find the most recent frame and update directly.
+            // Avoids processFrame()/isSignalInMessage() — uses the same safe path as addSignal().
+            for (int sigIdx = 0; sigIdx < signalList.size(); sigIdx++)
+            {
+                DBC_SIGNAL *sig = signalList.at(sigIdx);
+                if (!sig || !sig->parentMessage) continue;
+                for (int i = modelFrames->count() - 1; i >= 0; i--)
+                {
+                    const CANFrame &frame = modelFrames->at(i);
+                    if (frame.frameId() == sig->parentMessage->ID)
+                    {
+                        QString sigString;
+                        if (sig->processAsText(frame, sigString, false))
+                        {
+                            QTableWidgetItem *item = ui->tableViewer->item(sigIdx, VALUE_COL);
+                            if (!item)
+                            {
+                                item = new QTableWidgetItem(sigString);
+                                ui->tableViewer->setItem(sigIdx, VALUE_COL, item);
+                            }
+                            else item->setText(sigString);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
     }
     else if (numFrames == -2) //all new set of frames. Reset
     {
@@ -95,7 +124,7 @@ void SignalViewerWindow::processFrame(CANFrame &frame)
     for (int i = 0; i < signalList.size(); i++)
     {
         sig = signalList.at(i);
-        if (!sig) return;
+        if (!sig || !sig->parentMessage) continue;
         if (sig->parentMessage->ID == frame.frameId())
         {
             if (sig->isSignalInMessage(frame)) //filter out multiplexed signals that aren't in this message.
@@ -135,32 +164,31 @@ void SignalViewerWindow::loadNodes()
         DBCFile* thisFile = dbcHandler->getFileByIdx(f);
         qDebug() << thisFile->messageHandler->getCount();
 
+        // Build node list from the actual senders on messages so that DBC files
+        // without a BU_ section (or with senders like Vector__XXX not listed there)
+        // still expose all their messages.
         QList<QString> names;
+        QSet<QString> addedSenders;
+        const QString noSenderLabel = QStringLiteral("(No Sender)");
 
-        for (int x = 0; x < thisFile->dbc_nodes.size(); x++)
+        for (int m = 0; m < thisFile->messageHandler->getCount(); m++)
         {
-            bool messagesInNode = false;
-            for (int m = 0; m < thisFile->messageHandler->getCount(); m++)
+            DBC_MESSAGE *mMsg = thisFile->messageHandler->findMsgByIdx(m);
+            if (!mMsg) continue;
+            QString senderName = (mMsg->sender) ? mMsg->sender->name : noSenderLabel;
+            if (!addedSenders.contains(senderName))
             {
-                if(thisFile->messageHandler->findMsgByIdx(m)->sender->name == thisFile->dbc_nodes[x].name)
-                {
-                    messagesInNode = true;
-                    break;
-                }
-            }
-            if(messagesInNode)
-            {
-                QString fullyQualifiedNodeName = thisFile->getFilenameNoExt() + Utility::fullyQualifiedNameSeperator + thisFile->dbc_nodes[x].name;
-                names.append(fullyQualifiedNodeName);
+                addedSenders.insert(senderName);
+                names.append(thisFile->getFilenameNoExt() + Utility::fullyQualifiedNameSeperator + senderName);
             }
         }
 
-        if(names.size() > 0)
+        if (names.size() > 0)
         {
             names.sort();
             ui->cbNodes->addItem("----" + thisFile->getFilename());
-            Utility::SetComboBoxItemEnabled(ui->cbNodes, ui->cbNodes->count() -1, false);
-            for(int i=0; i<names.size(); i++)
+            Utility::SetComboBoxItemEnabled(ui->cbNodes, ui->cbNodes->count() - 1, false);
+            for (int i = 0; i < names.size(); i++)
                 ui->cbNodes->addItem(names[i]);
         }
     }
@@ -180,11 +208,15 @@ void SignalViewerWindow::loadMessages(int idx)
     {
         qDebug() << dbcHandler->getFileByIdx(f)->messageHandler->getCount();
 
+        const QString noSenderLabel = QStringLiteral("(No Sender)");
         for (int x = 0; x < dbcHandler->getFileByIdx(f)->messageHandler->getCount(); x++)
         {
-            QString fullyQualifiedNodeName = dbcHandler->getFileByIdx(f)->getFilenameNoExt() + Utility::fullyQualifiedNameSeperator + dbcHandler->getFileByIdx(f)->messageHandler->findMsgByIdx(x)->sender->name;
-            if(fullyQualifiedNodeName == displayedNodeName)
-                ui->cbMessages->addItem(dbcHandler->getFileByIdx(f)->messageHandler->findMsgByIdx(x)->name);
+            DBC_MESSAGE *xMsg = dbcHandler->getFileByIdx(f)->messageHandler->findMsgByIdx(x);
+            if (!xMsg) continue;
+            QString senderName = xMsg->sender ? xMsg->sender->name : noSenderLabel;
+            QString fullyQualifiedNodeName = dbcHandler->getFileByIdx(f)->getFilenameNoExt() + Utility::fullyQualifiedNameSeperator + senderName;
+            if (fullyQualifiedNodeName == displayedNodeName)
+                ui->cbMessages->addItem(xMsg->name);
         }
     }
 }
@@ -228,13 +260,42 @@ void SignalViewerWindow::addSignal(DBC_SIGNAL *sig)
 
     int rowIdx = ui->tableViewer->rowCount();
     ui->tableViewer->insertRow(rowIdx);
-    QString senderName;
-    if (sig->parentMessage && sig->parentMessage->sender)
-        senderName = sig->parentMessage->sender->name;
-    QTableWidgetItem *nodeitem = new QTableWidgetItem(senderName);
+    QString nodeName;
+    if (sig->parentMessage)
+    {
+        if (sig->parentMessage->sender)
+            nodeName = sig->parentMessage->sender->name;
+        else
+            nodeName = sig->parentMessage->name;
+    }
+    QTableWidgetItem *nodeitem = new QTableWidgetItem(nodeName);
     ui->tableViewer->setItem(rowIdx, 0, nodeitem);
-    QTableWidgetItem *msgitem = new QTableWidgetItem(sig->name);
-    ui->tableViewer->setItem(rowIdx, 1, msgitem);
+    QTableWidgetItem *sigitem = new QTableWidgetItem(sig->name);
+    ui->tableViewer->setItem(rowIdx, 1, sigitem);
+
+    // Find the most recent existing frame for this signal and show its value
+    if (sig->parentMessage)
+    {
+        for (int i = modelFrames->count() - 1; i >= 0; i--)
+        {
+            const CANFrame &frame = modelFrames->at(i);
+            if (frame.frameId() == sig->parentMessage->ID)
+            {
+                QString sigString;
+                if (sig->processAsText(frame, sigString, false))
+                {
+                    QTableWidgetItem *item = ui->tableViewer->item(rowIdx, VALUE_COL);
+                    if (!item)
+                    {
+                        item = new QTableWidgetItem(sigString);
+                        ui->tableViewer->setItem(rowIdx, VALUE_COL, item);
+                    }
+                    else item->setText(sigString);
+                }
+                break;
+            }
+        }
+    }
 }
 
 void SignalViewerWindow::saveSignalsFile()
