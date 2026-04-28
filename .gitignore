@@ -1,6 +1,9 @@
 #Build directory
 build/
 
+#gitignore_files directory
+gitignore_files/
+
 # Compiled Object files
 *.slo
 *.lo

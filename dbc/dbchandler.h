@@ -92,6 +92,7 @@ public:
     bool getDirtyFlag();
     void clearDirtyFlag();
     void sort();
+    void remapInternalPointers();
 
     DBCMessageHandler *messageHandler;
     QList<DBC_NODE> dbc_nodes;

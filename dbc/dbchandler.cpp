@@ -362,9 +362,16 @@ DBCFile::DBCFile(const DBCFile& cpy) : QObject()
 
 DBCFile& DBCFile::operator=(const DBCFile& cpy)
 {
-    if (this != &cpy) // protect against invalid self-assignment
+    if (this != &cpy)
     {
-        messageHandler = cpy.messageHandler;
+        // Deep copy messageHandler (not a shallow pointer share — that causes double-free)
+        delete messageHandler;
+        messageHandler = new DBCMessageHandler;
+        for (int i = 0; i < cpy.messageHandler->getCount(); i++)
+            messageHandler->addMessage(*cpy.messageHandler->findMsgByIdx(i));
+        messageHandler->setMatchingCriteria(cpy.messageHandler->getMatchingCriteria());
+        messageHandler->setFilterLabeling(cpy.messageHandler->filterLabeling());
+
         fileName = cpy.fileName;
         filePath = cpy.filePath;
         assocBuses = cpy.assocBuses;
@@ -374,6 +381,22 @@ DBCFile& DBCFile::operator=(const DBCFile& cpy)
         dbc_value_tables.append(cpy.dbc_value_tables);
         dbc_attributes.clear();
         dbc_attributes.append(cpy.dbc_attributes);
+        unassignedSignals.clear();
+        unassignedSignals.append(cpy.unassignedSignals);
+        isDirty = cpy.isDirty;
+
+        // Remap internal cross-pointers to this object's storage (mirrors copy constructor)
+        for (int i = 0; i < messageHandler->getCount(); i++) {
+            DBC_MESSAGE *msg = messageHandler->findMsgByIdx(i);
+            if (msg->sender)
+                msg->sender = findNodeByName(msg->sender->name);
+            for (int j = 0; j < msg->sigHandler->getCount(); j++) {
+                DBC_SIGNAL *sig = msg->sigHandler->findSignalByIdx(j);
+                sig->parentMessage = msg;
+                if (sig->receiver)
+                    sig->receiver = findNodeByName(sig->receiver->name);
+            }
+        }
     }
     return *this;
 }
@@ -382,6 +405,48 @@ void DBCFile::sort()
 {
     std::sort(dbc_nodes.begin(), dbc_nodes.end()); //sort node names
     messageHandler->sort(); //sort messages, each of which sorts its signals too
+}
+
+// Fix cross-pointers that may have been invalidated by Qt6 QList reallocation during parsing.
+// Qt6 QList<T> uses contiguous storage: &list[i] moves whenever the list grows.
+// Call this after all messages and signals have been appended so the lists are at their final
+// addresses and findMsgByIdx/findSignalByIdx return stable current pointers.
+void DBCFile::remapInternalPointers()
+{
+    for (int i = 0; i < messageHandler->getCount(); i++)
+    {
+        DBC_MESSAGE *msg = messageHandler->findMsgByIdx(i);
+        if (!msg) continue;
+
+        if (msg->sender)
+            msg->sender = findNodeByName(msg->sender->name);
+
+        // Re-derive multiplexorSignal by flag — don't dereference the (possibly stale) pointer
+        if (msg->multiplexorSignal != nullptr)
+        {
+            msg->multiplexorSignal = nullptr;
+            for (int j = 0; j < msg->sigHandler->getCount(); j++)
+            {
+                DBC_SIGNAL *s = msg->sigHandler->findSignalByIdx(j);
+                if (s && s->isMultiplexor && !s->isMultiplexed)
+                {
+                    msg->multiplexorSignal = s;
+                    break;
+                }
+            }
+        }
+
+        for (int j = 0; j < msg->sigHandler->getCount(); j++)
+        {
+            DBC_SIGNAL *sig = msg->sigHandler->findSignalByIdx(j);
+            if (!sig) continue;
+            sig->parentMessage = msg;
+            if (sig->receiver)
+                sig->receiver = findNodeByName(sig->receiver->name);
+            if (sig->multiplexParent != nullptr)
+                sig->multiplexParent = msg->multiplexorSignal;
+        }
+    }
 }
 
 DBC_NODE* DBCFile::findNodeByIdx(int idx)
@@ -1303,9 +1368,36 @@ bool DBCFile::loadFile(QString fileName)
         DBC_ATTRIBUTE_VALUE *thisFG = msg->findAttrValByName("GenMsgForegroundColor");
         if (thisBG) msg->bgColor = QColor(thisBG->value.toString());
         if (thisFG) msg->fgColor = QColor(thisFG->value.toString());
+
+        // Qt6: QList<DBC_MESSAGE> and QList<DBC_SIGNAL> use contiguous storage.
+        // Pointers stored during parsing (parentMessage, multiplexorSignal, multiplexParent)
+        // may have been invalidated by list reallocations as more elements were appended.
+        // Re-derive them here using findMsgByIdx/findSignalByIdx which return current addresses.
+
+        // Re-derive multiplexorSignal by searching for the signal with isMultiplexor set,
+        // so that the append to multiplexedChildren below uses a valid pointer.
+        if (msg->multiplexorSignal != nullptr)
+        {
+            msg->multiplexorSignal = nullptr;
+            for (int y = 0; y < msg->sigHandler->getCount(); y++)
+            {
+                DBC_SIGNAL *s = msg->sigHandler->findSignalByIdx(y);
+                if (s && s->isMultiplexor && !s->isMultiplexed)
+                {
+                    msg->multiplexorSignal = s;
+                    break;
+                }
+            }
+        }
+
         for (int y = 0; y < msg->sigHandler->getCount(); y++)
         {
             DBC_SIGNAL *sig = msg->sigHandler->findSignalByIdx(y);
+            // Fix parentMessage — may be dangling after list reallocation in Qt6
+            sig->parentMessage = msg;
+            // Fix multiplexParent for already-set entries
+            if (sig->multiplexParent != nullptr)
+                sig->multiplexParent = msg->multiplexorSignal;
             //if this doesn't have a multiplex parent set but is multiplexed then it must have used
             //simple multiplexing instead of any extended specification. So, fill in the multiplexor signal here
             //and also write the extended entry for it too.
@@ -2186,6 +2278,7 @@ DBCFile* DBCHandler::loadSecretCSVFile(QString filename)
         }
     }
 
+    thisFile->remapInternalPointers();
     thisFile->setDirtyFlag();
     return thisFile;
 }
@@ -2353,6 +2446,7 @@ DBCFile* DBCHandler::loadJSONFile(QString filename)
              }
          }
 
+         thisFile->remapInternalPointers();
          thisFile->setDirtyFlag();
          return thisFile;
 }
