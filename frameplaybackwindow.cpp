@@ -75,6 +75,7 @@ FramePlaybackWindow::FramePlaybackWindow(const QVector<CANFrame> *frames, QWidge
     connect(ui->btnLoadFilters, &QAbstractButton::clicked, this, &FramePlaybackWindow::loadFilters);
     connect(ui->btnSaveFilters, &QAbstractButton::clicked, this, &FramePlaybackWindow::saveFilters);
     connect(ui->cbOriginalTiming, &QCheckBox::toggled, this, &FramePlaybackWindow::useOrigTimingClicked);
+    useOrigTimingClicked();
     connect(MainWindow::getReference(), SIGNAL(framesUpdated(int)), this, SLOT(updatedFrames(int)));
 
     connect(&playbackObject, &FramePlaybackObject::EndOfFrameCache, this, &FramePlaybackWindow::EndOfFrameCache);
@@ -104,6 +105,7 @@ FramePlaybackWindow::~FramePlaybackWindow()
 void FramePlaybackWindow::showEvent(QShowEvent *)
 {
     readSettings();
+    useOrigTimingClicked();
     installEventFilter(this);
 
     //any time the view is shown we'll go see how many buses are registered and redo the combobox to match

@@ -162,6 +162,12 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->listFilters, &QListWidget::itemChanged, this, &MainWindow::filterListItemChanged);
     connect(ui->listBusFilters, &QListWidget::itemChanged, this, &MainWindow::busFilterListItemChanged);
 
+    // readSettings() set these checkboxes before the connections above existed, so the model
+    // never received the saved states. Apply them directly now that connections are live.
+    model->setInterpretMode(ui->cbInterpret->isChecked());
+    model->setOverwriteMode(ui->cbOverwrite->isChecked()); // silent restore — user confirmed this previously
+    model->setClearMode(ui->cbPersistentFilters->isChecked());
+
     connect(ui->btnCaptureToggle, &QAbstractButton::clicked, this, &MainWindow::toggleCapture);
     connect(ui->btnClearFrames, &QAbstractButton::clicked, this, &MainWindow::clearFrames);
     connect(ui->btnNormalize, &QAbstractButton::clicked, this, &MainWindow::normalizeTiming);
@@ -194,7 +200,10 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->listFilters->horizontalScrollBar()->setEnabled(false);
 
     connect(&updateTimer, &QTimer::timeout, this, &MainWindow::tickGUIUpdate);
-    updateTimer.setInterval(250);
+    {
+        int hz = QSettings().value("Main/RefreshRateHz", 4).toInt();
+        updateTimer.setInterval(1000 / qBound(4, hz, 100));
+    }
     updateTimer.start();
 
     elapsedTime = new QElapsedTimer;
@@ -1667,6 +1676,7 @@ void MainWindow::showSettingsDialog()
     {
         settingsDialog = new MainSettingsDialog();
         connect (settingsDialog, SIGNAL(updatedSettings()), this, SLOT(readUpdateableSettings()));
+        readUpdateableSettings(); // apply any settings the dialog constructor emitted before the connection existed
     }
     settingsDialog->show();
 }
