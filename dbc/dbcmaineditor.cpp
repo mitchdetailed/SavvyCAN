@@ -877,10 +877,11 @@ void DBCMainEditor::deleteCurrentTreeItem()
         if (!node) return;
         for (int x = 0; x < dbcFile->messageHandler->getCount(); x++)
         {
-            if (dbcFile->messageHandler->findMsgByIdx(x)->sender == node)
+            DBC_MESSAGE *xMsg = dbcFile->messageHandler->findMsgByIdx(x);
+            if (xMsg && xMsg->sender == node)
             {
                 numMsg++;
-                numSig += dbcFile->messageHandler->findMsgByIdx(x)->sigHandler->getCount();
+                numSig += xMsg->sigHandler->getCount();
             }
         }
         confirmDialog = QMessageBox::question(this, "Really?", "Are you sure you want to delete this node, its\n"

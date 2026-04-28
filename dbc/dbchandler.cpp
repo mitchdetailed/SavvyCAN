@@ -1843,7 +1843,7 @@ bool DBCFile::saveFile(QString fileName)
                 if (sig->isMultiplexed)
                 {
                     msgOutput.append("SG_MUL_VAL_ " + QString::number(ID) + " ");
-                    msgOutput.append(sig->name + " " + sig->multiplexParent->name + " ");
+                    msgOutput.append(sig->name + " " + (sig->multiplexParent ? sig->multiplexParent->name : QString()) + " ");
                     msgOutput.append(sig->multiplexDbcString() + ";");
                     msgOutput.append("\n");
                     extMultiplexOutput.append(msgOutput);
@@ -2464,7 +2464,7 @@ DBC_MESSAGE* DBCHandler::findMessage(const QString msgName, const QString nodeNa
             for(int f = 0; f < msgCount; f++)
             {
                 msg = file->messageHandler->findMsgByIdx(f);
-                if (msg && msg->name == msgName && msg->sender->name == nodeName)
+                if (msg && msg->name == msgName && msg->sender && msg->sender->name == nodeName)
                     return msg; //if it's not null and the node name matches return it
             }
         }

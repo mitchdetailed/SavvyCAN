@@ -940,7 +940,7 @@ void GraphingWindow::saveDefinitions()
             outFile.write(QString::number(iter->pointType).toUtf8());
             outFile.putChar(',');
             outFile.write(QString::number(iter->lineWidth).toUtf8());
-            if (iter->associatedSignal)
+            if (iter->associatedSignal && iter->associatedSignal->parentMessage)
             {
                 outFile.putChar(',');
                 outFile.write(iter->associatedSignal->parentMessage->name.toUtf8());

@@ -719,12 +719,15 @@ void DBCSignalEditor::fillSignalForm(DBC_SIGNAL *sig)
         break;
     }
 
-    for (int i = 0; i < ui->comboReceiver->count(); i++)
+    if (sig->receiver)
     {
-        if (ui->comboReceiver->itemText(i) == sig->receiver->name)
+        for (int i = 0; i < ui->comboReceiver->count(); i++)
         {
-            ui->comboReceiver->setCurrentIndex(i);
-            break;
+            if (ui->comboReceiver->itemText(i) == sig->receiver->name)
+            {
+                ui->comboReceiver->setCurrentIndex(i);
+                break;
+            }
         }
     }
 
