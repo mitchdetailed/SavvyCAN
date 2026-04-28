@@ -228,7 +228,10 @@ void SignalViewerWindow::addSignal(DBC_SIGNAL *sig)
 
     int rowIdx = ui->tableViewer->rowCount();
     ui->tableViewer->insertRow(rowIdx);
-    QTableWidgetItem *nodeitem = new QTableWidgetItem(sig->parentMessage->sender->name);
+    QString senderName;
+    if (sig->parentMessage && sig->parentMessage->sender)
+        senderName = sig->parentMessage->sender->name;
+    QTableWidgetItem *nodeitem = new QTableWidgetItem(senderName);
     ui->tableViewer->setItem(rowIdx, 0, nodeitem);
     QTableWidgetItem *msgitem = new QTableWidgetItem(sig->name);
     ui->tableViewer->setItem(rowIdx, 1, msgitem);

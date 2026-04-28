@@ -224,12 +224,15 @@ void DBCMessageEditor::refreshView()
     ui->lineFrameID->setText(Utility::formatCANID(dbcMessage->ID & 0x1FFFFFFFul));
     ui->lineMsgName->setText(dbcMessage->name);
     ui->lineFrameLen->setText(QString::number(dbcMessage->len));    
-    for (int i = 0; i < ui->comboSender->count(); i++)
+    if (dbcMessage->sender)
     {
-        if (ui->comboSender->itemText(i) == dbcMessage->sender->name)
+        for (int i = 0; i < ui->comboSender->count(); i++)
         {
-            ui->comboSender->setCurrentIndex(i);
-            break;
+            if (ui->comboSender->itemText(i) == dbcMessage->sender->name)
+            {
+                ui->comboSender->setCurrentIndex(i);
+                break;
+            }
         }
     }
 
