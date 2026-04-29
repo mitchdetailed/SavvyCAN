@@ -55,6 +55,7 @@ public:
     static bool loadCANServerFile(QString filename, QVector<CANFrame>* frames);
     static bool loadWiresharkFile(QString filename, QVector<CANFrame>* frames);
     static bool loadWiresharkSocketCANFile(QString filename, QVector<CANFrame>* frames);
+    static bool loadMDF4File(QString filename, QVector<CANFrame>* frames);
 
     //functions that pre-scan a file to try to figure out if they could read it. Used to automatically determine
     //file type and load it.
@@ -98,6 +99,7 @@ public:
     static bool saveCARBUSAnalzyer(QString filename, const QVector<CANFrame>* frames);
     static bool savePCANFile21(QString filename, const QVector<CANFrame>* frames);
     static bool savePCANFile30(QString filename, const QVector<CANFrame>* frames);
+    static bool saveMDF4File(QString filename, const QVector<CANFrame>* frames);
 
     static bool openContinuousNative();
     static bool closeContinuousNative();

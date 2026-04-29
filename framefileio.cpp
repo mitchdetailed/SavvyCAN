@@ -1,5 +1,6 @@
 #include "framefileio.h"
 
+#include <cmath>
 #include <QMessageBox>
 #include <QProgressDialog>
 #include <QDateTime>
@@ -12,6 +13,16 @@
 
 #include "utility.h"
 #include "blfhandler.h"
+
+#include <mdf/mdffactory.h>
+#include <mdf/mdfwriter.h>
+#include <mdf/mdfreader.h>
+#include <mdf/mdffile.h>
+#include <mdf/ifilehistory.h>
+#include <mdf/iheader.h>
+#include <mdf/idatagroup.h>
+#include <mdf/ichannelgroup.h>
+#include <mdf/ichannelobserver.h>
 
 QFile FrameFileIO::continuousFile;
 
@@ -55,6 +66,7 @@ bool FrameFileIO::saveFrameFile(QString &fileName, const QVector<CANFrame>* fram
     filters.append(QString(tr("CARBUS Analyzer (*.trc *.TRC)")));
     filters.append(QString(tr("PCAN Viewer Version 2.1 (*.trc *.TRC)")));
     filters.append(QString(tr("PCAN Viewer Version 3.0 (*.trc *.TRC)")));
+    filters.append(QString(tr("ASAM MDF4 (*.mf4 *.MF4)")));
 
     dialog.setDirectory(settings.value("FileIO/LoadSaveDirectory", dialog.directory().path()).toString());
     dialog.setFileMode(QFileDialog::AnyFile);
@@ -155,6 +167,11 @@ bool FrameFileIO::saveFrameFile(QString &fileName, const QVector<CANFrame>* fram
             if (!filename.contains('.')) filename += ".trc";
             result = savePCANFile30(filename, frameCache);
         }
+        if (dialog.selectedNameFilter() == filters[15])
+        {
+            if (!filename.contains('.')) filename += ".mf4";
+            result = saveMDF4File(filename, frameCache);
+        }
 
         progress.cancel();
 
@@ -204,6 +221,7 @@ bool FrameFileIO::loadFrameFile(QString &fileName, QVector<CANFrame>* frameCache
     filters.append(QString(tr("CANServer Binary Log (*.log *.LOG)")));
     filters.append(QString(tr("Wireshark (*.pcap *.PCAP *.pcapng *.PCAPNG)")));
     filters.append(QString(tr("Wireshark SocketCAN (*.pcap *.PCAP")));
+    filters.append(QString(tr("ASAM MDF4 (*.mf4 *.MF4)")));
 
     dialog.setDirectory(settings.value("FileIO/LoadSaveDirectory", dialog.directory().path()).toString());
     dialog.setFileMode(QFileDialog::ExistingFile);
@@ -251,6 +269,7 @@ bool FrameFileIO::loadFrameFile(QString &fileName, QVector<CANFrame>* frameCache
         if (selectedNameFilter == filters[23]) result = loadCANServerFile(filename, frameCache);
         if (selectedNameFilter == filters[24]) result = loadWiresharkFile(filename, frameCache);
         if (selectedNameFilter == filters[25]) result = loadWiresharkSocketCANFile(filename, frameCache);
+        if (selectedNameFilter == filters[26]) result = loadMDF4File(filename, frameCache);
 
 
         progress.cancel();
@@ -295,7 +314,8 @@ bool FrameFileIO::autoDetectLoadFile(QString filename, QVector<CANFrame>* frames
         QLatin1String("log"), QLatin1String("can"), QLatin1String("trace"),
         QLatin1String("avc"), QLatin1String("evc"), QLatin1String("qcc"),
         QLatin1String("trc"), QLatin1String("txt"), QLatin1String("asc"),
-        QLatin1String("blf"), QLatin1String("pcap"), QLatin1String("pcapng")
+        QLatin1String("blf"), QLatin1String("pcap"), QLatin1String("pcapng"),
+        QLatin1String("mf4")
     };
 
     if (!knownExtensions.contains(ext))
@@ -312,6 +332,15 @@ bool FrameFileIO::autoDetectLoadFile(QString filename, QVector<CANFrame>* frames
 
     // Step 2: Binary / magic-byte formats (extension-independent)
     // These use file headers so they are safe to probe first.
+
+    if (ext == QLatin1String("mf4"))
+    {
+        qDebug() << "Attempting ASAM MDF4";
+        if (loadMDF4File(filename, frames)) {
+            qDebug() << "Loaded as ASAM MDF4 successfully!"; return true;
+        }
+        return false;
+    }
 
     if (ext == QLatin1String("blf"))
     {
@@ -5313,4 +5342,289 @@ bool FrameFileIO::isWiresharkSocketCANFile(QString filename)
     pcap_close(pcap_data_file);
     pcap_data_file = NULL;
     return true;
+}
+
+bool FrameFileIO::saveMDF4File(QString filename, const QVector<CANFrame>* frames)
+{
+    using namespace mdf;
+
+    auto writer = MdfFactory::CreateMdfWriter(MdfWriterType::MdfConverter);
+    if (!writer->Init(filename.toStdString())) return false;
+
+    auto* header = writer->Header();
+    auto* history = header->CreateFileHistory();
+    history->Description("CAN bus log converted by SavvyCAN");
+    history->ToolName("SavvyCAN");
+    history->ToolVersion("2.0");
+    history->UserName("");
+
+    writer->BusType(MdfBusType::CAN);
+    writer->StorageType(MdfStorageType::MlsdStorage);
+    writer->MaxLength(8);
+    writer->CreateBusLogConfiguration();
+    writer->PreTrigTime(0.0);
+    writer->CompressData(false);
+
+    auto* last_dg = header->LastDataGroup();
+    if (!last_dg) return false;
+
+    auto* can_data_frame  = last_dg->GetChannelGroup("CAN_DataFrame");
+    auto* can_remote_frame = last_dg->GetChannelGroup("CAN_RemoteFrame");
+    if (!can_data_frame || !can_remote_frame) return false;
+
+    writer->InitMeasurement();
+
+    // Use current UTC time as the absolute base for all frame timestamps
+    uint64_t base_ns = static_cast<uint64_t>(
+        QDateTime::currentDateTimeUtc().toMSecsSinceEpoch()) * 1000000ULL;
+
+    writer->StartMeasurement(base_ns);
+
+    int lineCounter = 0;
+    for (const auto& frame : *frames)
+    {
+        lineCounter++;
+        if (lineCounter > 500) { qApp->processEvents(); lineCounter = 0; }
+
+        uint64_t frame_time_ns = base_ns
+            + static_cast<uint64_t>(frame.timeStamp().seconds()) * 1000000000ULL
+            + static_cast<uint64_t>(frame.timeStamp().microSeconds()) * 1000ULL;
+
+        CanMessage msg;
+        msg.BusChannel(static_cast<uint8_t>(frame.bus + 1));
+        bool extended = frame.hasExtendedFrameFormat();
+        msg.ExtendedId(extended);
+        uint32_t msg_id = extended ? (frame.frameId() | 0x80000000U) : frame.frameId();
+        msg.MessageId(msg_id);
+        msg.Dir(!frame.isReceived);
+
+        if (frame.frameType() == QCanBusFrame::RemoteRequestFrame)
+        {
+            msg.TypeOfMessage(MessageType::CAN_RemoteFrame);
+            msg.Rtr(true);
+            msg.Dlc(static_cast<uint8_t>(frame.payload().size()));
+            writer->SaveCanMessage(*can_remote_frame, frame_time_ns, msg);
+        }
+        else
+        {
+            msg.TypeOfMessage(MessageType::CAN_DataFrame);
+            const QByteArray& payload = frame.payload();
+            msg.DataBytes(std::vector<uint8_t>(payload.cbegin(), payload.cend()));
+            writer->SaveCanMessage(*can_data_frame, frame_time_ns, msg);
+        }
+    }
+
+    uint64_t stop_ns = base_ns;
+    if (!frames->isEmpty())
+    {
+        const auto& last = frames->last();
+        stop_ns = base_ns
+            + static_cast<uint64_t>(last.timeStamp().seconds()) * 1000000000ULL
+            + static_cast<uint64_t>(last.timeStamp().microSeconds()) * 1000ULL;
+    }
+    writer->StopMeasurement(stop_ns);
+    writer->FinalizeMeasurement();
+    return true;
+}
+
+bool FrameFileIO::loadMDF4File(QString filename, QVector<CANFrame>* frames)
+{
+    using namespace mdf;
+
+    MdfReader reader(filename.toStdString());
+    reader.ReadEverythingButData();
+
+    const auto* mdf_file = reader.GetFile();
+    if (!mdf_file) return false;
+
+    // Get measurement start time (ns since Unix epoch) from the HD block.
+    // Per-sample timestamps in the channel are relative seconds; add start_s to get epoch time.
+    double start_s = 0.0;
+    if (const auto* hdr = mdf_file->Header(); hdr != nullptr)
+        start_s = static_cast<double>(hdr->StartTime()) * 1.0e-9;
+
+    DataGroupList dg_list;
+    mdf_file->DataGroups(dg_list);
+
+    for (auto* dg : dg_list)
+    {
+        // Group per-channel observers by channel group so we can correlate samples.
+        struct CgBundle {
+            bool is_remote = false;
+            bool ide_from_name = false;  // CG name has _IDE suffix → all frames are 29-bit
+            int  bus_from_name = 0;      // 0-based bus from CG name (CAN1_* → 0)
+            bool rx_from_name  = true;   // true=Rx, false=Tx, from CG name (_Rx/_Tx)
+            std::unique_ptr<IChannelObserver> obs_time;
+            std::unique_ptr<IChannelObserver> obs_id;
+            std::unique_ptr<IChannelObserver> obs_ide;
+            std::unique_ptr<IChannelObserver> obs_bus;
+            std::unique_ptr<IChannelObserver> obs_dir;
+            std::unique_ptr<IChannelObserver> obs_data;
+            std::unique_ptr<IChannelObserver> obs_dlc;
+            std::unique_ptr<IChannelObserver> obs_datalen;
+        };
+        std::vector<CgBundle> bundles;
+
+        for (auto* cg : dg->ChannelGroups())
+        {
+            // Detect frame type by the channel named CAN_DataFrame.ID or CAN_RemoteFrame.ID.
+            // GetChannel() does substring matching, so ".ID" would also work, but using the
+            // full channel name avoids accidentally matching non-CAN channel groups.
+            auto* cn_id = cg->GetChannel("CAN_DataFrame.ID");
+            bool is_remote = false;
+            if (!cn_id) {
+                cn_id = cg->GetChannel("CAN_RemoteFrame.ID");
+                is_remote = true;
+            }
+            if (!cn_id) continue;  // not a CAN bus channel group
+
+            // Use partial name matching (mdflib IChannelGroup::GetChannel does substring search).
+            auto* cn_time    = cg->GetMasterChannel();
+            auto* cn_ide     = cg->GetChannel(".IDE");
+            auto* cn_bus     = cg->GetChannel(".BusChannel");
+            auto* cn_dir     = cg->GetChannel(".Dir");
+            auto* cn_data    = is_remote ? nullptr : cg->GetChannel(".DataBytes");
+            auto* cn_dlc     = cg->GetChannel(".DLC");
+            auto* cn_datalen = cg->GetChannel(".DataLength");
+
+            CgBundle b;
+            b.is_remote = is_remote;
+            {
+                const std::string cg_name = cg->Name();
+                // _IDE suffix → all frames in this CG are 29-bit extended.
+                b.ide_from_name = (cg_name.find("_IDE") != std::string::npos);
+                // _Tx suffix → transmitted; otherwise assume received.
+                // Many bus-logging tools create separate CGs per direction.
+                b.rx_from_name = (cg_name.find("_Tx") == std::string::npos);
+                // Extract 1-based bus number from CG name: CAN1_* → bus 0, CAN9_* → bus 8.
+                auto can_pos = cg_name.find("CAN");
+                if (can_pos != std::string::npos) {
+                    size_t num_start = can_pos + 3;
+                    size_t num_end   = num_start;
+                    while (num_end < cg_name.size() && std::isdigit(cg_name[num_end]))
+                        ++num_end;
+                    if (num_end > num_start)
+                        b.bus_from_name = std::stoi(cg_name.substr(num_start, num_end - num_start)) - 1;
+                }
+            }
+            if (cn_time) b.obs_time = CreateChannelObserver(*dg, *cg, *cn_time);
+            b.obs_id               = CreateChannelObserver(*dg, *cg, *cn_id);
+            // Only subscribe to IDE/BusChannel/Dir when they are NOT VirtualData.
+            // VirtualData channels (Type=6) have no per-sample storage; GetChannelValue
+            // returns the sample index, not the actual signal value.
+            if (cn_ide && cn_ide->Type() != ChannelType::VirtualData)
+                b.obs_ide = CreateChannelObserver(*dg, *cg, *cn_ide);
+            if (cn_bus && cn_bus->Type() != ChannelType::VirtualData)
+                b.obs_bus = CreateChannelObserver(*dg, *cg, *cn_bus);
+            if (cn_dir && cn_dir->Type() != ChannelType::VirtualData)
+                b.obs_dir = CreateChannelObserver(*dg, *cg, *cn_dir);
+            if (cn_data)    b.obs_data    = CreateChannelObserver(*dg, *cg, *cn_data);
+            if (cn_dlc)     b.obs_dlc     = CreateChannelObserver(*dg, *cg, *cn_dlc);
+            if (cn_datalen) b.obs_datalen = CreateChannelObserver(*dg, *cg, *cn_datalen);
+            bundles.push_back(std::move(b));
+        }
+
+        if (bundles.empty()) continue;
+
+        reader.ReadData(*dg);
+
+        for (auto& b : bundles)
+        {
+            const uint64_t nof = b.obs_id->NofSamples();
+            for (uint64_t s = 0; s < nof; ++s)
+            {
+                uint32_t raw_id = 0;
+                if (!b.obs_id->GetChannelValue(s, raw_id)) continue;
+
+                CANFrame frame;
+
+                // Determine whether this is an extended (29-bit) or standard (11-bit) frame.
+                // Priority:
+                //  1. CG name ends in _IDE  → all frames in this CG are extended (29-bit)
+                //  2. IDE channel (per-sample) → used when CG does not follow _IDE naming
+                //  3. Bit 31 of raw ID        → last resort
+                bool extended;
+                if (b.ide_from_name) {
+                    extended = true;
+                } else if (b.obs_ide) {
+                    uint8_t ide = 0;
+                    b.obs_ide->GetChannelValue(s, ide);
+                    extended = (ide != 0);
+                } else {
+                    extended = (raw_id & 0x80000000U) != 0;
+                }
+                frame.setFrameId(raw_id & 0x1FFFFFFFU);
+                frame.setExtendedFrameFormat(extended);
+
+                // Bus channel: prefer FixedLength observer; fall back to CG-name-parsed value.
+                // (BusChannel is VirtualData in many bus-logging tools, returning sample index.)
+                if (b.obs_bus) {
+                    uint8_t bus_ch = 0;
+                    b.obs_bus->GetChannelValue(s, bus_ch);
+                    frame.bus = (bus_ch > 0) ? static_cast<int>(bus_ch) - 1 : 0;
+                } else {
+                    frame.bus = b.bus_from_name;
+                }
+
+                // Direction: prefer FixedLength observer; fall back to CG name (_Rx/_Tx).
+                // Dir is VirtualData in many bus-logging tools (returns sample index).
+                if (b.obs_dir) {
+                    uint8_t dir = 0;
+                    b.obs_dir->GetChannelValue(s, dir);
+                    frame.isReceived = (dir == 0);
+                } else {
+                    frame.isReceived = b.rx_from_name;
+                }
+
+                if (b.is_remote || !b.obs_data)
+                {
+                    frame.setFrameType(QCanBusFrame::RemoteRequestFrame);
+                    uint8_t dlc = 0;
+                    if (b.obs_dlc) b.obs_dlc->GetChannelValue(s, dlc);
+                    frame.setPayload(QByteArray(static_cast<int>(dlc), 0));
+                }
+                else
+                {
+                    frame.setFrameType(QCanBusFrame::DataFrame);
+                    std::vector<uint8_t> data;
+                    b.obs_data->GetChannelValue(s, data);
+                    if (b.obs_datalen) {
+                        uint8_t actual_len = 0;
+                        b.obs_datalen->GetChannelValue(s, actual_len);
+                        if (actual_len < data.size())
+                            data.resize(actual_len);
+                    }
+                    frame.setPayload(QByteArray(
+                        reinterpret_cast<const char*>(data.data()),
+                        static_cast<int>(data.size())));
+                }
+
+                // Timestamp: SavvyCAN's convention is TimeStamp(0, total_microseconds).
+                // It uses microSeconds() as the full monotonic counter and ignores seconds().
+                // We add the HD block start time (epoch) + relative sample time,
+                // and round to avoid floating-point truncation going negative.
+                if (b.obs_time) {
+                    double rel_s = 0.0;
+                    b.obs_time->GetEngValue(s, rel_s);
+                    qint64 epoch_us = static_cast<qint64>(std::round((start_s + rel_s) * 1.0e6));
+                    frame.setTimeStamp(QCanBusFrame::TimeStamp(0, epoch_us));
+                }
+
+                frames->append(frame);
+            }
+
+            // Detach all observers for this channel group.
+            if (b.obs_time)    b.obs_time->DetachObserver();
+            b.obs_id->DetachObserver();
+            if (b.obs_ide)     b.obs_ide->DetachObserver();
+            if (b.obs_bus)     b.obs_bus->DetachObserver();
+            if (b.obs_dir)     b.obs_dir->DetachObserver();
+            if (b.obs_data)    b.obs_data->DetachObserver();
+            if (b.obs_dlc)     b.obs_dlc->DetachObserver();
+            if (b.obs_datalen) b.obs_datalen->DetachObserver();
+        }
+    }
+
+    reader.Close();
+    return !frames->isEmpty();
 }
