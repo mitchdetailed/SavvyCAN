@@ -1,0 +1,532 @@
+VERSION ""
+
+
+NS_ : 
+	NS_DESC_
+	CM_
+	BA_DEF_
+	BA_
+	VAL_
+	CAT_DEF_
+	CAT_
+	FILTER
+	BA_DEF_DEF_
+	EV_DATA_
+	ENVVAR_DATA_
+	SGTYPE_
+	SGTYPE_VAL_
+	BA_DEF_SGTYPE_
+	BA_SGTYPE_
+	SIG_TYPE_REF_
+	VAL_TABLE_
+	SIG_GROUP_
+	SIG_VALTYPE_
+	SIGTYPE_VALTYPE_
+	BO_TX_BU_
+	BA_DEF_REL_
+	BA_REL_
+	BA_DEF_DEF_REL_
+	BU_SG_REL_
+	BU_EV_REL_
+	BU_BO_REL_
+	SG_MUL_VAL_
+
+BS_:
+
+BU_: TPMS ABS_Module Body_Control_Module Auto_Trans_Controller Engine_Controller
+VAL_TABLE_ ID_2F0_SB37_L8_TCS_State 132 "On" 61 "TC Comp" 60 "TC Off" 56 "TC + AH Off" ;
+VAL_TABLE_ ID_1F5_SB48_L2_Enum 3 "Unknown" 2 "Reverse" 1 "Drive" 0 "Park/Neutral" ;
+VAL_TABLE_ ID_1F5_SB24_L3_Gear_Enum 5 "Manual Mode" 4 "Drive" 2 "Reverse" 1 "Park" 0 "Undefined" ;
+VAL_TABLE_ ID320_B4_Shift_Lever_Position 10 "Park" 9 "Neutral" 8 "Reverse" 6 "Drive" 4 "Manual Mode" 0 "Unreferenced" ;
+VAL_TABLE_ Gear 8 "R" 7 "7" 6 "6" 5 "5" 4 "4" 3 "3" 2 "2" 1 "1" 0 "N" ;
+VAL_TABLE_ Gear_Enum 10 "Park" 9 "Neutral" 8 "Reverse" 6 "6th" 5 "5th" 4 "4th" 3 "3rd" 2 "2nd" 1 "1st" ;
+
+
+BO_ 840 ID_0x348: 3 Engine_Controller
+ SG_ ID_348_SB16_L8 : 23|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_348_SB8_L8 : 15|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_348_SB0_L8 : 7|8@0+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 368 ID_0x170: 2 Engine_Controller
+ SG_ ID_170_SB0_L8_Val_1 : 7|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_170_SB8_L8_Val_0 : 15|8@0+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 296 ID_0x128: 4 Body_Control_Module
+ SG_ ID_128_SB6_L1_Linked_To_ID_128_S : 6|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_128_SB7_L1_Accel_not_Pressed : 7|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_128_SB24_L8_Unknown : 31|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_128_SB18_L6_Val_0 : 23|6@0+ (1,0) [0|63] "" Vector__XXX
+ SG_ ID_128_SB8_L8_Brake_Pressure : 15|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_128_SB2_L4 : 5|4@0+ (1,0) [0|15] "" Vector__XXX
+ SG_ ID_128_SB16_L2_Complimentary_Cou : 17|2@0+ (1,0) [0|3] "" Vector__XXX
+ SG_ ID_128_SB0_L2_Incrementing_Count : 1|2@0+ (1,0) [0|3] "" Vector__XXX
+
+BO_ 1312 ID_0x520: 6 Auto_Trans_Controller
+ SG_ ID_520_SB_21_L3_Val_0 : 23|3@0+ (1,0) [0|7] "" Vector__XXX
+ SG_ ID_520_SB16_L2_Val_1 : 17|2@0+ (1,0) [0|3] "" Vector__XXX
+ SG_ ID_520_SB0_L0_Val_0 : 0|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_520_SB1_L1_GearRejection : 1|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_520_SB40_L8_Val_255 : 47|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_520_SB32_L8_Val_0 : 39|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_520_SB24_L8_Val_40 : 31|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_520_SB18_L3_Target_Gear : 20|3@0+ (1,0) [0|7] "" Vector__XXX
+ SG_ ID_520_SB8_L8_Val_96 : 15|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_520_SB2_L6_Val_0 : 7|6@0+ (1,0) [0|63] "" Vector__XXX
+
+BO_ 288 ID_0x120: 8 Engine_Controller
+ SG_ ID_120_SB56_L12_Trans_Tq_Reducti : 51|12@0+ (0.25,-200) [-200|823.75] "N.m" Vector__XXX
+ SG_ ID_120_SB52_L4_Val_0 : 55|4@0+ (1,0) [0|15] "" Vector__XXX
+ SG_ ID_120_SB40_L12_Engine_Torque : 35|12@0+ (0.25,-200) [-200|823.75] "N.m" Vector__XXX
+ SG_ ID_120_SB38_L4_Val_4 : 39|4@0+ (1,0) [0|15] "" Vector__XXX
+ SG_ ID_120_SB_24_L12_Engine_Torque : 19|12@0+ (0.25,-200) [-200|823.75] "N.m" Vector__XXX
+ SG_ ID_120_SB20_L4_Val_0 : 23|4@0+ (1,0) [0|15] "" Vector__XXX
+ SG_ ID_120_SB8_L12_Trans_Engine_Torq : 3|12@0+ (0.25,-200) [-200|823.75] "N.m" Vector__XXX
+ SG_ ID_120_SB_4_L4_Val_0 : 7|4@0+ (1,0) [0|15] "" Vector__XXX
+
+BO_ 768 ID_0x300: 6 Engine_Controller
+ SG_ ID_300_SB32_L16_Integral_Fuel_Us : 31|16@0+ (1,0) [0|0] "cc/min" Vector__XXX
+ SG_ ID_300_SB40_L8 : 47|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_300_SB16_L8 : 23|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_300_SB8_L8 : 15|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_300_SB0_L8 : 7|8@0+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 1225 ID_0x4C9: 8 Auto_Trans_Controller
+ SG_ ID_4C9_SB24_L8 : 31|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_4C9_SB16_L8 : 23|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_4C9_SB8_L8_Trans_Oil_Temp : 15|8@0+ (1,0) [0|255] "C" Vector__XXX
+ SG_ ID_4C9_SB0_L8 : 7|8@0+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 1217 ID_0x4C1: 8 Auto_Trans_Controller
+ SG_ ID_4C1_SB32_L8_Ambient_Air_Temp : 39|8@0+ (0.5,-40) [-40|87.5] "C" Vector__XXX
+ SG_ ID_4C1_SB24_L8_Inlet_Air_Temp : 31|8@0+ (1,-40) [-40|215] "C" Vector__XXX
+ SG_ ID_4C1_SB16_L8_Engine_Coolant_Te : 23|8@0+ (1,-40) [-40|215] "C" Vector__XXX
+ SG_ ID_4C1_SB8_L8 : 15|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_4C1_SB0_L8 : 7|8@0+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 645 ID_0x285: 1 Auto_Trans_Controller
+ SG_ ID_285_SB7_L1_Val_0 : 5|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_285_SB5_L1_Val_0 : 7|1@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_285_SB4_L1_Unknown : 4|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_285_SB6_L1_Accel_not_Pressed : 6|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_285_SB0_L4_Val_0 : 3|4@0+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 501 ID_0x1F5: 7 Auto_Trans_Controller
+ SG_ ID_1F5_SB11_L1_Not_in_Drive : 11|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_1F5_SB22_L2_Val_0 : 23|2@0+ (1,0) [0|3] "" Vector__XXX
+ SG_ ID_1F5_SB14_L2_Val_0 : 15|2@0+ (1,0) [0|3] "" Vector__XXX
+ SG_ ID_1F5_SB21_L1_Target_Gear_Rejec : 21|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_1F5_SB20_L1_Manual_Mode : 20|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_1F5_SB12_L1_UpShift : 12|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_1F5_SB13_L1_DownShift : 13|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_1F5_SB50_L6_Val_0 : 55|6@0+ (1,0) [0|63] "" Vector__XXX
+ SG_ ID_1F5_SB41_L7_Val_0 : 47|7@0+ (1,0) [0|127] "" Vector__XXX
+ SG_ ID_1F5_SB27_L5_Val_0 : 31|5@0+ (1,0) [0|31] "" Vector__XXX
+ SG_ ID_1F5_SB3_L3_Unknown : 5|3@0+ (1,0) [0|7] "" Vector__XXX
+ SG_ ID_1F5_SB0_L3_Gear : 2|3@0+ (1,0) [0|7] "" Vector__XXX
+ SG_ ID_1F5_SB48_L2_Gear_Ref_Enum : 49|2@0+ (1,0) [0|3] "" Vector__XXX
+ SG_ ID_1F5_SB40_L1_Manual_Mode : 40|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_1F5_SB32_L8_Val_0 : 39|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_1F5_SB24_L3_Gear_Enum : 26|3@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_1F5_SB16_L4_Manual_Gear_Targe : 19|4@0+ (1,0) [0|15] "" Vector__XXX
+ SG_ ID_1F5_SB8_L3_TargetGear : 10|3@0+ (1,0) [0|7] "" Vector__XXX
+ SG_ ID_1F5_SB6_L2_Unknown : 7|2@0+ (1,0) [0|3] "" Vector__XXX
+
+BO_ 417 ID_0x1A1: 3 Auto_Trans_Controller
+ SG_ ID_1A1_SB23_L1_Val_0 : 23|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_1A1_SB22_L1_Gear_Position_Pla : 22|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_1A1_SB14_L2_Val_0 : 15|2@0+ (1,0) [0|3] "" Vector__XXX
+ SG_ ID_1A1_SB13_L1_Unknown : 13|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_1A1_SB12_L1_RPM_under_375 : 12|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_1A1_SB7_L1_ThermoFan : 7|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_1A1_SB16_L6_Val_0 : 21|6@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_1A1_SB8_L4_Val_0 : 11|4@0+ (1,0) [0|15] "" Vector__XXX
+ SG_ ID_1A1_SB0_L7_Val_0 : 6|7@0+ (1,0) [0|127] "" Vector__XXX
+
+BO_ 413 ID_0x19D: 8 Auto_Trans_Controller
+ SG_ ID_19D_SB56_L8_Unknown : 63|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_19D_SB48_L16_Trans_Input_Shaf : 47|16@0+ (0.25,0) [0|16383.75] "rpm" Vector__XXX
+ SG_ ID_19D_SB32_L8_Unknown : 39|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_19D_SB24_L8_Decremental_Count : 31|8@0- (1,0) [-128|127] "" Vector__XXX
+ SG_ ID_19D_SB16_L8_Trans_Related : 23|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_19D_SB8_L8_Gear_Enum : 15|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_19D_SB6_L2_Decremental_Counte : 7|2@0+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 409 ID_0x199: 8 Auto_Trans_Controller
+ SG_ ID_199_SB40_L2_Decremental_Count : 41|2@0+ (1,0) [0|3] "" Vector__XXX
+ SG_ ID_199_SB0_L3 : 3|4@0+ (1,0) [0|15] "" Vector__XXX
+ SG_ ID_199_SB56_L8_255 : 63|8@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_199_SB48_L8_Zero : 55|8@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_199_SB42_L6 : 47|6@0+ (1,0) [0|63] "" Vector__XXX
+ SG_ ID_199_SB32_L8 : 39|8@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_199_SB24_L8 : 31|8@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_199_SB16_L8 : 23|8@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_199_SB8_L8 : 15|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_199_B0b6l2_Incremental_Counte : 7|2@0+ (1,0) [0|3] "" Vector__XXX
+
+BO_ 401 ID_0x191: 8 Auto_Trans_Controller
+ SG_ ID_191_SB22_L2_Torque_Implausibl : 23|2@0+ (1,0) [0|3] "" Vector__XXX
+ SG_ ID_191_SB56_L8_Accel_Pedal : 63|8@0+ (0.392156862745098,0) [0|100] "%" Vector__XXX
+ SG_ ID_191_SB48_L8_Accel_Pedal : 55|8@0+ (0.392156862745098,0) [0|100] "%" Vector__XXX
+ SG_ ID_191_SB40_L14_Trans_Torque : 37|14@0+ (0.5,-850) [-850|7341.5] "Nm" Vector__XXX
+ SG_ ID_191_SB24_L14_Trans_Torque : 21|14@0+ (0.5,-850) [-850|7341.5] "Nm" Vector__XXX
+ SG_ ID_191_SB8_L16_Trans_Torque : 7|16@0+ (0.5,-850) [-850|31917.5] "Nm" Vector__XXX
+
+BO_ 249 ID_0x0F9: 8 Auto_Trans_Controller
+ SG_ ID_0F9_SB7_L1_Val_0 : 7|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_0F9_SB56_L8_Linked_to_Gear : 63|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_0F9_SB48_L16_Distance_Counter : 47|16@0+ (0.06,0) [0|3932.1] "m" Vector__XXX
+ SG_ ID_0F9_SB32_L16_Vehicle_Speed : 31|16@0+ (0.0115,0) [0|753.6525] "km/h" Vector__XXX
+ SG_ ID_0F9_SB16_L8_Val_64 : 23|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_0F9_SB8_L12_Unknown : 3|12@0+ (1,0) [0|4095] "" Vector__XXX
+ SG_ ID_0F9_SB4_L3_Shifter_Position_I : 6|3@0+ (0.142857142857143,0) [0|1] "" Vector__XXX
+
+BO_ 201 ID_0x0C9: 7 Engine_Controller
+ SG_ ID_0C9_SB6_L1_Cranking : 6|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_0C9_SB5_L1_KeyOn_EngineOff : 5|1@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_0C9_SB53_L4_Val_0 : 55|4@0+ (1,0) [0|15] "" Vector__XXX
+ SG_ ID_0C9_SB48_L3_Val_0 : 50|3@0+ (1,0) [0|7] "" Vector__XXX
+ SG_ ID_0C9_SB47_L1_Val_0 : 47|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_0C9_SB41_L5_Val_0 : 45|5@0+ (1,0) [0|31] "" Vector__XXX
+ SG_ ID_0C9_SB30_L2_Val_0 : 31|2@0+ (1,0) [0|3] "" Vector__XXX
+ SG_ ID_0C9_SB3_L2_Val_0 : 4|2@0+ (1,0) [0|3] "" Vector__XXX
+ SG_ ID_0C9_SB0_L2_Val_0 : 1|2@0+ (1,0) [0|3] "" Vector__XXX
+ SG_ ID_0C9_SB40_L1_Accel_Not_Pressed : 40|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_0C9_SB29_L1_Keystate_not_OFF : 29|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_0C9_SB24_L2_Complimentary_Cou : 25|2@0+ (1,0) [0|3] "" Vector__XXX
+ SG_ ID_0C9_SB26_L2_Incremental_Count : 27|2@0+ (1,0) [0|3] "" Vector__XXX
+ SG_ ID_0C9_SB7_L1_Engine_Running : 7|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_0C9_SB2_L1_Unknown : 2|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_0C9_SB51_L1_Val_1 : 51|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_0C9_SB46_L1_Val_1 : 46|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_0C9_SB32_L8_Accel_Pedal : 39|8@0+ (0.392156862745098,0) [0|100] "%" Vector__XXX
+ SG_ ID_0C9_SB28_L1_Accel_Pressed : 28|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_0C9_SB16_L16_Engine_Speed : 15|16@0+ (0.25,0) [0|16383.75] "rpm" Vector__XXX
+
+BO_ 752 ID_0x2F0: 5 Engine_Controller
+ SG_ ID_2F0_SB34_L3_Val_0 : 36|3@0+ (1,0) [0|7] "" Vector__XXX
+ SG_ ID_2F0_SB32_L1_Val_0 : 32|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_2F0_SB29_L3_Val_0 : 31|3@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_2F0_SB33_L1_Unknown : 33|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_2F0_SB37_L8_TCS_State_enum : 28|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_2F0_SB16_L8_Val_0 : 23|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_2F0_SB8_L8_Unknown : 15|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_2F0_SB0_L8_Val_0_or_16 : 7|8@0+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 324 ID_0x144: 8 Engine_Controller
+ SG_ ID_144_SB56_L12_YawRate_Raw : 51|12@0- (0.125,0) [-256|255.875] "deg/s" Vector__XXX
+ SG_ ID_144_SB52_L4_Val_0 : 55|4@0+ (1,0) [0|15] "" Vector__XXX
+ SG_ ID_144_SB40_L8_Val_0 : 47|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_144_SB32_L10_Lateral_Gforce : 25|10@0- (0.0078125,0) [-4|3.9921875] "G" Vector__XXX
+ SG_ ID_144_SB26_L6_Val_0 : 31|6@0+ (1,0) [0|63] "" Vector__XXX
+ SG_ ID_144_SB16_L8_Val_0 : 23|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_144_SB8_L12_YawRate_Scaled : 3|12@0- (0.125,0) [-256|255.875] "deg/s" Vector__XXX
+ SG_ ID_144_SB4_L4_Val_0 : 7|4@0+ (1,0) [0|15] "" Vector__XXX
+
+BO_ 320 ID_0x140: 8 Engine_Controller
+ SG_ ID_140_SB56_L8_Val_0 : 63|8@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_140_SB48_L8_Val_0 : 55|8@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_140_SB40_L8_Complimentary_Cou : 47|8@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_140_SB32_L8_Val_242 : 39|8@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_140_SB24_L12_YawRate_related_ : 19|12@0- (0.125,0) [-256|255.875] "" Vector__XXX
+ SG_ ID_140_SB20_L4_Counter : 23|4@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_140_SB8_L8_Val_79 : 15|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_140_SB8_L8_Val_13 : 7|8@0+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 384 ID_0x180: 4 Engine_Controller
+ SG_ ID_180_SB26_L14_Steering_Wheel_A : 23|14@0- (0.5,0) [0|0] "deg" Vector__XXX
+
+BO_ 1688 ID_0x698: 8 TPMS
+ SG_ ID_698_SB40_L8_RR_Pres : 47|8@0+ (0.58823529412,0) [0|0] "" Vector__XXX
+ SG_ ID_698_SB32_L8_RL_Pres : 39|8@0+ (0.58823529412,0) [0|0] "" Vector__XXX
+ SG_ ID_698_SB24_L8_FR_Pres : 31|8@0+ (0.58823529412,0) [0|0] "" Vector__XXX
+ SG_ ID_698_SB16_L8_FL_Pres : 23|8@0+ (0.58823529412,0) [0|0] "" Vector__XXX
+
+BO_ 1296 ID_0x510: 8 Engine_Controller
+ SG_ ID_510_SB24_L8_Oil_Temp : 31|8@0+ (1,-40) [-40|215] "C" Vector__XXX
+ SG_ ID_510_SB16_L8_Inlet_Air_Temp : 23|8@0+ (1,-40) [-40|215] "C" Vector__XXX
+ SG_ ID_510_SB8_L8_Engine_Coolant_Tem : 15|8@0+ (1,-40) [-40|215] "C" Vector__XXX
+
+BO_ 1056 ID_0x420: 2 Engine_Controller
+ SG_ ID_420_SB8_L16_Val_0 : 7|16@0+ (1,0) [0|65535] "" Vector__XXX
+
+BO_ 272 ID_0x110: 8 Engine_Controller
+ SG_ ID_110_SB59_L2_Complimentary_Che : 60|2@0+ (1,0) [0|3] "" Vector__XXX
+ SG_ ID_110_SB2_L6_Val_0 : 7|6@0+ (1,0) [0|63] "" Vector__XXX
+ SG_ ID_110_SB0_L1_Val_0 : 0|1@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_110_SB61_L2_Incremental_Count : 62|2@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_110_SB48_L8_Accel_Pedal_Posit : 55|8@0+ (0.393700787401575,0) [0|100.393700787402] "" Vector__XXX
+ SG_ ID_110_SB24_L8_Accel_Pedal_Posit : 31|8@0+ (0.393700787401575,0) [0|100.393700787402] "%" Vector__XXX
+ SG_ ID_110_SB1_L1_Accel_Pedal_Presse : 1|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_110_SB40_L8_Throttle_Position : 47|8@0+ (0.393700787401575,0) [0|100.393700787402] "%" Vector__XXX
+ SG_ ID_110_SB32_L8_Accel_Pedal_Posit : 39|8@0+ (0.393700787401575,0) [0|100.393700787402] "%" Vector__XXX
+ SG_ ID_110_SB16_L15_Engine_Speed : 14|15@0+ (0.25,0) [0|8191.75] "rpm" Vector__XXX
+
+BO_ 640 ID_0x280: 8 Engine_Controller
+ SG_ ID_280_SB8_L15_Wheel_Speed_FL : 6|15@0- (0.25,0) [-4096|4095.75] "rpm" Vector__XXX
+ SG_ ID_280_SB24_L15_Wheel_Speed_FR : 22|15@0- (0.25,0) [-4096|4095.75] "rpm" Vector__XXX
+ SG_ ID_280_SB40_L15_Wheel_Speed_RL : 38|15@0- (0.25,0) [-4096|4095.75] "rpm" Vector__XXX
+ SG_ ID_280_SB56_L15_Wheel_Speed_RR : 54|15@0- (0.25,0) [-4096|4095.75] "rpm" Vector__XXX
+
+BO_ 816 ID_0x330: 1 Engine_Controller
+ SG_ ID_330_SB20_L12_SW_Angle : 15|12@0- (1,0) [0|0] "deg" Vector__XXX
+
+BO_ 776 ID_0x308: 7 Engine_Controller
+ SG_ ID_308_SB48_L8_Val_255 : 55|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_308_SB40_L8_Val_0 : 47|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_308_SB32_L8_Val_32 : 39|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_308_SB24_L8_Val_0 : 31|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_308_SB0_L8_Val_0 : 7|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_308_SB8_L8_Fuel_Level : 15|8@0+ (0.390625,0) [0|0] "%" Vector__XXX
+ SG_ ID_308_SB16_L8_Oil_Pressure : 23|8@0+ (0.58823529412,0) [0|0] "" Vector__XXX
+
+BO_ 1040 ID_0x410: 8 Engine_Controller
+ SG_ ID_410_SB16_L16_Vehicle_Speed : 15|16@0+ (0.0078125,0) [0|0] "km/h" Vector__XXX
+
+BO_ 800 ID_0x320: 8 Auto_Trans_Controller
+ SG_ ID_320_SB1_L1_Downshift : 1|1@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_320_SB0_L1_Upshift : 0|1@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_320_SB18_L1_Manual_Mode_Engag : 18|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_320_SB36_L4_Val_0 : 39|4@0+ (1,0) [0|15] "" Vector__XXX
+ SG_ ID_320_SB16_L2_Unknown : 17|2@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_320_SB12_L4_Val_0 : 15|4@0+ (1,0) [0|0] "" Vector__XXX
+ SG_ ID_320_SB56_L8_Trans_Oil_Temp : 63|8@0+ (1,-40) [-40|215] "C" Vector__XXX
+ SG_ ID_320_SB48_L8_Val_0 : 55|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_320_SB40_L8_Val_0 : 47|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_320_SB32_L4_Shift_Lever_Posit : 35|4@0+ (1,0) [0|15] "" Vector__XXX
+ SG_ ID_320_SB24_L8_Unknown : 31|8@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_320_SB2_L8_Val_0 : 7|6@0+ (1,0) [0|255] "" Vector__XXX
+ SG_ ID_320_SB19_L1_SelectShift_Val_0 : 19|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_320_SB20_L1_ManualGear_Reques : 20|1@0+ (1,0) [0|1] "" Vector__XXX
+ SG_ ID_320_SB21_L3_Target_Gear : 23|3@0+ (1,0) [0|7] "" Vector__XXX
+ SG_ ID_320_SB8_L4_Engaged_Gear : 11|4@0+ (1,0) [0|0] "" Vector__XXX
+
+
+
+CM_ BO_ 840 "4 Hz";
+CM_ BO_ 368 "2 Hz";
+CM_ SG_ 368 ID_170_SB0_L8_Val_1 "Value = 1";
+CM_ SG_ 368 ID_170_SB8_L8_Val_0 "Value = 0";
+CM_ BO_ 296 "100 Hz";
+CM_ SG_ 296 ID_128_SB6_L1_Linked_To_ID_128_S "ID_128_SB8_L8 > 68 ? 1 : 0;";
+CM_ SG_ 296 ID_128_SB24_L8_Unknown "Value = 0 when Accelerator > 0, well be 0 |  252-255 s, briefly held high, mostly low. ";
+CM_ SG_ 296 ID_128_SB18_L6_Val_0 "Value = 0;";
+CM_ SG_ 296 ID_128_SB8_L8_Brake_Pressure "BrakePressure?";
+CM_ SG_ 296 ID_128_SB2_L4 "Value = 0;";
+CM_ SG_ 296 ID_128_SB16_L2_Complimentary_Cou "Value = (4 - (ID_128_SB0_L2_Incrementing_Counter) ) Mod (4);";
+CM_ SG_ 296 ID_128_SB0_L2_Incrementing_Count "0,1,2,3;";
+CM_ BO_ 1312 "10 Hz";
+CM_ SG_ 1312 ID_520_SB_21_L3_Val_0 "Always 0";
+CM_ SG_ 1312 ID_520_SB16_L2_Val_1 "Always 1";
+CM_ SG_ 1312 ID_520_SB0_L0_Val_0 "Always 0";
+CM_ SG_ 1312 ID_520_SB1_L1_GearRejection "1 if Gear Rejected, else 0";
+CM_ SG_ 1312 ID_520_SB40_L8_Val_255 "255 Always";
+CM_ SG_ 1312 ID_520_SB32_L8_Val_0 "Always 0";
+CM_ SG_ 1312 ID_520_SB24_L8_Val_40 "Always 40";
+CM_ SG_ 1312 ID_520_SB2_L6_Val_0 "Always 0";
+CM_ BO_ 288 "80 Hz";
+CM_ SG_ 288 ID_120_SB52_L4_Val_0 "Value = 0;";
+CM_ SG_ 288 ID_120_SB38_L4_Val_4 "Init = 0; Value = 4";
+CM_ SG_ 288 ID_120_SB20_L4_Val_0 "Value = 0";
+CM_ SG_ 288 ID_120_SB_4_L4_Val_0 "Value = 0";
+CM_ BO_ 768 "10 Hz";
+CM_ SG_ 768 ID_300_SB32_L16_Integral_Fuel_Us "INIT : 0 , Increments by cc/min, rolls over, ";
+CM_ BO_ 1225 "2 Hz";
+CM_ SG_ 1225 ID_4C9_SB24_L8 "Static 0";
+CM_ SG_ 1225 ID_4C9_SB16_L8 "Static 0";
+CM_ SG_ 1225 ID_4C9_SB0_L8 "static 96";
+CM_ BO_ 1217 "2 Hz";
+CM_ SG_ 1217 ID_4C1_SB32_L8_Ambient_Air_Temp "81-82";
+CM_ SG_ 1217 ID_4C1_SB24_L8_Inlet_Air_Temp "60-88 raw";
+CM_ SG_ 1217 ID_4C1_SB8_L8 "Static 196";
+CM_ SG_ 1217 ID_4C1_SB0_L8 "Mostly 0, 1 once for about a minute";
+CM_ BO_ 645 "40 Hz";
+CM_ SG_ 645 ID_285_SB7_L1_Val_0 "Value = 0";
+CM_ SG_ 645 ID_285_SB5_L1_Val_0 "Value = 0";
+CM_ SG_ 645 ID_285_SB0_L4_Val_0 "Value = 0";
+CM_ BO_ 501 "40 Hz";
+CM_ SG_ 501 ID_1F5_SB11_L1_Not_in_Drive "0 When in Drive or Manual, 1 When in Park/Reverse/Neutral";
+CM_ SG_ 501 ID_1F5_SB22_L2_Val_0 "Validated";
+CM_ SG_ 501 ID_1F5_SB21_L1_Target_Gear_Rejec "Validated";
+CM_ SG_ 501 ID_1F5_SB50_L6_Val_0 "Validated";
+CM_ SG_ 501 ID_1F5_SB41_L7_Val_0 "Validated";
+CM_ SG_ 501 ID_1F5_SB27_L5_Val_0 "Validated";
+CM_ SG_ 501 ID_1F5_SB3_L3_Unknown "Linked to 1F5_SB6_L2_ShifSteps and 320_SB16_L2; if 320_SB16_L2 == 0, Val = 4, else 0;";
+CM_ SG_ 501 ID_1F5_SB48_L2_Gear_Ref_Enum "1 commonly when engine running, 3 when engine off";
+CM_ SG_ 501 ID_1F5_SB40_L1_Manual_Mode "goes mostly 0 sometimes 1";
+CM_ SG_ 501 ID_1F5_SB32_L8_Val_0 "Validated Always 0";
+CM_ SG_ 501 ID_1F5_SB24_L3_Gear_Enum "Manual_Mode";
+CM_ SG_ 501 ID_1F5_SB16_L4_Manual_Gear_Targe "no idea, try 18";
+CM_ SG_ 501 ID_1F5_SB6_L2_Unknown "IF ID320_SB16_L2 != 3, Val = 1, else 0";
+CM_ BO_ 417 "40 Hz";
+CM_ SG_ 417 ID_1A1_SB22_L1_Gear_Position_Pla "1 When Gear Plausible";
+CM_ SG_ 417 ID_1A1_SB7_L1_ThermoFan "NEEDS VALIDATION";
+CM_ SG_ 417 ID_1A1_SB16_L6_Val_0 "0 or 64";
+CM_ SG_ 417 ID_1A1_SB8_L4_Val_0 "16 mostly";
+CM_ SG_ 417 ID_1A1_SB0_L7_Val_0 "0 mostly";
+CM_ BO_ 413 "40 Hz";
+CM_ SG_ 413 ID_19D_SB56_L8_Unknown "no idea, 255 if not being used perhaps.. loosely aligns with throttle if inverted";
+CM_ SG_ 413 ID_19D_SB48_L16_Trans_Input_Shaf "Torque Related??";
+CM_ SG_ 413 ID_19D_SB32_L8_Unknown "usually 0, spikes to 1 during Some shift events.";
+CM_ SG_ 413 ID_19D_SB24_L8_Decremental_Count "0,-3,-2,-1,repeat";
+CM_ SG_ 413 ID_19D_SB16_L8_Trans_Related "IF RPM = 0, (0,63,63,63,63), Elif Gear == Reverse, Value = 46, Else 31 ro 32..";
+CM_ SG_ 413 ID_19D_SB8_L8_Gear_Enum "IF Gear == Reverse, Value = 244, Else 0,";
+CM_ SG_ 413 ID_19D_SB6_L2_Decremental_Counte "0,3,2,1";
+CM_ BO_ 409 "80 Hz; Byte [2] + Byte [4] = 255 Always";
+CM_ SG_ 409 ID_199_SB40_L2_Decremental_Count "3,2,1,0;";
+CM_ SG_ 409 ID_199_SB0_L3 "7 when no shift event is present. sometimes drops when shifting";
+CM_ SG_ 409 ID_199_SB42_L6 "usually 143, anomalies spike to 0 or 255 sometimes ";
+CM_ SG_ 409 ID_199_SB32_L8 "usually 241, anomalies spike to 88 : Byte 2 Mirrors;";
+CM_ SG_ 409 ID_199_SB24_L8 "usually 112, anomalies send it to 255";
+CM_ SG_ 409 ID_199_SB16_L8 "usually 14, sometimes jumps to 166 or 167 for shifting: Byte 4 Mirrors";
+CM_ SG_ 409 ID_199_SB8_L8 "stays at 255 unless shifting potentially";
+CM_ SG_ 409 ID_199_B0b6l2_Incremental_Counte "0,1,2,3";
+CM_ BO_ 401 "80 Hz";
+CM_ SG_ 401 ID_191_SB22_L2_Torque_Implausibl "1 When ID_191_SB24_L14 and ID_191_SB40_L14 have variance in values.";
+CM_ BO_ 249 "80 Hz";
+CM_ SG_ 249 ID_0F9_SB7_L1_Val_0 "1 In Reverse, Else 0";
+CM_ SG_ 249 ID_0F9_SB56_L8_Linked_to_Gear "When Not In Manual Mode: gear 1 : 255, Gear 2 : 119, Gear 3 : 19, Gear 4 : 21, Gear 5 : 28 , Gear 6 : 34";
+CM_ SG_ 249 ID_0F9_SB48_L16_Distance_Counter "Increments with Distance. 65535 steps per 400 Meters. ";
+CM_ SG_ 249 ID_0F9_SB16_L8_Val_64 "Init 0, Value = 64";
+CM_ SG_ 249 ID_0F9_SB8_L12_Unknown "Trend Follows ID_320_SB24_L8_Unknown";
+CM_ SG_ 249 ID_0F9_SB4_L3_Shifter_Position_I "Shifter Position Plausible = 0, Implausible = Raw 7";
+CM_ BO_ 201 "80 Hz";
+CM_ SG_ 201 ID_0C9_SB6_L1_Cranking "1 When Cranking, Else 0";
+CM_ SG_ 201 ID_0C9_SB5_L1_KeyOn_EngineOff "1 When Key On, Engine Off, Else 0";
+CM_ SG_ 201 ID_0C9_SB53_L4_Val_0 "Value = 0";
+CM_ SG_ 201 ID_0C9_SB48_L3_Val_0 "Value = 0";
+CM_ SG_ 201 ID_0C9_SB47_L1_Val_0 "Value = 0";
+CM_ SG_ 201 ID_0C9_SB41_L5_Val_0 "Value = 0";
+CM_ SG_ 201 ID_0C9_SB30_L2_Val_0 "Value = 0";
+CM_ SG_ 201 ID_0C9_SB3_L2_Val_0 "Value = 0";
+CM_ SG_ 201 ID_0C9_SB0_L2_Val_0 "Value = 0";
+CM_ SG_ 201 ID_0C9_SB24_L2_Complimentary_Cou "Value = (3 + (ID_0C9_SB26_L2_Incremental_Counter) ) (Mod 4)";
+CM_ SG_ 201 ID_0C9_SB26_L2_Incremental_Count "0,1,2,3";
+CM_ SG_ 201 ID_0C9_SB2_L1_Unknown "occurs about 10-20s after holding brakes it appears.";
+CM_ SG_ 201 ID_0C9_SB51_L1_Val_1 "Init = 0, Value = 1";
+CM_ SG_ 201 ID_0C9_SB16_L16_Engine_Speed "Value = 0";
+CM_ BO_ 752 "10Hz - try 2F0#101B001080";
+CM_ SG_ 752 ID_2F0_SB16_L8_Val_0 "Always 0";
+CM_ SG_ 752 ID_2F0_SB8_L8_Unknown "Unknown";
+CM_ SG_ 752 ID_2F0_SB0_L8_Val_0_or_16 "0 : 2m30s'ish in , 16";
+CM_ BO_ 324 "50Hz";
+CM_ SG_ 324 ID_144_SB52_L4_Val_0 "Value = 0";
+CM_ SG_ 324 ID_144_SB40_L8_Val_0 "Value = 0";
+CM_ SG_ 324 ID_144_SB26_L6_Val_0 "Value = 0";
+CM_ SG_ 324 ID_144_SB16_L8_Val_0 "Value = 0";
+CM_ SG_ 324 ID_144_SB4_L4_Val_0 "Value = 0";
+CM_ BO_ 320 "50Hz";
+CM_ SG_ 320 ID_140_SB56_L8_Val_0 "Value = 0";
+CM_ SG_ 320 ID_140_SB48_L8_Val_0 "Value = 0";
+CM_ SG_ 320 ID_140_SB40_L8_Complimentary_Cou "Value = 177 - (ID_140_SB20_L4_Counter)";
+CM_ SG_ 320 ID_140_SB32_L8_Val_242 "Value = 242";
+CM_ SG_ 320 ID_140_SB20_L4_Counter "0,1,2,3;";
+CM_ SG_ 320 ID_140_SB8_L8_Val_79 "Value = 79";
+CM_ SG_ 320 ID_140_SB8_L8_Val_13 "Value = 13";
+CM_ BO_ 384 "100 Hz";
+CM_ BO_ 1688 "4 Hz";
+CM_ BO_ 1296 "2 Hz";
+CM_ BO_ 1056 "10 Hz";
+CM_ BO_ 272 "80 Hz";
+CM_ SG_ 272 ID_110_SB59_L2_Complimentary_Che "Value = ((ID_110_SB1_L1_Accel_Pedal_Pressed * 3))  - (ID_110_SB61_L2_Incremental_counter) & 0x03;";
+CM_ SG_ 272 ID_110_SB2_L6_Val_0 "Value = 0";
+CM_ SG_ 272 ID_110_SB0_L1_Val_0 "Value = 0";
+CM_ SG_ 272 ID_110_SB61_L2_Incremental_Count "0x00, 0x68, 0x50, 0x38";
+CM_ SG_ 272 ID_110_SB48_L8_Accel_Pedal_Posit "Aceel Pedal Position, 0 - 254 Raw";
+CM_ SG_ 272 ID_110_SB24_L8_Accel_Pedal_Posit "Accel Pedal Position: 0-254 Raw";
+CM_ SG_ 272 ID_110_SB1_L1_Accel_Pedal_Presse "1 When Accel Pedal Pressed, Else 0";
+CM_ SG_ 272 ID_110_SB40_L8_Throttle_Position "Throttle Position : 0 - 254 Raw";
+CM_ SG_ 272 ID_110_SB32_L8_Accel_Pedal_Posit "Accel_Pedal_Position : 0-254 Raw";
+CM_ BO_ 640 "20 Hz";
+CM_ BO_ 816 "10 Hz";
+CM_ BO_ 776 "10 Hz";
+CM_ SG_ 776 ID_308_SB48_L8_Val_255 "Value = 255";
+CM_ SG_ 776 ID_308_SB40_L8_Val_0 "Value = 0";
+CM_ SG_ 776 ID_308_SB32_L8_Val_32 "Value = 32";
+CM_ SG_ 776 ID_308_SB24_L8_Val_0 "Value = 0";
+CM_ SG_ 776 ID_308_SB0_L8_Val_0 "Value = 0";
+CM_ BO_ 1040 "10 Hz";
+CM_ BO_ 800 "10 Hz";
+CM_ SG_ 800 ID_320_SB36_L4_Val_0 "Always 0";
+CM_ SG_ 800 ID_320_SB16_L2_Unknown "Linked to 1F5_SB6_L2. if val != 3, 1F5_SB6_L2 = 1";
+CM_ SG_ 800 ID_320_SB12_L4_Val_0 "Static 0 Validated";
+CM_ SG_ 800 ID_320_SB48_L8_Val_0 "Static 0";
+CM_ SG_ 800 ID_320_SB40_L8_Val_0 "Static 0";
+CM_ SG_ 800 ID_320_SB24_L8_Unknown "Trend Follows ID_0F9_SB8_L12_Unknown";
+CM_ SG_ 800 ID_320_SB2_L8_Val_0 "Validated";
+CM_ SG_ 800 ID_320_SB19_L1_SelectShift_Val_0 "Static 0 in OEM Log running and driving.";
+BA_DEF_ BO_  "GenMsgCycleTime" FLOAT 0 65535;
+BA_DEF_  "MultiplexExtEnabled" ENUM  "No","Yes";
+BA_DEF_  "BusType" STRING ;
+BA_DEF_ SG_  "SystemSignalLongSymbol" STRING ;
+BA_DEF_DEF_  "GenMsgCycleTime" 0;
+BA_DEF_DEF_  "MultiplexExtEnabled" "No";
+BA_DEF_DEF_  "BusType" "CAN";
+BA_DEF_DEF_  "SystemSignalLongSymbol" "";
+BA_ "GenMsgCycleTime" BO_ 840 250;
+BA_ "GenMsgCycleTime" BO_ 368 500;
+BA_ "GenMsgCycleTime" BO_ 296 10;
+BA_ "GenMsgCycleTime" BO_ 1312 100;
+BA_ "GenMsgCycleTime" BO_ 288 12;
+BA_ "GenMsgCycleTime" BO_ 768 100;
+BA_ "GenMsgCycleTime" BO_ 1225 500;
+BA_ "GenMsgCycleTime" BO_ 1217 500;
+BA_ "GenMsgCycleTime" BO_ 645 25;
+BA_ "GenMsgCycleTime" BO_ 501 25;
+BA_ "GenMsgCycleTime" BO_ 417 25;
+BA_ "GenMsgCycleTime" BO_ 413 25;
+BA_ "GenMsgCycleTime" BO_ 409 12.5;
+BA_ "GenMsgCycleTime" BO_ 401 12.5;
+BA_ "GenMsgCycleTime" BO_ 249 12.5;
+BA_ "GenMsgCycleTime" BO_ 201 12.5;
+BA_ "GenMsgCycleTime" BO_ 752 100;
+BA_ "GenMsgCycleTime" BO_ 324 20;
+BA_ "GenMsgCycleTime" BO_ 320 20;
+BA_ "GenMsgCycleTime" BO_ 384 10;
+BA_ "GenMsgCycleTime" BO_ 1688 250;
+BA_ "GenMsgCycleTime" BO_ 1296 500;
+BA_ "GenMsgCycleTime" BO_ 1056 100;
+BA_ "GenMsgCycleTime" BO_ 272 12;
+BA_ "GenMsgCycleTime" BO_ 640 50;
+BA_ "GenMsgCycleTime" BO_ 816 100;
+BA_ "GenMsgCycleTime" BO_ 776 100;
+BA_ "GenMsgCycleTime" BO_ 1040 100;
+BA_ "GenMsgCycleTime" BO_ 800 100;
+BA_ "SystemSignalLongSymbol" SG_ 296 ID_128_SB6_L1_Linked_To_ID_128_S "ID_128_SB6_L1_Linked_To_ID_128_SB8_L8";
+BA_ "SystemSignalLongSymbol" SG_ 296 ID_128_SB16_L2_Complimentary_Cou "ID_128_SB16_L2_Complimentary_Counter";
+BA_ "SystemSignalLongSymbol" SG_ 296 ID_128_SB0_L2_Incrementing_Count "ID_128_SB0_L2_Incrementing_Counter";
+BA_ "SystemSignalLongSymbol" SG_ 288 ID_120_SB56_L12_Trans_Tq_Reducti "ID_120_SB56_L12_Trans_Tq_Reduction_Commanded";
+BA_ "SystemSignalLongSymbol" SG_ 288 ID_120_SB8_L12_Trans_Engine_Torq "ID_120_SB8_L12_Trans_Engine_Torque";
+BA_ "SystemSignalLongSymbol" SG_ 768 ID_300_SB32_L16_Integral_Fuel_Us "ID_300_SB32_L16_Integral_Fuel_Used";
+BA_ "SystemSignalLongSymbol" SG_ 1217 ID_4C1_SB16_L8_Engine_Coolant_Te "ID_4C1_SB16_L8_Engine_Coolant_Temp";
+BA_ "SystemSignalLongSymbol" SG_ 501 ID_1F5_SB21_L1_Target_Gear_Rejec "ID_1F5_SB21_L1_Target_Gear_Rejection";
+BA_ "SystemSignalLongSymbol" SG_ 501 ID_1F5_SB16_L4_Manual_Gear_Targe "ID_1F5_SB16_L4_Manual_Gear_Target";
+BA_ "SystemSignalLongSymbol" SG_ 417 ID_1A1_SB22_L1_Gear_Position_Pla "ID_1A1_SB22_L1_Gear_Position_Plausible";
+BA_ "SystemSignalLongSymbol" SG_ 413 ID_19D_SB48_L16_Trans_Input_Shaf "ID_19D_SB48_L16_Trans_Input_Shaft_Speed";
+BA_ "SystemSignalLongSymbol" SG_ 413 ID_19D_SB24_L8_Decremental_Count "ID_19D_SB24_L8_Decremental_Counter_Signed";
+BA_ "SystemSignalLongSymbol" SG_ 413 ID_19D_SB6_L2_Decremental_Counte "ID_19D_SB6_L2_Decremental_Counter";
+BA_ "SystemSignalLongSymbol" SG_ 409 ID_199_SB40_L2_Decremental_Count "ID_199_SB40_L2_Decremental_Counter";
+BA_ "SystemSignalLongSymbol" SG_ 409 ID_199_B0b6l2_Incremental_Counte "ID_199_B0b6l2_Incremental_Counter";
+BA_ "SystemSignalLongSymbol" SG_ 401 ID_191_SB22_L2_Torque_Implausibl "ID_191_SB22_L2_Torque_Implausible";
+BA_ "SystemSignalLongSymbol" SG_ 249 ID_0F9_SB4_L3_Shifter_Position_I "ID_0F9_SB4_L3_Shifter_Position_Implausible_or_Reverse";
+BA_ "SystemSignalLongSymbol" SG_ 201 ID_0C9_SB24_L2_Complimentary_Cou "ID_0C9_SB24_L2_Complimentary_Counter";
+BA_ "SystemSignalLongSymbol" SG_ 201 ID_0C9_SB26_L2_Incremental_Count "ID_0C9_SB26_L2_Incremental_Counter";
+BA_ "SystemSignalLongSymbol" SG_ 320 ID_140_SB40_L8_Complimentary_Cou "ID_140_SB40_L8_Complimentary_Counter";
+BA_ "SystemSignalLongSymbol" SG_ 320 ID_140_SB24_L12_YawRate_related_ "ID_140_SB24_L12_YawRate_related_DO_NOT_USE";
+BA_ "SystemSignalLongSymbol" SG_ 384 ID_180_SB26_L14_Steering_Wheel_A "ID_180_SB26_L14_Steering_Wheel_Angle";
+BA_ "SystemSignalLongSymbol" SG_ 1296 ID_510_SB8_L8_Engine_Coolant_Tem "ID_510_SB8_L8_Engine_Coolant_Temp";
+BA_ "SystemSignalLongSymbol" SG_ 272 ID_110_SB59_L2_Complimentary_Che "ID_110_SB59_L2_Complimentary_Checksum";
+BA_ "SystemSignalLongSymbol" SG_ 272 ID_110_SB61_L2_Incremental_Count "ID_110_SB61_L2_Incremental_Counter";
+BA_ "SystemSignalLongSymbol" SG_ 272 ID_110_SB48_L8_Accel_Pedal_Posit "ID_110_SB48_L8_Accel_Pedal_Position";
+BA_ "SystemSignalLongSymbol" SG_ 272 ID_110_SB24_L8_Accel_Pedal_Posit "ID_110_SB24_L8_Accel_Pedal_Position";
+BA_ "SystemSignalLongSymbol" SG_ 272 ID_110_SB1_L1_Accel_Pedal_Presse "ID_110_SB1_L1_Accel_Pedal_Pressed";
+BA_ "SystemSignalLongSymbol" SG_ 272 ID_110_SB40_L8_Throttle_Position "ID_110_SB40_L8_Throttle_Position_Actual";
+BA_ "SystemSignalLongSymbol" SG_ 272 ID_110_SB32_L8_Accel_Pedal_Posit "ID_110_SB32_L8_Accel_Pedal_Position";
+BA_ "SystemSignalLongSymbol" SG_ 800 ID_320_SB18_L1_Manual_Mode_Engag "ID_320_SB18_L1_Manual_Mode_Engaged";
+BA_ "SystemSignalLongSymbol" SG_ 800 ID_320_SB32_L4_Shift_Lever_Posit "ID_320_SB32_L4_Shift_Lever_Position";
+BA_ "SystemSignalLongSymbol" SG_ 800 ID_320_SB20_L1_ManualGear_Reques "ID_320_SB20_L1_ManualGear_Request";
+VAL_ 501 ID_1F5_SB48_L2_Gear_Ref_Enum 3 "Unknown" 2 "Reverse" 1 "Drive" 0 "Park/Neutral" ;
+VAL_ 501 ID_1F5_SB24_L3_Gear_Enum 5 "Manual Mode" 4 "Drive" 2 "Reverse" 1 "Park" 0 "Undefined" ;
+VAL_ 752 ID_2F0_SB37_L8_TCS_State_enum 132 "On" 61 "TC Comp" 60 "TC Off" 56 "TC + AH Off" ;
+VAL_ 800 ID_320_SB32_L4_Shift_Lever_Posit 10 "Park" 9 "Neutral" 8 "Reverse" 6 "Drive" 4 "Manual Mode" 0 "Unreferenced" ;
+VAL_ 800 ID_320_SB8_L4_Engaged_Gear 10 "Park" 9 "Neutral" 8 "Reverse" 6 "6th" 5 "5th" 4 "4th" 3 "3rd" 2 "2nd" 1 "1st" ;
+
