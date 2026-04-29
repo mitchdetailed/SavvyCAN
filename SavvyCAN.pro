@@ -248,6 +248,10 @@ win32-msvc* {
 
 win32-g++ {
    LIBS += libopengl32
+   INCLUDEPATH += $$PWD/third_party/mdflib/include
+   LIBS += -L$$PWD/third_party/mdflib/build/mdflib -lmdf
+   LIBS += -L"C:/Program Files/mingw64/x86_64-w64-mingw32/lib" -lz
+   LIBS += -L"C:/Program Files/mingw64/opt/lib" -lexpat
 }
 
 unix {
