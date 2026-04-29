@@ -228,7 +228,12 @@ MainWindow::MainWindow(QWidget *parent) :
     normalRowHeight = ui->canFramesView->rowHeight(0);
     if (normalRowHeight == 0) normalRowHeight = 30; //should not be necessary but provides a sane number if something stupid happened.
     qDebug() << "normal row height = " << normalRowHeight;
+    // Always wipe the dummy sizing frame's filter entries, regardless of persistent filter mode.
+    // If persistent filters is on, clearFrames() skips clearing filters/busFilters — which would
+    // permanently leave bus=0 and id=0x100 visible in the filter lists.
+    model->setClearMode(false);
     model->clearFrames();
+    model->setClearMode(ui->cbPersistentFilters->isChecked());
 
     ui->canFramesView->verticalHeader()->setDefaultSectionSize(normalRowHeight);    // Set the default height for all rows to the height that was calculated
 
