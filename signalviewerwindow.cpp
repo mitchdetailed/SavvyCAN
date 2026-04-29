@@ -272,30 +272,7 @@ void SignalViewerWindow::addSignal(DBC_SIGNAL *sig)
     ui->tableViewer->setItem(rowIdx, 0, nodeitem);
     QTableWidgetItem *sigitem = new QTableWidgetItem(sig->name);
     ui->tableViewer->setItem(rowIdx, 1, sigitem);
-
-    // Find the most recent existing frame for this signal and show its value
-    if (sig->parentMessage)
-    {
-        for (int i = modelFrames->count() - 1; i >= 0; i--)
-        {
-            const CANFrame &frame = modelFrames->at(i);
-            if (frame.frameId() == sig->parentMessage->ID)
-            {
-                QString sigString;
-                if (sig->processAsText(frame, sigString, false))
-                {
-                    QTableWidgetItem *item = ui->tableViewer->item(rowIdx, VALUE_COL);
-                    if (!item)
-                    {
-                        item = new QTableWidgetItem(sigString);
-                        ui->tableViewer->setItem(rowIdx, VALUE_COL, item);
-                    }
-                    else item->setText(sigString);
-                }
-                break;
-            }
-        }
-    }
+    // Value cell starts empty; processFrame/updatedFrames will fill it when a real frame arrives.
 }
 
 void SignalViewerWindow::saveSignalsFile()
