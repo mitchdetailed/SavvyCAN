@@ -1,0 +1,3 @@
+[submodule "third_party/mdflib"]
+	path = third_party/mdflib
+	url = https://github.com/ihedvall/mdflib.git
