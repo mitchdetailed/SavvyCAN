@@ -1491,6 +1491,22 @@ bool FrameFileIO::isPCANFile(QString filename)
             if (line.startsWith(";$FILEVERSION=")) hasFileVer = true;
             if (line.toUpper().contains("PCAN") && hasFileVer) isMatch = true;
         }
+        // Files saved by SavvyCAN carry $FILEVERSION=3.0 but no "PCAN" branding.
+        // Accept any file whose header declares a known PCAN/SavvyCAN version number.
+        if (hasFileVer && !isMatch) {
+            inFile->seek(0);
+            while (!inFile->atEnd()) {
+                line = inFile->readLine();
+                if (line.contains("$FILEVERSION=3.0") ||
+                    line.contains("$FILEVERSION=2.1") ||
+                    line.contains("$FILEVERSION=2.0") ||
+                    line.contains("$FILEVERSION=1.3") ||
+                    line.contains("$FILEVERSION=1.1")) {
+                    isMatch = true;
+                    break;
+                }
+            }
+        }
     }
     catch (...)
     {
@@ -1567,6 +1583,7 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
         line = inFile->readLine();
         if (line.startsWith(';'))
         {
+            if (line.contains("$FILEVERSION=3.0")) fileVersion = 30;
             if (line.contains("$FILEVERSION=2.1")) fileVersion = 21;
             if (line.contains("$FILEVERSION=2.0")) fileVersion = 20;
             if (line.contains("$FILEVERSION=1.3")) fileVersion = 13;
@@ -1722,7 +1739,7 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
 ;---+--- ------+------ +- +- --+----- +- +- +--- +- -- -- -- -- -- -- --
   0            1       2  3   4       5  6  7    8 +
             */
-            else if (fileVersion == 21)
+            else if (fileVersion == 30 || fileVersion == 21)
             {
                 if (tokens.length() > 7)
                 {
@@ -5353,6 +5370,8 @@ bool FrameFileIO::saveMDF4File(QString filename, const QVector<CANFrame>* frames
 
     auto* header = writer->Header();
     auto* history = header->CreateFileHistory();
+    history->Time(static_cast<uint64_t>(
+        QDateTime::currentDateTimeUtc().toMSecsSinceEpoch()) * 1000000ULL);
     history->Description("CAN bus log converted by SavvyCAN");
     history->ToolName("SavvyCAN");
     history->ToolVersion("2.0");
@@ -5374,9 +5393,22 @@ bool FrameFileIO::saveMDF4File(QString filename, const QVector<CANFrame>* frames
 
     writer->InitMeasurement();
 
-    // Use current UTC time as the absolute base for all frame timestamps
-    uint64_t base_ns = static_cast<uint64_t>(
-        QDateTime::currentDateTimeUtc().toMSecsSinceEpoch()) * 1000000ULL;
+    // Determine the measurement start time.
+    // loadMDF4File stores absolute epoch microseconds in microSeconds() (seconds()=0).
+    // Other loaders may store relative microseconds after normalizeTiming().
+    // Detect epoch-scale values: > 1e12 µs ≈ anything after 1970 + ~11.6 days.
+    qint64 time0_us = frames->isEmpty() ? 0LL : frames->first().timeStamp().microSeconds();
+    const bool epoch_timestamps = (time0_us > 1000000000000LL);
+    uint64_t base_ns;
+    if (epoch_timestamps) {
+        // Frames carry absolute epoch timestamps — use the first frame as start.
+        base_ns = static_cast<uint64_t>(time0_us) * 1000ULL;
+    } else {
+        // Relative (normalized) timestamps — anchor to current wall clock.
+        base_ns = static_cast<uint64_t>(
+            QDateTime::currentDateTimeUtc().toMSecsSinceEpoch()) * 1000000ULL;
+        time0_us = 0LL;
+    }
 
     writer->StartMeasurement(base_ns);
 
@@ -5386,42 +5418,40 @@ bool FrameFileIO::saveMDF4File(QString filename, const QVector<CANFrame>* frames
         lineCounter++;
         if (lineCounter > 500) { qApp->processEvents(); lineCounter = 0; }
 
-        uint64_t frame_time_ns = base_ns
-            + static_cast<uint64_t>(frame.timeStamp().seconds()) * 1000000000ULL
-            + static_cast<uint64_t>(frame.timeStamp().microSeconds()) * 1000ULL;
+        // Convert frame timestamp to absolute nanoseconds using the computed base.
+        qint64 rel_us = frame.timeStamp().microSeconds() - time0_us;
+        uint64_t frame_time_ns = base_ns + static_cast<uint64_t>(rel_us) * 1000ULL;
 
         CanMessage msg;
         msg.BusChannel(static_cast<uint8_t>(frame.bus + 1));
+        // Set MessageId first (with just the CAN ID), then ExtendedId separately.
+        // mdflib's MessageId() stores the IDE flag in bit 31; ExtendedId() sets/clears it.
         bool extended = frame.hasExtendedFrameFormat();
+        msg.MessageId(frame.frameId());
         msg.ExtendedId(extended);
-        uint32_t msg_id = extended ? (frame.frameId() | 0x80000000U) : frame.frameId();
-        msg.MessageId(msg_id);
-        msg.Dir(!frame.isReceived);
+        // Per CAN protocol: SRR bit is recessive (1) in extended frames.
+        if (extended) msg.Srr(true);
+        msg.Dir(!frame.isReceived);  // false=Rx, true=Tx (ASAM: 0=Rx, 1=Tx)
 
         if (frame.frameType() == QCanBusFrame::RemoteRequestFrame)
         {
-            msg.TypeOfMessage(MessageType::CAN_RemoteFrame);
             msg.Rtr(true);
-            msg.Dlc(static_cast<uint8_t>(frame.payload().size()));
+            // DataBytes() sets both DataLength and DLC from the payload size.
+            // For remote frames the payload is zero-filled to the DLC length.
+            const uint8_t dlc = static_cast<uint8_t>(frame.payload().size());
+            msg.DataBytes(std::vector<uint8_t>(dlc, 0x00));
             writer->SaveCanMessage(*can_remote_frame, frame_time_ns, msg);
         }
         else
         {
-            msg.TypeOfMessage(MessageType::CAN_DataFrame);
             const QByteArray& payload = frame.payload();
             msg.DataBytes(std::vector<uint8_t>(payload.cbegin(), payload.cend()));
             writer->SaveCanMessage(*can_data_frame, frame_time_ns, msg);
         }
     }
 
-    uint64_t stop_ns = base_ns;
-    if (!frames->isEmpty())
-    {
-        const auto& last = frames->last();
-        stop_ns = base_ns
-            + static_cast<uint64_t>(last.timeStamp().seconds()) * 1000000000ULL
-            + static_cast<uint64_t>(last.timeStamp().microSeconds()) * 1000ULL;
-    }
+    qint64 last_us = frames->isEmpty() ? time0_us : frames->last().timeStamp().microSeconds();
+    uint64_t stop_ns = base_ns + static_cast<uint64_t>(last_us - time0_us) * 1000ULL;
     writer->StopMeasurement(stop_ns);
     writer->FinalizeMeasurement();
     return true;
