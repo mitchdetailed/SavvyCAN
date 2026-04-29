@@ -53,6 +53,8 @@ bool FrameFileIO::saveFrameFile(QString &fileName, const QVector<CANFrame>* fram
     filters.append(QString(tr("Cabana Log (*.csv *.CSV)")));
     filters.append(QString(tr("CANalyzer Ascii Log (*.asc *.ASC)")));
     filters.append(QString(tr("CARBUS Analyzer (*.trc *.TRC)")));
+    filters.append(QString(tr("PCAN Viewer Version 2.1 (*.trc *.TRC)")));
+    filters.append(QString(tr("PCAN Viewer Version 3.0 (*.trc *.TRC)")));
 
     dialog.setDirectory(settings.value("FileIO/LoadSaveDirectory", dialog.directory().path()).toString());
     dialog.setFileMode(QFileDialog::AnyFile);
@@ -142,6 +144,16 @@ bool FrameFileIO::saveFrameFile(QString &fileName, const QVector<CANFrame>* fram
         {
             if (!filename.contains('.')) filename += ".trc";
             result = saveCARBUSAnalzyer(filename, frameCache);
+        }
+        if (dialog.selectedNameFilter() == filters[13])
+        {
+            if (!filename.contains('.')) filename += ".trc";
+            result = savePCANFile21(filename, frameCache);
+        }
+        if (dialog.selectedNameFilter() == filters[14])
+        {
+            if (!filename.contains('.')) filename += ".trc";
+            result = savePCANFile30(filename, frameCache);
         }
 
         progress.cancel();
@@ -1281,6 +1293,148 @@ bool FrameFileIO::saveCRTDFile(QString filename, const QVector<CANFrame>* frames
     return true;
 }
 
+
+bool FrameFileIO::savePCANFile21(QString filename, const QVector<CANFrame>* frames)
+{
+    QFile *outFile = new QFile(filename);
+    if (!outFile->open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        delete outFile;
+        return false;
+    }
+    QTextStream out(outFile);
+
+    // Compute OADate (days since 1899-12-30) in local time (OLE Automation Date convention)
+    QDateTime oaEpoch(QDate(1899, 12, 30), QTime(0, 0, 0));
+    double oaDate = oaEpoch.msecsTo(QDateTime::currentDateTime()) / 86400000.0;
+
+    out << ";$FILEVERSION=2.1\n";
+    out << QString(";$STARTTIME=%1\n").arg(oaDate, 0, 'f', 10);
+    out << ";$COLUMNS=N,O,T,B,I,d,r,L,D\n";
+    out << ";\n";
+    out << ";   Message    Time    Type    ID     Rx/Tx\n";
+    out << ";   Number     Offset  |  Bus  [hex]  |  Reserved\n";
+    out << ";   |          [ms]    |  |    |      |  |  Data Length Code\n";
+    out << ";   |          |       |  |    |      |  |  |    Data [hex] ...\n";
+    out << ";   |          |       |  |    |      |  |  |    |\n";
+    out << ";---+--- ------+------ +- +- --+----- +- +- +--- +- -- -- -- -- -- -- --\n";
+
+    int lineCounter = 0;
+    for (int i = 0; i < frames->count(); i++)
+    {
+        lineCounter++;
+        if (lineCounter > 100) { qApp->processEvents(); lineCounter = 0; }
+
+        const CANFrame &frame = frames->at(i);
+        double timeMs = frame.timeStamp().microSeconds() / 1000.0;
+        int bus = frame.bus + 1;  // PCAN uses 1-based bus numbers
+
+        QString typeStr = (frame.frameType() == QCanBusFrame::RemoteRequestFrame) ? "RR" : "DT";
+        QString rxTx   = frame.isReceived ? "Rx" : "Tx";
+
+        QString idStr;
+        if (frame.hasExtendedFrameFormat())
+            idStr = QString::number(frame.frameId(), 16).toUpper().rightJustified(8, '0');
+        else
+            idStr = QString::number(frame.frameId(), 16).toUpper().rightJustified(4, '0');
+
+        // Build data bytes string
+        QString dataStr;
+        const QByteArray payload = frame.payload();
+        for (int d = 0; d < payload.length(); d++)
+        {
+            dataStr += QString::number(static_cast<unsigned char>(payload[d]), 16).toUpper().rightJustified(2, '0');
+            if (d < payload.length() - 1) dataStr += " ";
+        }
+
+        // Format:  msgnum   time  type  bus   id    rx/tx  -   dlc   data
+        out << QString("%1 %2 %3 %4  %5 %6 - %7   %8\n")
+                   .arg(i + 1, 7)
+                   .arg(timeMs, 10, 'f', 3)
+                   .arg(typeStr, -2)
+                   .arg(bus)
+                   .arg(idStr, -8)
+                   .arg(rxTx, -2)
+                   .arg(payload.length(), 2)
+                   .arg(dataStr);
+    }
+
+    outFile->close();
+    delete outFile;
+    return true;
+}
+
+bool FrameFileIO::savePCANFile30(QString filename, const QVector<CANFrame>* frames)
+{
+    QFile *outFile = new QFile(filename);
+    if (!outFile->open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        delete outFile;
+        return false;
+    }
+    QTextStream out(outFile);
+
+    // Compute OADate (days since 1899-12-30) in local time (OLE Automation Date convention)
+    QDateTime oaEpoch(QDate(1899, 12, 30), QTime(0, 0, 0));
+    double oaDate = oaEpoch.msecsTo(QDateTime::currentDateTime()) / 86400000.0;
+
+    out << ";$FILEVERSION=3.0\n";
+    out << QString(";$STARTTIME=%1\n").arg(oaDate, 0, 'f', 10);
+    out << ";$COLUMNS=N,O,T,B,I,d,r,L,D\n";
+    out << ";\n";
+    out << ";   Message    Time    Type       Bus  ID         Rx/Tx\n";
+    out << ";   Number     Offset  |          |    [hex]      |  Reserved\n";
+    out << ";   |          [ms]    |          |    |          |  |  Data Length Code\n";
+    out << ";   |          |       |          |    |          |  |  |    Data [hex] ...\n";
+    out << ";   |          |       |          |    |          |  |  |    |\n";
+    out << ";---+--- ------+------ +--------- +- --+--------- +- +- +--- +- -- -- -- -- -- -- --\n";
+
+    int lineCounter = 0;
+    for (int i = 0; i < frames->count(); i++)
+    {
+        lineCounter++;
+        if (lineCounter > 100) { qApp->processEvents(); lineCounter = 0; }
+
+        const CANFrame &frame = frames->at(i);
+        double timeMs = frame.timeStamp().microSeconds() / 1000.0;
+        int bus = frame.bus + 1;  // PCAN uses 1-based bus numbers
+
+        // Version 3.0 uses extended type names; DT/RR for standard CAN
+        QString typeStr = (frame.frameType() == QCanBusFrame::RemoteRequestFrame) ? "RR" : "DT";
+        QString rxTx   = frame.isReceived ? "Rx" : "Tx";
+
+        // Version 3.0 always uses 8 hex digits for extended IDs; standard IDs still 4 digits
+        QString idStr;
+        if (frame.hasExtendedFrameFormat())
+            idStr = QString::number(frame.frameId(), 16).toUpper().rightJustified(8, '0');
+        else
+            idStr = QString::number(frame.frameId(), 16).toUpper().rightJustified(4, '0');
+
+        // Build data bytes string
+        QString dataStr;
+        const QByteArray payload = frame.payload();
+        for (int d = 0; d < payload.length(); d++)
+        {
+            dataStr += QString::number(static_cast<unsigned char>(payload[d]), 16).toUpper().rightJustified(2, '0');
+            if (d < payload.length() - 1) dataStr += " ";
+        }
+
+        // Format:  msgnum   time  type      bus   id          rx/tx  -   dlc   data
+        out << QString("%1 %2 %3 %4  %5 %6 - %7   %8\n")
+                   .arg(i + 1, 7)
+                   .arg(timeMs, 10, 'f', 3)
+                   .arg(typeStr, -9)
+                   .arg(bus)
+                   .arg(idStr, -10)
+                   .arg(rxTx, -2)
+                   .arg(payload.length(), 2)
+                   .arg(dataStr);
+    }
+
+    outFile->close();
+    delete outFile;
+    return true;
+}
 
 bool FrameFileIO::isPCANFile(QString filename)
 {
