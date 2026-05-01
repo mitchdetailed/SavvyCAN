@@ -47,16 +47,20 @@ static void saveTestFile(const std::string& path,
     history->ToolVersion("2.0");
     history->UserName("");
 
+    const bool has_remote = std::any_of(frames.begin(), frames.end(),
+        [](const TestFrame& f){ return f.remote; });
+
     writer->BusType(MdfBusType::CAN);
     writer->StorageType(MdfStorageType::MlsdStorage);
     writer->MaxLength(8);
+    writer->MandatoryMembersOnly(!has_remote);
     writer->CreateBusLogConfiguration();
     writer->PreTrigTime(0.0);
     writer->CompressData(false);
 
     auto* last_dg = header->LastDataGroup();
     auto* cg_data   = last_dg->GetChannelGroup("CAN_DataFrame");
-    auto* cg_remote = last_dg->GetChannelGroup("CAN_RemoteFrame");
+    auto* cg_remote = has_remote ? last_dg->GetChannelGroup("CAN_RemoteFrame") : nullptr;
 
     writer->InitMeasurement();
     writer->StartMeasurement(base_ns);
@@ -66,7 +70,6 @@ static void saveTestFile(const std::string& path,
         msg.BusChannel(static_cast<uint8_t>(f.bus + 1));
         msg.MessageId(f.id);
         msg.ExtendedId(f.extended);
-        if (f.extended) msg.Srr(true);
         msg.Dir(!f.rx);
 
         if (f.remote) {
@@ -172,8 +175,7 @@ int main()
         { base_ns + 9700000, 0x18FF1234, true,  false, true,  0, {0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08} },
         // standard Tx, bus 1, 3-byte payload
         { base_ns + 15000000, 0x123, false, false, false, 1, {0xAA, 0xBB, 0xCC} },
-        // remote, bus 0, DLC=4
-        { base_ns + 20000000, 0x456, false, true,  true,  0, {0,0,0,0} },
+        // NOTE: remote frame removed to test single-CG mandatory-only path
     };
 
     const std::string out_path = "mdf4_roundtrip_test.mf4";

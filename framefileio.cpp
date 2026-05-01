@@ -5377,9 +5377,17 @@ bool FrameFileIO::saveMDF4File(QString filename, const QVector<CANFrame>* frames
     history->ToolVersion("2.0");
     history->UserName("");
 
+    // Pre-scan: only create a RemoteFrame CG if the dataset actually contains remote frames.
+    // When there are none, mandatory_only=true gives a single-CG data group (dg_rec_id_size=0,
+    // saving 1 byte per record). When remote frames are present, mandatory_only=false adds the
+    // CAN_RemoteFrame CG so they can be stored with the correct record type.
+    const bool has_remote_frames = std::any_of(frames->cbegin(), frames->cend(),
+        [](const CANFrame& f) { return f.frameType() == QCanBusFrame::RemoteRequestFrame; });
+
     writer->BusType(MdfBusType::CAN);
     writer->StorageType(MdfStorageType::MlsdStorage);
     writer->MaxLength(8);
+    writer->MandatoryMembersOnly(!has_remote_frames);
     writer->CreateBusLogConfiguration();
     writer->PreTrigTime(0.0);
     writer->CompressData(false);
@@ -5387,9 +5395,10 @@ bool FrameFileIO::saveMDF4File(QString filename, const QVector<CANFrame>* frames
     auto* last_dg = header->LastDataGroup();
     if (!last_dg) return false;
 
-    auto* can_data_frame  = last_dg->GetChannelGroup("CAN_DataFrame");
-    auto* can_remote_frame = last_dg->GetChannelGroup("CAN_RemoteFrame");
-    if (!can_data_frame || !can_remote_frame) return false;
+    auto* can_data_frame   = last_dg->GetChannelGroup("CAN_DataFrame");
+    auto* can_remote_frame = has_remote_frames ? last_dg->GetChannelGroup("CAN_RemoteFrame") : nullptr;
+    if (!can_data_frame) return false;
+    if (has_remote_frames && !can_remote_frame) return false;
 
     writer->InitMeasurement();
 
@@ -5429,8 +5438,6 @@ bool FrameFileIO::saveMDF4File(QString filename, const QVector<CANFrame>* frames
         bool extended = frame.hasExtendedFrameFormat();
         msg.MessageId(frame.frameId());
         msg.ExtendedId(extended);
-        // Per CAN protocol: SRR bit is recessive (1) in extended frames.
-        if (extended) msg.Srr(true);
         msg.Dir(!frame.isReceived);  // false=Rx, true=Tx (ASAM: 0=Rx, 1=Tx)
 
         if (frame.frameType() == QCanBusFrame::RemoteRequestFrame)
