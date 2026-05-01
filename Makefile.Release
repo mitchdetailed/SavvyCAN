@@ -33502,8 +33502,7 @@ release/framefileio.o: framefileio.cpp framefileio.h \
 		third_party/mdflib/include/mdf/idatagroup.h \
 		third_party/mdflib/include/mdf/dgcomment.h \
 		third_party/mdflib/include/mdf/ichannelgroup.h \
-		third_party/mdflib/include/mdf/cgcomment.h \
-		third_party/mdflib/include/mdf/canbusobserver.h
+		third_party/mdflib/include/mdf/cgcomment.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release\framefileio.o framefileio.cpp
 
 release/mainsettingsdialog.o: mainsettingsdialog.cpp mainsettingsdialog.h \
