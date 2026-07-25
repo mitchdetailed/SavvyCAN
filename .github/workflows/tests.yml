@@ -24,6 +24,8 @@ jobs:
 
       - name: Prepare Qt Libraries
         uses: jurplel/install-qt-action@v4
+        with:
+          modules: qtserialbus qtserialport
 
       - name: Build application
         run: |
@@ -41,7 +43,7 @@ jobs:
         working-directory: test
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ./savvycan_tests -o results.txt,txt
+        run: ./savvycan_tests -o results_linux.txt,txt
 
       - name: Show results
         if: always()
