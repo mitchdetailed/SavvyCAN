@@ -190,7 +190,8 @@ void SocketCANd::connectDevice()
                 tcpClient[i]->close();
             }
             tcpClient[i]->disconnect();
-            delete tcpClient[i];
+            //may be reached from a socket signal, so never delete the sender mid-emission
+            tcpClient[i]->deleteLater();
             tcpClient[i] = nullptr;
         }
     }
@@ -345,7 +346,8 @@ void SocketCANd::disconnectDevice() {
                 tcpClient[i]->close();
             }
             tcpClient[i]->disconnect();
-            delete tcpClient[i];
+            //may be reached from a socket signal, so never delete the sender mid-emission
+            tcpClient[i]->deleteLater();
             tcpClient[i] = nullptr;
         }
     }

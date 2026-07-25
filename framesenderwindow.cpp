@@ -224,7 +224,7 @@ void FrameSenderWindow::processIncomingFrame(CANFrame *frame)
             if (passedChecks && (thisTrigger->triggerMask & TriggerMask::TRG_SIGNAL) )
             {
                 bool sigCheckPassed = false;
-                DBC_MESSAGE *msg = dbcHandler->findMessage(thisTrigger->ID);
+                DBC_MESSAGE *msg = dbcHandler->findMessage(thisTrigger->ID, thisTrigger->bus);
                 if (msg)
                 {
                     DBC_SIGNAL *sig = msg->sigHandler->findSignalByName(thisTrigger->sigName);
@@ -1093,7 +1093,7 @@ void FrameSenderWindow::processCellChange(int line, int col)
                 ui->tableSender->item(line, ST_COLS::SENDTAB_COL_EXT)->setCheckState(Qt::Checked);
                 ui->tableSender->blockSignals(false);
             }
-            msg = dbcHandler->findMessage(sendingData[line].frameId());
+            msg = dbcHandler->findMessage(sendingData[line]);
             if (msg)
             {
                 ui->tableSender->blockSignals(true);

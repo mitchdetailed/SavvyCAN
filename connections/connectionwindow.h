@@ -55,6 +55,8 @@ private slots:
     void moveConnDown();
     void connectionStatus(CANConStatus);
     void readPendingDatagrams();
+    //refreshes the bus health readout for whichever bus is selected
+    void updateBusHealth();
 
 private:
     Ui::ConnectionWindow *ui;    
@@ -64,8 +66,12 @@ private:
     QUdpSocket *rxBroadcastKayak;
     QVector<QString> remoteDeviceIPGVRET;
     QVector<QString> remoteDeviceKayak;
+    QTimer healthTimer;
 
     CANConnection* create(CANCon::type pTye, QString pPortName, QString pDriver, int pSerialSpeed, int pBusSpeed, bool pCanFd, int pDataRate);
+    //read every bus's configuration out of a live connection / push a saved set back into one
+    QList<CANBus> captureBusConfig(CANConnection *conn_p);
+    void applyBusConfig(CANConnection *conn_p, const QList<CANBus> &buses);
     void populateBusDetails(int offset);
     void loadConnections();
     void saveConnections();

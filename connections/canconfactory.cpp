@@ -7,6 +7,18 @@
 #include "lawicel_serial.h"
 #include "canserver.h"
 #include "canlogserver.h"
+#include "gsusbconnection.h"
+#include "seeedcan.h"
+#include "robotellcan.h"
+#include "pythoncanserial.h"
+#include "udpmulticast.h"
+#include "canalystii.h"
+#include "kvasercanlib.h"
+#include "ixxatvci.h"
+#include "usb2canlib.h"
+#include "iscanlib.h"
+#include "nicanlib.h"
+#include "neousyscan.h"
 
 using namespace CANCon;
 
@@ -32,6 +44,30 @@ CANConnection* CanConFactory::create(type pType, QString pPortName, QString pDri
         return new CANserver(pPortName);
     case CANLOGSERVER:
         return new CanLogServer(pPortName);
+    case GSUSB:
+        return new GSUSBConnection(pPortName, pBusSpeed);
+    case SEEEDSTUDIO:
+        return new SeeedCAN(pPortName, pSerialSpeed, pBusSpeed);
+    case ROBOTELL:
+        return new RobotellCAN(pPortName, pSerialSpeed, pBusSpeed);
+    case PYCAN_SERIAL:
+        return new PythonCanSerial(pPortName, pSerialSpeed);
+    case UDP_MULTICAST:
+        return new UDPMulticast(pPortName);
+    case CANALYSTII:
+        return new CanalystII(pPortName, pBusSpeed);
+    case KVASER:
+        return new KvaserCanlib(pPortName, pBusSpeed, pCanFd, pDataRate);
+    case IXXAT:
+        return new IxxatVci(pPortName, pBusSpeed);
+    case USB2CAN:
+        return new Usb2CanLib(pPortName, pBusSpeed);
+    case ISCAN:
+        return new IscanLib(pPortName, pBusSpeed);
+    case NICAN:
+        return new NicanLib(pPortName, pBusSpeed);
+    case NEOUSYS:
+        return new NeousysCan(pPortName, pBusSpeed);
     default: {}
     }
 

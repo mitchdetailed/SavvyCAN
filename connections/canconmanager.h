@@ -31,6 +31,17 @@ public:
     int getBusBase(CANConnection *);
 
     /**
+     * @brief Health figures for a global bus number, as shown in the connection window.
+     * @param busNum - global bus number, the same numbering frames carry
+     * @param stats - filled in on success
+     * @return false if that bus doesn't exist
+     */
+    bool getBusStats(int busNum, CANBusStats &stats);
+
+    //start the counters over, e.g. after reconnecting
+    void resetBusStats();
+
+    /**
      * @brief sendFrame sends a single frame out the desired bus
      * @param pFrame - reference to a CANFrame struct that has been filled out for sending
      * @return bool specifying whether the send succeeded or not
@@ -82,8 +93,19 @@ private:
     uint32_t               mNumActiveBuses;
     bool                   useSystemTime;
     QMutex                 buslessMutex;
+    /* guards mConns against the frame sender thread. The GUI thread mutates the list
+     * (add/remove/replace) while FrameSenderObject calls sendFrame from its own thread - both
+     * sides take this lock. Pure GUI thread readers (getConnections & friends) don't. */
+    QMutex                 mConnsMutex;
     QVector<CANFrame>      buslessFrames;
     QVector<CANFrame>      tempFrames;
+    //indexed by global bus number, grown as buses appear
+    QVector<CANBusStats>   mBusStats;
+    QMutex                 mStatsMutex;
+    QElapsedTimer          mStatsTimer;
+    //accumulate frames into the stats and, once a second, turn them into rates
+    void accumulateStats(const QVector<CANFrame> &frames);
+    void updateStatsRates();
 };
 
 #endif // CANCONNECTIONMODEL_H

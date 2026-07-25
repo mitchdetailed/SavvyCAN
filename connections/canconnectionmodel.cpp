@@ -89,6 +89,17 @@ QVariant CANConnectionModel::data(const QModelIndex &index, int role) const
                         case CANCon::LAWICEL: return "LAWICEL";
                         case CANCon::CANSERVER: return "CANserver";
                         case CANCon::CANLOGSERVER: return "CanLogServer";
+                        case CANCon::GSUSB: return "GSUSB";
+                        case CANCon::SEEEDSTUDIO: return "Seeed USB-CAN";
+                        case CANCon::ROBOTELL: return "Robotell";
+                        case CANCon::PYCAN_SERIAL: return "python-can serial";
+                        case CANCon::UDP_MULTICAST: return "UDP multicast";
+                        case CANCon::CANALYSTII: return "CANalyst-II";
+                        case CANCon::IXXAT: return "IXXAT";
+                        case CANCon::USB2CAN: return "USB2CAN";
+                        case CANCon::ISCAN: return "isCAN";
+                        case CANCon::NICAN: return "NI-CAN";
+                        case CANCon::NEOUSYS: return "Neousys";
                         default: {}
                     }
                 else qDebug() << "Tried to show connection type but connection was nullptr";
@@ -145,6 +156,10 @@ CANConnection* CANConnectionModel::getAtIdx(int pIdx) const
         return nullptr;
 
     QList<CANConnection*>& conns = CANConManager::getInstance()->getConnections();
+
+    //the list can shrink between a view giving us a row and us being asked about it
+    if (pIdx >= conns.count())
+        return nullptr;
 
     return conns.at(pIdx);
 }

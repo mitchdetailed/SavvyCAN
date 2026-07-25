@@ -44,10 +44,26 @@ MainWindow::MainWindow(QWidget *parent) :
 
     model = new CANFrameModel(this); // set parent to mainwindow to prevent canframemodel to change thread (might be done by setModel but just in case)
 
-    QSortFilterProxyModel* proxyModel = new QSortFilterProxyModel;
+    /* Sorting lives here rather than in the model. The model stays append only, which lets it
+     * report new frames as row insertions, and the proxy takes care of presenting them in whatever
+     * order the user asked for. Selection and row heights survive both, which they did not when
+     * the model re-sorted and reset itself.
+     *
+     * NB: every index that comes from the view is a proxy index. Anything that needs the frame
+     * behind a row has to map it back with mapToSource first. */
+    proxyModel = new QSortFilterProxyModel(this);
     proxyModel->setSourceModel(model);
+    //sort on the raw values behind each cell, not the text - hex IDs and formatted times sort wrongly
+    proxyModel->setSortRole(CANFrameModel::SortRole);
+    //keep newly arriving frames in the right place instead of appending them out of order
+    proxyModel->setDynamicSortFilter(true);
 
     ui->canFramesView->setModel(proxyModel);
+    //let the view drive sorting, so it handles the header clicks, the arrow and the direction
+    ui->canFramesView->setSortingEnabled(true);
+    //...but start in arrival order rather than sorted by whatever column happens to be first
+    proxyModel->sort(-1);
+    ui->canFramesView->horizontalHeader()->setSortIndicatorShown(false);
 
     settingsDialog = new MainSettingsDialog(); //instantiate the settings dialog so it can initialize settings if this is the first run or the config file was deleted.
     settingsDialog->updateSettings(); //write out all the settings. If this is the first run it'll write defaults out.
@@ -675,12 +691,21 @@ void MainWindow::updateConnectionSettings(QString connectionType, QString port, 
     }
 }
 
+/*
+ * The view sorts through the proxy on its own now, including the indicator arrow and the ascending
+ * or descending toggle, so there is no sorting to do here. All that is left is the housekeeping
+ * that a reordering implies.
+ */
 void MainWindow::headerClicked(int logicalIndex)
 {
-    //ui->canFramesView->sortByColumn(logicalIndex);
-    model->sortByColumn(logicalIndex);
+    Q_UNUSED(logicalIndex)
+
+    //the arrow only makes sense once the user has actually asked for a sort
+    ui->canFramesView->horizontalHeader()->setSortIndicatorShown(true);
 
     manageRowExpansion();
+    //rows have moved, so heights the user set by hand no longer belong to those frames
+    rowHeightOverrides.clear();
 }
 
 void MainWindow::expandAllRows()
@@ -703,6 +728,8 @@ void MainWindow::expandAllRows()
         ui->canFramesView->setWordWrap(true);
         ui->canFramesView->resizeRowsToContents();
 
+        //a global choice replaces whatever individual rows had been toggled
+        rowHeightOverrides.clear();
         rowExpansionActive = true;
     }
 }
@@ -727,6 +754,9 @@ void MainWindow::manageRowExpansion()
 void MainWindow::disableAutoRowExpansion()
 {
     rowExpansionActive = false;
+    /* Called whenever the frame list is about to be replaced wholesale. Row numbers no longer
+     * refer to the same frames after that, so remembered heights would land on the wrong rows. */
+    rowHeightOverrides.clear();
 }
 
 void MainWindow::collapseAllRows()
@@ -749,27 +779,72 @@ void MainWindow::collapseAllRows()
         ui->canFramesView->setWordWrap(false);
         for (int i = 0; i < numRows; i++) ui->canFramesView->setRowHeight(i, normalRowHeight);
 
+        //a global choice replaces whatever individual rows had been toggled
+        rowHeightOverrides.clear();
         rowExpansionActive = false;
+    }
+}
+
+//expand or collapse one row's height
+void MainWindow::applyRowHeight(int row, bool expanded)
+{
+    if (expanded) ui->canFramesView->resizeRowToContents(row);
+    else ui->canFramesView->setRowHeight(row, normalRowHeight);
+}
+
+/*
+ * Put back every row height the user set by hand.
+ *
+ * The model now reports arriving frames as row insertions, which leaves existing row heights
+ * alone, so this is no longer needed for ordinary traffic. It still matters after the cases that
+ * genuinely do reset the model - a filter change, a sort, recalculating overwrite mode - and after
+ * the global expand which resizes every row.
+ */
+void MainWindow::reapplyRowHeights()
+{
+    if (rowHeightOverrides.isEmpty()) return;
+
+    const int numRows = ui->canFramesView->model()->rowCount();
+
+    QMutableHashIterator<int, bool> it(rowHeightOverrides);
+    while (it.hasNext())
+    {
+        it.next();
+        //the row may have gone away since, e.g. the frame list was filtered down or cleared
+        if (it.key() < 0 || it.key() >= numRows)
+        {
+            it.remove();
+            continue;
+        }
+        applyRowHeight(it.key(), it.value());
     }
 }
 
 void MainWindow::gridClicked(QModelIndex idx)
 {
     //qDebug() << "Grid Clicked";
-    if (ui->canFramesView->rowHeight(idx.row()) > normalRowHeight)
-    {
-        ui->canFramesView->setRowHeight(idx.row(), normalRowHeight);
-    }
-    else {
-        ui->canFramesView->resizeRowToContents(idx.row());
-    }
+    if (!idx.isValid()) return;
+
+    const bool nowExpanded = (ui->canFramesView->rowHeight(idx.row()) > normalRowHeight);
+    //remember the choice so the next model refresh doesn't undo it
+    rowHeightOverrides.insert(idx.row(), !nowExpanded);
+    applyRowHeight(idx.row(), !nowExpanded);
 }
 
 void MainWindow::gridDoubleClicked(QModelIndex idx)
 {
     qDebug() << "Grid double clicked";
-    //grab ID and timestamp and send them away
-    CANFrame frame = model->getListReference()->at(idx.row());
+    if (!idx.isValid()) return;
+
+    /* idx is a proxy index, so its row is a position in the sorted view, not in the model. It also
+     * has to be looked up in the filtered list - the row the user clicked is a row of what is on
+     * screen, whereas getListReference() is every frame ever received. Using the raw row against
+     * that list picked the wrong frame as soon as any filter was active. */
+    const int sourceRow = proxyModel->mapToSource(idx).row();
+    const QVector<CANFrame> *shownFrames = model->getFilteredListReference();
+    if (sourceRow < 0 || sourceRow >= shownFrames->count()) return;
+
+    const CANFrame &frame = shownFrames->at(sourceRow);
     emit sendCenterTimeID(frame.frameId(), frame.timeStamp().microSeconds() / 1000000.0);
 }
 
@@ -1081,6 +1156,10 @@ void MainWindow::tickGUIUpdate()
             bDirty = true;
             emit framesUpdated(rxFrames); //anyone care that frames were updated?
             manageRowExpansion();
+            /* The refresh above reset the model, which wipes every row height the table was
+             * holding. Put the user's own expand/collapse choices back, after manageRowExpansion
+             * so an individual choice wins over the global one. */
+            reapplyRowHeights();
         }
 
         if (model->needsFilterRefresh()) updateFilterList();
@@ -1148,13 +1227,21 @@ void MainWindow::gotCenterTimeID(uint32_t ID, double timestamp)
     int idx = model->getIndexFromTimeID(ID, timestamp);
     if (idx > -1)
     {
-        ui->canFramesView->selectRow(idx);
+        //that index is a model row; the view is looking at the proxy's ordering of them
+        const QModelIndex proxyIdx = proxyModel->mapFromSource(model->index(idx, 0));
+        if (proxyIdx.isValid())
+        {
+            ui->canFramesView->selectRow(proxyIdx.row());
+            ui->canFramesView->scrollTo(proxyIdx, QAbstractItemView::PositionAtCenter);
+        }
     }
 }
 
 void MainWindow::clearFrames()
 {
     ui->canFramesView->scrollToTop();
+    //the rows these referred to are gone
+    rowHeightOverrides.clear();
     model->clearFrames();
     CANConManager::getInstance()->resetTimeBasis();
     ui->lbNumFrames->setText(QString::number(model->rowCount()));

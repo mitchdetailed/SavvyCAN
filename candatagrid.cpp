@@ -64,6 +64,9 @@ CANDataGrid::CANDataGrid(QWidget *parent) :
     ui->setupUi(this);
 
     gridMode = GridMode::CHANGED_BITS;
+    dragEnabled = false;
+    dragging = false;
+    dragLastBit = -1;
 
     memset(data, 0, 64);
     memset(refData, 0, 64);
@@ -130,22 +133,35 @@ void CANDataGrid::setBytesToDraw(int num)
     //this->update();
 }
 
+void CANDataGrid::setDragEnabled(bool enabled)
+{
+    dragEnabled = enabled;
+    if (!enabled) dragging = false;
+}
+
+bool CANDataGrid::isDragEnabled()
+{
+    return dragEnabled;
+}
+
 void CANDataGrid::mousePressEvent(QMouseEvent *event)
 {
-    QPoint clickedPoint = event->pos();
     if (event->button() == Qt::LeftButton)
     {
-        //qDebug() << "Mouse Loc " << clickedPoint;
-        clickedPoint -= upperLeft;
-        if (clickedPoint.x() < 0 || clickedPoint.y() < 0)
+        int bitClicked;
+        if (!pointToBit(event->pos(), bitClicked)) return;
+        qDebug() << "Grid bit clicked " << bitClicked;
+
+        if (dragEnabled)
         {
-            //qDebug() << "Clicked outside the grid";
+            //in drag mode the press just starts a drag. Whoever owns us decides whether the
+            //grabbed cell was a legal thing to grab, we only report where the cursor goes.
+            dragging = true;
+            dragLastBit = bitClicked;
+            emit gridDragBegin(bitClicked);
             return;
         }
-        int x = clickedPoint.x() / gridSize.x();
-        int y = clickedPoint.y() / gridSize.y();
-        qDebug() << "Grid square clicked " << x << " " << y;
-        int bitClicked = gridToBitPosition(x, y);
+
         //this control is the ultimate authority on which bit is at which grid so what we're going to do now
         //is return the actual bit so everyone else doesn't have to try to calculate it. When someone clicks
         //what the parent GUI really cares about is which bit that was.
@@ -165,16 +181,36 @@ void CANDataGrid::mousePressEvent(QMouseEvent *event)
     //external code can differentiate which button was pressed
     if (event->button() == Qt::RightButton)
     {
-        clickedPoint -= upperLeft;
-        if (clickedPoint.x() < 0 || clickedPoint.y() < 0)
-        {
-            return;
-        }
-        int x = clickedPoint.x() / gridSize.x();
-        int y = clickedPoint.y() / gridSize.y();
-        int bitClicked = gridToBitPosition(x, y);
+        if (dragging) return; //a drag is in progress, don't let a second button interfere with it
+        int bitClicked;
+        if (!pointToBit(event->pos(), bitClicked)) return;
         emit gridRightClicked(bitClicked);
     }
+}
+
+void CANDataGrid::mouseMoveEvent(QMouseEvent *event)
+{
+    if (!dragging) return;
+
+    int bit;
+    //while the cursor is off the grid we report nothing at all, so whatever is being dragged just
+    //holds still until it comes back. Sticking to the nearest edge cell instead would drag the
+    //thing to the edge, which is not what someone who left the grid was asking for.
+    if (!pointToBit(event->pos(), bit)) return;
+    if (bit == dragLastBit) return; //still sat in the same cell, nothing worth reporting
+
+    dragLastBit = bit;
+    emit gridDragMove(bit);
+}
+
+void CANDataGrid::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() != Qt::LeftButton) return;
+    if (!dragging) return;
+
+    dragging = false;
+    dragLastBit = -1;
+    emit gridDragEnd();
 }
 
 void CANDataGrid::setCellTextState(int bitPos, GridTextState state)
@@ -214,6 +250,13 @@ void CANDataGrid::setUsedSignalNum(int bit, int signal)
     if (bit < 0) return;
     if (bit > 511) return;
     usedSignalNum[bit] = signal;
+}
+
+//call this before rebuilding signal ownership, otherwise bits a signal used to sit on keep
+//claiming they belong to it
+void CANDataGrid::clearUsedSignalNums()
+{
+    for (int j = 0; j < 512; j++) usedSignalNum[j] = -1;
 }
 
 int CANDataGrid::getUsedSignalNum(int bit)
@@ -541,6 +584,23 @@ void CANDataGrid::paintCommonEnding()
     //and we don't need these anymore after we're done drawing
     delete painter;
     delete smallMetric;
+}
+
+//figure out which bit a point within the widget lands on. Returns false if the point isn't over
+//a cell at all (or nothing has been painted yet so we don't know where the cells are).
+bool CANDataGrid::pointToBit(const QPoint &pos, int &bit)
+{
+    if (gridSize.x() < 1 || gridSize.y() < 1) return false; //no paint pass yet, we know nothing
+
+    const QPoint pt = pos - upperLeft;
+    //integer division truncates toward zero so anything left of / above the grid needs a hand
+    const int x = (pt.x() < 0) ? -1 : pt.x() / gridSize.x();
+    const int y = (pt.y() < 0) ? -1 : pt.y() / gridSize.y();
+
+    if (x < 0 || y < 0 || x >= neededXDivisions || y >= neededYDivisions) return false;
+
+    bit = gridToBitPosition(x, y);
+    return true;
 }
 
 //given a grid cell we return which bit position that is within the CAN frame.

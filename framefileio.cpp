@@ -14,6 +14,8 @@
 #include "utility.h"
 #include "blfhandler.h"
 
+// MDF4 support needs the mdflib submodule, build with CONFIG+=mdf4 to enable it
+#ifdef MDF4_SUPPORT
 #include <mdf/mdffactory.h>
 #include <mdf/mdfwriter.h>
 #include <mdf/mdfreader.h>
@@ -23,8 +25,32 @@
 #include <mdf/idatagroup.h>
 #include <mdf/ichannelgroup.h>
 #include <mdf/ichannelobserver.h>
+#endif
 
 QFile FrameFileIO::continuousFile;
+
+/* Safe token accessors for the text based log parsers. Log files come from other tools and from
+ * hand editing, so a truncated or mangled line must never index past the end of a token list.
+ * These return an empty value instead, which every caller already treats as a zero / empty field
+ * (the resulting frame is nonsense but the program stays up and the parser resynchronises on the
+ * next line). Always use these rather than indexing a split() result directly. */
+static QByteArray tok(const QList<QByteArray> &list, int idx)
+{
+    return (idx >= 0 && idx < list.count()) ? list.at(idx) : QByteArray();
+}
+
+static QString tok(const QStringList &list, int idx)
+{
+    return (idx >= 0 && idx < list.count()) ? list.at(idx) : QString();
+}
+
+//the safe version of tokAt(tokens, idx, chr) - can't run off either end
+static char tokAt(const QList<QByteArray> &list, int idx, int chr)
+{
+    const QByteArray t = tok(list, idx);
+    return (chr >= 0 && chr < t.length()) ? t.at(chr) : '\0';
+}
+
 
 struct TeslaAPCANRecord
 {
@@ -66,7 +92,9 @@ bool FrameFileIO::saveFrameFile(QString &fileName, const QVector<CANFrame>* fram
     filters.append(QString(tr("CARBUS Analyzer (*.trc *.TRC)")));
     filters.append(QString(tr("PCAN Viewer Version 2.1 (*.trc *.TRC)")));
     filters.append(QString(tr("PCAN Viewer Version 3.0 (*.trc *.TRC)")));
+#ifdef MDF4_SUPPORT
     filters.append(QString(tr("ASAM MDF4 (*.mf4 *.MF4)")));
+#endif
 
     dialog.setDirectory(settings.value("FileIO/LoadSaveDirectory", dialog.directory().path()).toString());
     dialog.setFileMode(QFileDialog::AnyFile);
@@ -140,7 +168,7 @@ bool FrameFileIO::saveFrameFile(QString &fileName, const QVector<CANFrame>* fram
         if (dialog.selectedNameFilter() == filters[9])
         {
             if (!filename.contains('.')) filename += ".log";
-            saveCanDumpFile(filename,frameCache);
+            result = saveCanDumpFile(filename,frameCache);
         }
         if (dialog.selectedNameFilter() == filters[10])
         {
@@ -167,11 +195,13 @@ bool FrameFileIO::saveFrameFile(QString &fileName, const QVector<CANFrame>* fram
             if (!filename.contains('.')) filename += ".trc";
             result = savePCANFile30(filename, frameCache);
         }
+#ifdef MDF4_SUPPORT
         if (dialog.selectedNameFilter() == filters[15])
         {
             if (!filename.contains('.')) filename += ".mf4";
             result = saveMDF4File(filename, frameCache);
         }
+#endif
 
         progress.cancel();
 
@@ -182,6 +212,11 @@ bool FrameFileIO::saveFrameFile(QString &fileName, const QVector<CANFrame>* fram
             settings.setValue("FileIO/LoadSaveDirectory", dialog.directory().path());
             return true;
         }
+
+        //the user picked a file and we did not write it, don't let that pass silently
+        QMessageBox msgBox;
+        msgBox.setText("File save failed. The file was not written.");
+        msgBox.exec();
         return false;
     }
     return false;
@@ -221,7 +256,9 @@ bool FrameFileIO::loadFrameFile(QString &fileName, QVector<CANFrame>* frameCache
     filters.append(QString(tr("CANServer Binary Log (*.log *.LOG)")));
     filters.append(QString(tr("Wireshark (*.pcap *.PCAP *.pcapng *.PCAPNG)")));
     filters.append(QString(tr("Wireshark SocketCAN (*.pcap *.PCAP")));
+#ifdef MDF4_SUPPORT
     filters.append(QString(tr("ASAM MDF4 (*.mf4 *.MF4)")));
+#endif
 
     dialog.setDirectory(settings.value("FileIO/LoadSaveDirectory", dialog.directory().path()).toString());
     dialog.setFileMode(QFileDialog::ExistingFile);
@@ -269,7 +306,9 @@ bool FrameFileIO::loadFrameFile(QString &fileName, QVector<CANFrame>* frameCache
         if (selectedNameFilter == filters[23]) result = loadCANServerFile(filename, frameCache);
         if (selectedNameFilter == filters[24]) result = loadWiresharkFile(filename, frameCache);
         if (selectedNameFilter == filters[25]) result = loadWiresharkSocketCANFile(filename, frameCache);
+#ifdef MDF4_SUPPORT
         if (selectedNameFilter == filters[26]) result = loadMDF4File(filename, frameCache);
+#endif
 
 
         progress.cancel();
@@ -315,7 +354,9 @@ bool FrameFileIO::autoDetectLoadFile(QString filename, QVector<CANFrame>* frames
         QLatin1String("avc"), QLatin1String("evc"), QLatin1String("qcc"),
         QLatin1String("trc"), QLatin1String("txt"), QLatin1String("asc"),
         QLatin1String("blf"), QLatin1String("pcap"), QLatin1String("pcapng"),
-        QLatin1String("mf4")
+#ifdef MDF4_SUPPORT
+        QLatin1String("mf4"),
+#endif
     };
 
     if (!knownExtensions.contains(ext))
@@ -333,6 +374,7 @@ bool FrameFileIO::autoDetectLoadFile(QString filename, QVector<CANFrame>* frames
     // Step 2: Binary / magic-byte formats (extension-independent)
     // These use file headers so they are safe to probe first.
 
+#ifdef MDF4_SUPPORT
     if (ext == QLatin1String("mf4"))
     {
         qDebug() << "Attempting ASAM MDF4";
@@ -341,6 +383,7 @@ bool FrameFileIO::autoDetectLoadFile(QString filename, QVector<CANFrame>* frames
         }
         return false;
     }
+#endif
 
     if (ext == QLatin1String("blf"))
     {
@@ -543,7 +586,7 @@ bool FrameFileIO::isVehicleSpyFile(QString filename)
                 QList<QByteArray> tokens = line.split(',');
                 if (tokens.length() > 20)
                 {
-                    if (tokens[9].toInt(nullptr, 16) > 0) isMatch = true;
+                    if (tok(tokens, 9).toInt(nullptr, 16) > 0) isMatch = true;
                 }
             }
         }
@@ -602,19 +645,19 @@ bool FrameFileIO::loadVehicleSpyFile(QString filename, QVector<CANFrame> *frames
             thisFrame.bus = 0;
             thisFrame.setFrameType(QCanBusFrame::DataFrame);
             tempTime = now;
-            tempTime = tempTime.addMSecs(static_cast<int64_t>(tokens[1].toDouble() * 1000.0));
+            tempTime = tempTime.addMSecs(static_cast<int64_t>(tok(tokens, 1).toDouble() * 1000.0));
             thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tempTime.toMSecsSinceEpoch() * 1000)));
-            if (tokens[5].startsWith("T")) thisFrame.isReceived = false;
+            if (tok(tokens, 5).startsWith("T")) thisFrame.isReceived = false;
                 else thisFrame.isReceived = true;
-            thisFrame.setFrameId(static_cast<uint32_t>(tokens[9].toInt(nullptr, 16)));
-            if (tokens[11].startsWith("T")) thisFrame.setExtendedFrameFormat(true);
+            thisFrame.setFrameId(static_cast<uint32_t>(tok(tokens, 9).toInt(nullptr, 16)));
+            if (tok(tokens, 11).startsWith("T")) thisFrame.setExtendedFrameFormat(true);
                 else thisFrame.setExtendedFrameFormat(false);
             QByteArray bytes;
             for (int i = 0; i < 8; i++)
             {
-                if (tokens[12 + i].length() > 0)
+                if (tok(tokens, 12 + i).length() > 0)
                 {
-                    bytes.append(static_cast<char>(tokens[12 + i].toInt(nullptr, 16)));
+                    bytes.append(static_cast<char>(tok(tokens, 12 + i).toInt(nullptr, 16)));
                 }
                 else break;
             }
@@ -660,16 +703,16 @@ bool FrameFileIO::isCRTDFile(QString filename)
                 QList<QByteArray> tokens = line.split(' ');
                 if (tokens.length() > 2)
                 {
-                    char firstChar = tokens[1].left(1)[0];
+                    char firstChar = tok(tokens, 1).left(1)[0];
                     if (firstChar >= '1' && firstChar <= '9')
                     {
-                        tokens[1].remove(0,1); // Remove leading digit (bus number)
-                        firstChar = tokens[1].left(1)[0];
+                        tok(tokens, 1).remove(0,1); // Remove leading digit (bus number)
+                        firstChar = tok(tokens, 1).left(1)[0];
                     }
                     if (firstChar == 'R' || firstChar == 'T')
                     {
-                        if (tokens[1] == "R29" || tokens[1] == "T29") isMatch = true;
-                        if (tokens[1] == "R11" || tokens[1] == "T11") isMatch = true;
+                        if (tok(tokens, 1) == "R29" || tok(tokens, 1) == "T29") isMatch = true;
+                        if (tok(tokens, 1) == "R11" || tok(tokens, 1) == "T11") isMatch = true;
                     }
                 }
                 else isMatch = false;
@@ -743,9 +786,9 @@ bool FrameFileIO::loadCRTDFile(QString filename, QVector<CANFrame>* frames)
             int multiplier;
             if (tokens.length() > 2)
             {
-                int idxOfDecimal = tokens[0].indexOf('.');
+                int idxOfDecimal = tok(tokens, 0).indexOf('.');
                 if (idxOfDecimal > -1) {
-                    //int decimalPlaces = tokens[0].length() - tokens[0].indexOf('.') - 1;
+                    //int decimalPlaces = tok(tokens, 0).length() - tok(tokens, 0).indexOf('.') - 1;
                     //the result of the above is the # of digits after the decimal.
                     //This program deals in microsecond so turn the value into microseconds
                     multiplier = 1000000; //turn the decimal into full microseconds
@@ -755,19 +798,19 @@ bool FrameFileIO::loadCRTDFile(QString filename, QVector<CANFrame>* frames)
                     multiplier = 1; //special case. Assume no decimal means microseconds
                 }
                 //qDebug() << "decimal places " << decimalPlaces;
-                thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<int64_t>((tokens[0].toDouble() * multiplier))));
+                thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<int64_t>((tok(tokens, 0).toDouble() * multiplier))));
                 thisFrame.bus = 0;
-                char firstChar = tokens[1].left(1)[0];
+                char firstChar = tok(tokens, 1).left(1)[0];
                 if (firstChar >= '1' && firstChar <= '9')
                 {
-                    thisFrame.bus = tokens[1].left(1)[0] - '1';
-                    tokens[1].remove(0,1); // Remove leading digit (bus number)
-                    firstChar = tokens[1].left(1)[0];
+                    thisFrame.bus = tok(tokens, 1).left(1)[0] - '1';
+                    tok(tokens, 1).remove(0,1); // Remove leading digit (bus number)
+                    firstChar = tok(tokens, 1).left(1)[0];
                 }
                 if (firstChar == 'R' || firstChar == 'T')
                 {
-                    thisFrame.setFrameId(static_cast<uint32_t>(tokens[2].toInt(nullptr, 16)));
-                    if (tokens[1] == "R29" || tokens[1] == "T29") thisFrame.setExtendedFrameFormat(true);
+                    thisFrame.setFrameId(static_cast<uint32_t>(tok(tokens, 2).toInt(nullptr, 16)));
+                    if (tok(tokens, 1) == "R29" || tok(tokens, 1) == "T29") thisFrame.setExtendedFrameFormat(true);
                         else thisFrame.setExtendedFrameFormat(false);
                     if (firstChar == 'T') thisFrame.isReceived = false;
                         else thisFrame.isReceived = true;
@@ -775,9 +818,9 @@ bool FrameFileIO::loadCRTDFile(QString filename, QVector<CANFrame>* frames)
                     thisFrame.setFrameType(QCanBusFrame::DataFrame);
                     for (int d = 0; d < bytes.length(); d++)
                     {
-                        if (tokens[d + 3] != "")
+                        if (tok(tokens, d + 3) != "")
                         {
-                            bytes[d] = static_cast<char>(tokens[d + 3].toInt(nullptr, 16));
+                            bytes[d] = static_cast<char>(tok(tokens, d + 3).toInt(nullptr, 16));
                         }
                         else bytes[d] = 0;
                     }
@@ -869,7 +912,7 @@ bool FrameFileIO::loadCARBUSAnalyzerFile(QString filename, QVector<CANFrame>* fr
             QList<QString> tokens = line.split(QRegularExpression("\\s+"));
             if (tokens.length() >= 5)
             {
-                QString time = tokens[0].replace(",", "");
+                QString time = tok(tokens, 0).replace(",", "");
                 int64_t timeStamp = time.toInt();
                 if (version == 2) {
                     timeStamp *= 1000; // ms -> us
@@ -878,19 +921,21 @@ bool FrameFileIO::loadCARBUSAnalyzerFile(QString filename, QVector<CANFrame>* fr
                 thisFrame.isReceived = true;
                 thisFrame.setFrameType(QCanBusFrame::DataFrame);
                 thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<int64_t>(timeStamp)));
-                thisFrame.bus = tokens[1].toInt();
-                thisFrame.setFrameId(static_cast<uint32_t>(tokens[3].toInt(nullptr, 16)));
+                thisFrame.bus = tok(tokens, 1).toInt();
+                thisFrame.setFrameId(static_cast<uint32_t>(tok(tokens, 3).toInt(nullptr, 16)));
                 thisFrame.setExtendedFrameFormat(thisFrame.frameId() > 0x7FF);
-                int numBytes = tokens[4].toInt(nullptr, 16);
+                int numBytes = tok(tokens, 4).toInt(nullptr, 16);
                 
                 if (tokens.length() >= 5 + numBytes)
                 {
-                    QByteArray bytes(numBytes , 0);
+                    if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
+                    if (numBytes > 64) numBytes = 64; //nothing we load has frames bigger than CAN-FD
+                    QByteArray bytes(numBytes, 0);
                     for (int d = 0; d < numBytes; d++)
                     {
-                        if (tokens[d + 5] != "")
+                        if (tok(tokens, d + 5) != "")
                         {
-                            bytes[d] = static_cast<unsigned char>(tokens[d + 5].toInt(nullptr, 16));
+                            bytes[d] = static_cast<unsigned char>(tok(tokens, d + 5).toInt(nullptr, 16));
                         }
                         else bytes[d] = 0;
                     }
@@ -1036,9 +1081,9 @@ bool FrameFileIO::isCANHackerFile(QString filename)
                 QList<QByteArray> tokens = line.split(' ');
                 if (tokens.length() > 3)
                 {
-                    if (tokens[1].toInt(nullptr, 16) > 0)
+                    if (tok(tokens, 1).toInt(nullptr, 16) > 0)
                     {
-                        int len = tokens[2].toInt();
+                        int len = tok(tokens, 2).toInt();
                         if (len > -1 && len < 9)
                         {
                             isMatch = true;
@@ -1095,14 +1140,14 @@ bool FrameFileIO::loadCANHackerFile(QString filename, QVector<CANFrame>* frames)
             int multiplier;
             if (tokens.length() > 3)
             {
-                int idxOfDecimal = tokens[0].indexOf('.');
+                int idxOfDecimal = tok(tokens, 0).indexOf('.');
                 // If no dot is found, try comma
                 if(idxOfDecimal == -1)
                 {
-                    idxOfDecimal = tokens[0].indexOf(','); 
+                    idxOfDecimal = tok(tokens, 0).indexOf(','); 
                 }
                 if (idxOfDecimal > -1) {
-                    //int decimalPlaces = tokens[0].length() - tokens[0].indexOf('.') - 1;
+                    //int decimalPlaces = tok(tokens, 0).length() - tok(tokens, 0).indexOf('.') - 1;
                     //the result of the above is the # of digits after the decimal.
                     //This program deals in microsecond so turn the value into microseconds
                     multiplier = 1000000; //turn the decimal into full microseconds
@@ -1112,23 +1157,23 @@ bool FrameFileIO::loadCANHackerFile(QString filename, QVector<CANFrame>* frames)
                     multiplier = 1; //special case. Assume no decimal means microseconds
                 }
                 //qDebug() << "decimal places " << decimalPlaces;
-                if (previousTime > tokens[0].toDouble()) {
+                if (previousTime > tok(tokens, 0).toDouble()) {
                     addendumTime += 60;
                 }
-                thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>((tokens[0].toDouble() + addendumTime) * multiplier)));
-                previousTime = tokens[0].toDouble();
-                thisFrame.setFrameId( static_cast<uint32_t>(tokens[1].toInt(nullptr, 16)) );
+                thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>((tok(tokens, 0).toDouble() + addendumTime) * multiplier)));
+                previousTime = tok(tokens, 0).toDouble();
+                thisFrame.setFrameId( static_cast<uint32_t>(tok(tokens, 1).toInt(nullptr, 16)) );
                 thisFrame.setExtendedFrameFormat((thisFrame.frameId() > 0x7FF));
                 thisFrame.isReceived = true;
                 thisFrame.setFrameType(QCanBusFrame::DataFrame);
                 thisFrame.bus = 0;
-                int numBytes = tokens[2].toInt(nullptr, 16);
+                int numBytes = tok(tokens, 2).toInt(nullptr, 16);
                 QByteArray bytes( numBytes, 0);
                 for (int d = 0; d < numBytes; d++)
                 {
-                    if (tokens[d + 3] != "")
+                    if (tok(tokens, d + 3) != "")
                     {
-                        bytes[d] = static_cast<char>(tokens[d + 3].toInt(nullptr, 16));
+                        bytes[d] = static_cast<char>(tok(tokens, d + 3).toInt(nullptr, 16));
                     }
                     else bytes[d] = 0;
                 }
@@ -1178,9 +1223,9 @@ bool FrameFileIO::isCANOpenFile(QString filename)
                 QList<QByteArray> tokens = line.split(',');
                 if (tokens.length() > 11)
                 {
-                    if (Utility::ParseStringToNum(tokens[5].simplified()) > 0)
+                    if (Utility::ParseStringToNum(tok(tokens, 5).simplified()) > 0)
                     {
-                        QList<QByteArray> dataTok = tokens[11].simplified().split(' ');
+                        QList<QByteArray> dataTok = tok(tokens, 11).simplified().split(' ');
                         if ( dataTok.length() > -1 && dataTok.length() < 9) isMatch = true;
                     }
                 }
@@ -1234,19 +1279,19 @@ bool FrameFileIO::loadCANOpenFile(QString filename, QVector<CANFrame>* frames)
             QList<QByteArray> tokens = line.split(',');
             if (tokens.length() > 11)
             {
-                thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tokens[1].simplified().toDouble() * 1000.0)));
-                thisFrame.setFrameId(static_cast<uint32_t>(Utility::ParseStringToNum(tokens[5].simplified())));
+                thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tok(tokens, 1).simplified().toDouble() * 1000.0)));
+                thisFrame.setFrameId(static_cast<uint32_t>(Utility::ParseStringToNum(tok(tokens, 5).simplified())));
                 thisFrame.setExtendedFrameFormat( (thisFrame.frameId() > 0x7FF) );
                 thisFrame.isReceived = true;
                 thisFrame.setFrameType(QCanBusFrame::DataFrame);
                 thisFrame.bus = 0;
-                QList<QByteArray> dataTok = tokens[11].simplified().split(' ');
+                QList<QByteArray> dataTok = tok(tokens, 11).simplified().split(' ');
                 QByteArray bytes(dataTok.length(), 0);
                 for (int d = 0; d < dataTok.length(); d++)
                 {
-                    if (dataTok[d] != "")
+                    if (tok(dataTok, d) != "")
                     {
-                        bytes[d] = static_cast<char>(dataTok[d].simplified().toInt(nullptr, 16));
+                        bytes[d] = static_cast<char>(tok(dataTok, d).simplified().toInt(nullptr, 16));
                     }
                     else bytes[d] = 0;
                 }
@@ -1598,15 +1643,17 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
             {
                 if (tokens.length() > 4)
                 {
-                    thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, (uint64_t)(tokens[1].toDouble() * 1000.0)));
-                    thisFrame.setFrameId(tokens[3].toUInt(nullptr, 16));
+                    thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, (uint64_t)(tok(tokens, 1).toDouble() * 1000.0)));
+                    thisFrame.setFrameId(tok(tokens, 3).toUInt(nullptr, 16));
                     if (thisFrame.frameId() < 0x1FFFFFFF)
                     {
-                        int numBytes = tokens[4].toInt();
+                        int numBytes = tok(tokens, 4).toInt();
+                        if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
+                        if (numBytes > 64) numBytes = 64; //nothing we load has frames bigger than CAN-FD
                         QByteArray bytes(numBytes, 0);
                         thisFrame.isReceived = true;
                         thisFrame.bus = 0;
-                        if ((thisFrame.frameId() > 0x10000000) || (tokens[3].length() >= 8))
+                        if ((thisFrame.frameId() > 0x10000000) || (tok(tokens, 3).length() >= 8))
                         {
                             thisFrame.setExtendedFrameFormat(true);
                         }
@@ -1624,9 +1671,9 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
                             thisFrame.setFrameType(QCanBusFrame::DataFrame);
                             for (int d = 0; d < numBytes; d++)
                             {
-                                if ((d + 5) < tokens.length() && tokens[d + 5] != "")
+                                if ((d + 5) < tokens.length() && tok(tokens, d + 5) != "")
                                 {
-                                    bytes[d] = static_cast<char>(tokens[d + 5].toInt(nullptr, 16));
+                                    bytes[d] = static_cast<char>(tok(tokens, d + 5).toInt(nullptr, 16));
                                 }
                                 else bytes[d] = 0;
                             }
@@ -1649,16 +1696,18 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
             {
                 if (tokens.length() > 6)
                 {
-                    thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tokens[1].toDouble() * 1000.0)));
-                    thisFrame.setFrameId(tokens[4].toUInt(nullptr, 16));
+                    thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tok(tokens, 1).toDouble() * 1000.0)));
+                    thisFrame.setFrameId(tok(tokens, 4).toUInt(nullptr, 16));
                     if (thisFrame.frameId() < 0x1FFFFFFF)
                     {
-                        int numBytes = tokens[6].toInt();
+                        int numBytes = tok(tokens, 6).toInt();
+                        if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
+                        if (numBytes > 64) numBytes = 64; //nothing we load has frames bigger than CAN-FD
                         QByteArray bytes(numBytes, 0);
                         //qDebug() << thisFrame.payload().length();
                         thisFrame.isReceived = true;
-                        thisFrame.bus = tokens[2].toInt();
-                        if ((thisFrame.frameId() > 0x10000000) || (tokens[4].length() >= 8))
+                        thisFrame.bus = tok(tokens, 2).toInt();
+                        if ((thisFrame.frameId() > 0x10000000) || (tok(tokens, 4).length() >= 8))
                         {
                             thisFrame.setExtendedFrameFormat(true);
                         }
@@ -1675,9 +1724,9 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
                             thisFrame.setFrameType(QCanBusFrame::DataFrame);
                             for (int d = 0; d < numBytes; d++)
                             {
-                                if ((d + 7) < tokens.length() && tokens[d + 7] != "")
+                                if ((d + 7) < tokens.length() && tok(tokens, d + 7) != "")
                                 {
-                                    bytes[d] = static_cast<char>(tokens[d + 7].toInt(nullptr, 16));
+                                    bytes[d] = static_cast<char>(tok(tokens, d + 7).toInt(nullptr, 16));
                                 }
                                 else bytes[d] = 0;
                             }
@@ -1691,16 +1740,18 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
             {
                 if (tokens.length() > 5)
                 {
-                    thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tokens[1].toDouble() * 1000.0)));
-                    thisFrame.setFrameId(tokens[3].toUInt(nullptr, 16));
+                    thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tok(tokens, 1).toDouble() * 1000.0)));
+                    thisFrame.setFrameId(tok(tokens, 3).toUInt(nullptr, 16));
                     if (thisFrame.frameId() < 0x1FFFFFFF)
                     {
-                        int numBytes = tokens[5].toInt();
+                        int numBytes = tok(tokens, 5).toInt();
+                        if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
+                        if (numBytes > 64) numBytes = 64; //nothing we load has frames bigger than CAN-FD
                         QByteArray bytes(numBytes, 0);
                         //qDebug() << thisFrame.payload().length();
                         thisFrame.isReceived = true;
                         thisFrame.bus = 0;
-                        if ((thisFrame.frameId() > 0x10000000) || (tokens[3].length() >= 8))
+                        if ((thisFrame.frameId() > 0x10000000) || (tok(tokens, 3).length() >= 8))
                         {
                             thisFrame.setExtendedFrameFormat(true);
                         }
@@ -1717,9 +1768,9 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
                             thisFrame.setFrameType(QCanBusFrame::DataFrame);
                             for (int d = 0; d < numBytes; d++)
                             {
-                                if ((d + 6) < tokens.length() && tokens[d + 6] != "")
+                                if ((d + 6) < tokens.length() && tok(tokens, d + 6) != "")
                                 {
-                                    bytes[d] = static_cast<char>(tokens[d + 6].toInt(nullptr, 16));
+                                    bytes[d] = static_cast<char>(tok(tokens, d + 6).toInt(nullptr, 16));
                                 }
                                 else bytes[d] = 0;
                             }
@@ -1743,16 +1794,18 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
             {
                 if (tokens.length() > 7)
                 {
-                    thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tokens[1].toDouble() * 1000.0)));
-                    thisFrame.setFrameId(tokens[4].toUInt(nullptr, 16));
+                    thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tok(tokens, 1).toDouble() * 1000.0)));
+                    thisFrame.setFrameId(tok(tokens, 4).toUInt(nullptr, 16));
                     if (thisFrame.frameId() < 0x1FFFFFFF)
                     {
-                        int numBytes = tokens[7].toInt();
+                        int numBytes = tok(tokens, 7).toInt();
+                        if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
+                        if (numBytes > 64) numBytes = 64; //nothing we load has frames bigger than CAN-FD
                         QByteArray bytes(numBytes, 0);
                         //qDebug() << thisFrame.payload().length();
                         thisFrame.isReceived = true;
-                        thisFrame.bus = tokens[3].toInt();
-                        if ((thisFrame.frameId() > 0x10000000) || (tokens[4].length() >= 8))
+                        thisFrame.bus = tok(tokens, 3).toInt();
+                        if ((thisFrame.frameId() > 0x10000000) || (tok(tokens, 4).length() >= 8))
                         {
                             thisFrame.setExtendedFrameFormat(true);
                         }
@@ -1760,7 +1813,7 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
                         {
                             thisFrame.setExtendedFrameFormat(false);
                         }
-                        if (tokens[2] == "R")
+                        if (tok(tokens, 2) == "R")
                         {
                             thisFrame.setFrameType(QCanBusFrame::RemoteRequestFrame);
                         }
@@ -1769,9 +1822,9 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
                             thisFrame.setFrameType(QCanBusFrame::DataFrame);
                             for (int d = 0; d < numBytes; d++)
                             {
-                                if ((d + 8) < tokens.length() && tokens[d + 8] != "")
+                                if ((d + 8) < tokens.length() && tok(tokens, d + 8) != "")
                                 {
-                                    bytes[d] = static_cast<char>(tokens[d + 8].toInt(nullptr, 16));
+                                    bytes[d] = static_cast<char>(tok(tokens, d + 8).toInt(nullptr, 16));
                                 }
                                 else bytes[d] = 0;
                             }
@@ -1792,6 +1845,11 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
 //supporting two styles now and they have very different line layouts. Just checking for the header for now. That should still match only ASC files.
 bool FrameFileIO::isCanalyzerASC(QString filename)
 {
+    /* An empty or header-only file used to match every one of these probes, because the flag
+     * starts true and is only cleared by contrary evidence. Autodetect then picked whichever
+     * format happened to be tried first. Requiring at least one record that actually parsed
+     * is what makes a probe mean something. */
+    int recordsSeen = 0;
     QFile *inFile = new QFile(filename);
     QByteArray line;
     bool isMatch = true;
@@ -1812,6 +1870,8 @@ bool FrameFileIO::isCanalyzerASC(QString filename)
         {
             line = inFile->readLine();
             if (!line.startsWith("base")) isMatch = false;
+            //this format is identified by its header, so a matching header is the evidence
+            else recordsSeen++;
         }
     }
     catch (...)
@@ -1820,7 +1880,7 @@ bool FrameFileIO::isCanalyzerASC(QString filename)
     }
     inFile->close();
     delete inFile;
-    return isMatch;
+    return isMatch && (recordsSeen > 0);
 }
 
 //There tends to be four lines of header first. The last of which starts with // so first burn off lines
@@ -1880,9 +1940,9 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
                 QList<QByteArray> versionTokens = line.split('.');
                 if (versionTokens.length() > 2)
                 {
-                    verMajor = versionTokens[0].toInt();
-                    verMinor = versionTokens[1].toInt();
-                    verRevision = versionTokens[2].toInt();
+                    verMajor = tok(versionTokens, 0).toInt();
+                    verMinor = tok(versionTokens, 1).toInt();
+                    verRevision = tok(versionTokens, 2).toInt();
                     qDebug() << "Major: " << verMajor << " Minor:" << verMinor << " Rev:" << verRevision;
                 }
             }
@@ -1897,32 +1957,32 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
         {            
             tokens = line.simplified().split(' ');
 
-            if (tokens[0].contains("Begin")) continue; //probably begin triggerblock but we're ignoring that.
+            if (tok(tokens, 0).contains("Begin")) continue; //probably begin triggerblock but we're ignoring that.
 
             //try to do some investigating to see if this line is a CAN frame or not. The file format has many other potential line types it seems...
             if (tokens.length() > 5)
             {
-                if (tokens[3].toUpper().startsWith("RX") || tokens[3].toUpper().startsWith("TX"))
+                if (tok(tokens, 3).toUpper().startsWith("RX") || tok(tokens, 3).toUpper().startsWith("TX"))
                 {
-                    thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tokens[0].toDouble() * 1000000.0)));
-                    if (tokens[1].contains("CAN")) //the different format I haven't seen a whole lot of, seems to support CANFD in this format
+                    thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tok(tokens, 0).toDouble() * 1000000.0)));
+                    if (tok(tokens, 1).contains("CAN")) //the different format I haven't seen a whole lot of, seems to support CANFD in this format
                     {
-                        if (tokens[4].endsWith('x'))
+                        if (tok(tokens, 4).endsWith('x'))
                         {
-                            QByteArray copied_id = tokens[4];
+                            QByteArray copied_id = tok(tokens, 4);
                             copied_id.chop(1);
                             thisFrame.setFrameId(copied_id.toUInt(nullptr, 16));
                             thisFrame.setExtendedFrameFormat(true);
                         }
                         else
                         {
-                            thisFrame.setFrameId(tokens[4].toUInt(nullptr, 16));
+                            thisFrame.setFrameId(tok(tokens, 4).toUInt(nullptr, 16));
                             thisFrame.setExtendedFrameFormat(thisFrame.frameId() > 0x7FF);  //some .asc files have extended IDs without 'x'
                         }
 
                         int payloadLen = 0;
                         if (tokens.length() > 8) {
-                            payloadLen = tokens[8].toInt();
+                            payloadLen = tok(tokens, 8).toInt();
                         } else {
                             foundErrors = true;
                             continue;
@@ -1940,16 +2000,16 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
                             qDebug() << "Payload length negative! Original line: " << line;
                             return false;
                         }
-                        thisFrame.isReceived = tokens[3].toUpper().contains("RX");
-                        thisFrame.bus = tokens[2].toInt();
+                        thisFrame.isReceived = tok(tokens, 3).toUpper().contains("RX");
+                        thisFrame.bus = tok(tokens, 2).toInt();
 
-                        if (tokens[5].at(0) >= '0' && tokens[5].at(0) <= '9')
+                        if (tokAt(tokens, 5, 0) >= '0' && tokAt(tokens, 5, 0) <= '9')
                         {
                             for (int d = 9; d < (9 + payloadLen); d++)
                             {
                                 if (tokens.size() > d)
                                 {
-                                    bytes[d - 9] = static_cast<char>(tokens[d].toInt(nullptr, 16));
+                                    bytes[d - 9] = static_cast<char>(tok(tokens, d).toInt(nullptr, 16));
                                 }
                                 else //expected byte wasn't there to read. Set it zero and set error flag
                                 {
@@ -1967,7 +2027,7 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
                             {
                                 if (tokens.size() > d)
                                 {
-                                    bytes[d - 10] = static_cast<char>(tokens[d].toInt(nullptr, 16));
+                                    bytes[d - 10] = static_cast<char>(tok(tokens, d).toInt(nullptr, 16));
                                 }
                                 else //expected byte wasn't there to read. Set it zero and set error flag
                                 {
@@ -1982,18 +2042,18 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
                     }
                     else
                     {
-                        int payloadLen = tokens[5].toInt();
-                        thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tokens[0].toDouble() * 1000000.0)));
-                        if (tokens[2].endsWith('x'))
+                        int payloadLen = tok(tokens, 5).toInt();
+                        thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tok(tokens, 0).toDouble() * 1000000.0)));
+                        if (tok(tokens, 2).endsWith('x'))
                         {
-                            QByteArray copied_id = tokens[2];
+                            QByteArray copied_id = tok(tokens, 2);
                             copied_id.chop(1);
                             thisFrame.setFrameId(copied_id.toUInt(nullptr, 16));
                             thisFrame.setExtendedFrameFormat(true);
                         }
                         else
                         {
-                            thisFrame.setFrameId(tokens[2].toUInt(nullptr, 16));
+                            thisFrame.setFrameId(tok(tokens, 2).toUInt(nullptr, 16));
                             thisFrame.setExtendedFrameFormat(thisFrame.frameId() > 0x7FF);  //some .asc files have extended IDs without 'x'
                         }
                         QByteArray bytes(payloadLen, 0);
@@ -2008,14 +2068,14 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
                             qDebug() << "Payload length negative! Original line: " << line;
                             return false;
                         }
-                        thisFrame.isReceived = tokens[3].toUpper().contains("RX");
-                        thisFrame.bus = tokens[1].toInt();
-                        if (tokens[4] == "r") thisFrame.setFrameType(QCanBusFrame::RemoteRequestFrame);
+                        thisFrame.isReceived = tok(tokens, 3).toUpper().contains("RX");
+                        thisFrame.bus = tok(tokens, 1).toInt();
+                        if (tok(tokens, 4) == "r") thisFrame.setFrameType(QCanBusFrame::RemoteRequestFrame);
                         for (int d = 6; d < (6 + payloadLen); d++)
                         {
                             if (tokens.size() > d)
                             {
-                                bytes[d - 6] = static_cast<char>(tokens[d].toInt(nullptr, 16));
+                                bytes[d - 6] = static_cast<char>(tok(tokens, d).toInt(nullptr, 16));
                             }
                             else //expected byte wasn't there to read. Set it zero and set error flag
                             {
@@ -2164,6 +2224,11 @@ bool FrameFileIO::loadCanalyzerBLF(QString filename, QVector<CANFrame> *frames)
 
 bool FrameFileIO::isNativeCSVFile(QString filename)
 {
+    /* An empty or header-only file used to match every one of these probes, because the flag
+     * starts true and is only cleared by contrary evidence. Autodetect then picked whichever
+     * format happened to be tried first. Requiring at least one record that actually parsed
+     * is what makes a probe mean something. */
+    int recordsSeen = 0;
     QFile *inFile = new QFile(filename);
     QByteArray line;
     int fileVersion = 1;
@@ -2177,7 +2242,8 @@ bool FrameFileIO::isNativeCSVFile(QString filename)
     try
     {
         line = inFile->readLine().toUpper(); //read out the header first and discard it.
-        if (line.length() < 23) isMatch = false;
+        //at(23) needs 24 characters to be there, not 23
+        if (line.length() < 24) isMatch = false;
         else if (line.at(23) == 'D') fileVersion = 2; //Dir is found starting at position 23 if this is a V2 file
 
         if (!line.contains("TIME STAMP")) isMatch = false;
@@ -2191,13 +2257,14 @@ bool FrameFileIO::isNativeCSVFile(QString filename)
                 QList<QByteArray> tokens = line.split(',');
                 if (tokens.length() >= 5)
                 {
+                recordsSeen++; //this line looks like a record of this format
                     if (fileVersion == 1)
                     {
-                        if (tokens[4].toUInt() > 8) isMatch = false;
+                        if (tok(tokens, 4).toUInt() > 8) isMatch = false;
                     }
                     else if (fileVersion == 2)
                     {
-                        if ( tokens[5].toUInt() > 8) isMatch = false;
+                        if ( tok(tokens, 5).toUInt() > 8) isMatch = false;
                     }
                 }
                 else isMatch = false;
@@ -2211,7 +2278,7 @@ bool FrameFileIO::isNativeCSVFile(QString filename)
     inFile->close();
     delete inFile;
 
-    return isMatch;
+    return isMatch && (recordsSeen > 0);
 }
 
 //The "native" file format for this program
@@ -2235,6 +2302,15 @@ bool FrameFileIO::loadNativeCSVFile(QString filename, QVector<CANFrame>* frames)
     }
 
     line = inFile->readLine().toUpper(); //read out the header first and discard it.
+    /* An empty or stubby file leaves nothing to index into here. QByteArray::at does not bounds
+     * check in a release build, so reading position 23 of a shorter line walks off the end. */
+    if (line.length() < 24)
+    {
+        qDebug() << "Native CSV file has no usable header line";
+        inFile->close();
+        delete inFile;
+        return false;
+    }
     if (line.at(23) == 'D') fileVersion = 2; //Dir is found starting at position 23 if this is a V2 file
 
     while (!inFile->atEnd()) {
@@ -2251,10 +2327,10 @@ bool FrameFileIO::loadNativeCSVFile(QString filename, QVector<CANFrame>* frames)
             QList<QByteArray> tokens = line.split(',');
             if (tokens.length() >= 5)
             {
-                if (tokens[0].length() > 3)
+                if (tok(tokens, 0).length() > 3)
                 {
-                    quint64 tstamp = tokens[0].toULongLong();
-                    if (tstamp == 0) tstamp = (quint64)(tokens[0].toLongLong());
+                    quint64 tstamp = tok(tokens, 0).toULongLong();
+                    if (tstamp == 0) tstamp = (quint64)(tok(tokens, 0).toLongLong());
                     thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, tstamp));
                 }
                 else
@@ -2263,8 +2339,8 @@ bool FrameFileIO::loadNativeCSVFile(QString filename, QVector<CANFrame>* frames)
                     thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, timeStamp));
                 }
 
-                thisFrame.setFrameId(tokens[1].toUInt(nullptr, 16));
-                if (tokens[2].toUpper().contains("TRUE")) thisFrame.setExtendedFrameFormat(true);
+                thisFrame.setFrameId(tok(tokens, 1).toUInt(nullptr, 16));
+                if (tok(tokens, 2).toUpper().contains("TRUE")) thisFrame.setExtendedFrameFormat(true);
                     else thisFrame.setExtendedFrameFormat(false);
 
                 //fix for faulty files that fail to set the extended flag when they should
@@ -2275,30 +2351,30 @@ bool FrameFileIO::loadNativeCSVFile(QString filename, QVector<CANFrame>* frames)
                 if (fileVersion == 1)
                 {
                     thisFrame.isReceived = true;
-                    thisFrame.bus = tokens[3].toInt();
-                    int lng = tokens[4].toInt();
+                    thisFrame.bus = tok(tokens, 3).toInt();
+                    int lng = tok(tokens, 4).toInt();
                     if (lng > 8) lng = 8;
                     if (lng < 0) lng = 0;
                     if (lng + 5 > tokens.length()) lng = tokens.length() - 5;
                     QByteArray bytes(lng, 0);
                     for (int c = 0; c < lng; c++) bytes[c] = 0;
                     for (int d = 0; d < lng; d++)
-                        bytes[d] = static_cast<char>(tokens[5 + d].toInt(nullptr, 16));
+                        bytes[d] = static_cast<char>(tok(tokens, 5 + d).toInt(nullptr, 16));
                     thisFrame.setPayload(bytes);
                 }
                 else if (fileVersion == 2)
                 {
-                    if (tokens[3].at(0) == 'R') thisFrame.isReceived = true;
+                    if (tokAt(tokens, 3, 0) == 'R') thisFrame.isReceived = true;
                     else thisFrame.isReceived = false;
-                    thisFrame.bus = tokens[4].toInt();                    
-                    int lng = tokens[5].toInt();
+                    thisFrame.bus = tok(tokens, 4).toInt();                    
+                    int lng = tok(tokens, 5).toInt();
                     if (lng > 8) lng = 8;
                     if (lng < 0) lng = 0;
                     if (lng + 6 > tokens.length()) lng = tokens.length() - 6;
                     QByteArray bytes(lng, 0);
                     for (int c = 0; c < lng; c++) bytes[c] = 0;
                     for (int d = 0; d < lng; d++)
-                        bytes[d] = static_cast<char>(tokens[6 + d].toInt(nullptr, 16));
+                        bytes[d] = static_cast<char>(tok(tokens, 6 + d).toInt(nullptr, 16));
                     thisFrame.setPayload(bytes);
                 }
 
@@ -2479,6 +2555,11 @@ bool FrameFileIO::flushContinuousNative()
 
 bool FrameFileIO::isGenericCSVFile(QString filename)
 {
+    /* An empty or header-only file used to match every one of these probes, because the flag
+     * starts true and is only cleared by contrary evidence. Autodetect then picked whichever
+     * format happened to be tried first. Requiring at least one record that actually parsed
+     * is what makes a probe mean something. */
+    int recordsSeen = 0;
     QFile *inFile = new QFile(filename);
     QByteArray line;
     bool isMatch = true;
@@ -2496,9 +2577,10 @@ bool FrameFileIO::isGenericCSVFile(QString filename)
             line = inFile->readLine();
             if (line.length() > 2)
             {
+                recordsSeen++; //this line looks like a record of this format
                 QList<QByteArray> tokens = line.split(',');
 
-                int ID = tokens[0].toInt(nullptr, 16);
+                int ID = tok(tokens, 0).toInt(nullptr, 16);
                 if (ID < 1 || ID > 0x1FFFFFFF) isMatch = false;
 
                 if (tokens.size() < 2)
@@ -2508,7 +2590,7 @@ bool FrameFileIO::isGenericCSVFile(QString filename)
 
                 if (isMatch)
                 {
-                    QList<QByteArray> dataTok = tokens[1].split(' ');
+                    QList<QByteArray> dataTok = tok(tokens, 1).split(' ');
                     int len = dataTok.length();
                     if (len > 8) isMatch = false;
                     if (len < 2) isMatch = false;
@@ -2523,7 +2605,7 @@ bool FrameFileIO::isGenericCSVFile(QString filename)
     }
     inFile->close();
     delete inFile;
-    return isMatch;
+    return isMatch && (recordsSeen > 0);
 }
 
 bool FrameFileIO::loadGenericCSVFile(QString filename, QVector<CANFrame>* frames)
@@ -2559,18 +2641,18 @@ bool FrameFileIO::loadGenericCSVFile(QString filename, QVector<CANFrame>* frames
 
             timeStamp += 5000;
             thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, timeStamp));
-            thisFrame.setFrameId(tokens[0].toUInt(nullptr, 16));
+            thisFrame.setFrameId(tok(tokens, 0).toUInt(nullptr, 16));
             if (thisFrame.frameId() > 0x7FF) thisFrame.setExtendedFrameFormat(true);
             else thisFrame.setExtendedFrameFormat(false);
             thisFrame.bus = 0;
             thisFrame.setFrameType(QCanBusFrame::DataFrame);
             if (tokens.length() > 1)
             {
-                QList<QByteArray> dataTok = tokens[1].split(' ');
+                QList<QByteArray> dataTok = tok(tokens, 1).split(' ');
                 int dLen = dataTok.length();
                 if (dLen > 8) dLen = 8;
                 QByteArray bytes(dLen, 0);
-                for (int d = 0; d < dLen; d++) bytes[d] = static_cast<char>(dataTok[d].toInt(nullptr, 16));
+                for (int d = 0; d < dLen; d++) bytes[d] = static_cast<char>(tok(dataTok, d).toInt(nullptr, 16));
                 thisFrame.setPayload(bytes);
                 frames->append(thisFrame);
             }
@@ -2633,6 +2715,11 @@ bool FrameFileIO::saveGenericCSVFile(QString filename, const QVector<CANFrame>* 
 
 bool FrameFileIO::isLogFile(QString filename)
 {
+    /* An empty or header-only file used to match every one of these probes, because the flag
+     * starts true and is only cleared by contrary evidence. Autodetect then picked whichever
+     * format happened to be tried first. Requiring at least one record that actually parsed
+     * is what makes a probe mean something. */
+    int recordsSeen = 0;
     QFile *inFile = new QFile(filename);
     QByteArray line;
     bool isMatch = true;
@@ -2660,13 +2747,14 @@ bool FrameFileIO::isLogFile(QString filename)
                 QList<QByteArray> tokens = line.split(' ');
                 if (tokens.length() >= 6)
                 {
-                    QList<QByteArray> timeToks = tokens[0].split(':');
+                recordsSeen++; //this line looks like a record of this format
+                    QList<QByteArray> timeToks = tok(tokens, 0).split(':');
                     if (timeToks.size() != 4) isMatch = false;
 
-                    int ID = tokens[3].right(tokens[3].length() - 2).toInt(nullptr, 16);
+                    int ID = tok(tokens, 3).right(tok(tokens, 3).length() - 2).toInt(nullptr, 16);
                     if (ID < 1 || ID > 0x1FFFFFFF) isMatch = false;
-                    if (tokens[4] != "S" && tokens[4] != "X" && tokens[4] != "SR" && tokens[4] != "XR") isMatch = false;
-                    int len = tokens[5].toInt();
+                    if (tok(tokens, 4) != "S" && tok(tokens, 4) != "X" && tok(tokens, 4) != "SR" && tok(tokens, 4) != "XR") isMatch = false;
+                    int len = tok(tokens, 5).toInt();
                     if (len > 8) isMatch = false;
                 }
                 else isMatch = false;
@@ -2680,7 +2768,7 @@ bool FrameFileIO::isLogFile(QString filename)
 
     inFile->close();
     delete inFile;
-    return isMatch;
+    return isMatch && (recordsSeen > 0);
 }
 
 //busmaster log file
@@ -2746,37 +2834,37 @@ bool FrameFileIO::loadLogFile(QString filename, QVector<CANFrame>* frames)
             QList<QByteArray> tokens = line.split(' ');
             if (tokens.length() >= 6)
             {
-                QList<QByteArray> timeToks = tokens[0].split(':');
+                QList<QByteArray> timeToks = tok(tokens, 0).split(':');
                 if (timeToks.length() >= 4)
                 {
-                    uint64_t timeStamp = (timeToks[0].toUInt() * (1000ul * 1000ul * 60ul * 60ul)) + (timeToks[1].toUInt() * (1000ul * 1000ul * 60ul))
-                          + (timeToks[2].toUInt() * (1000ul * 1000ul)) + (timeToks[3].toUInt() * 100ul);
+                    uint64_t timeStamp = (tok(timeToks, 0).toUInt() * (1000ul * 1000ul * 60ul * 60ul)) + (tok(timeToks, 1).toUInt() * (1000ul * 1000ul * 60ul))
+                          + (tok(timeToks, 2).toUInt() * (1000ul * 1000ul)) + (tok(timeToks, 3).toUInt() * 100ul);
                     thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, timeStamp));
-                    if (tokens[1].at(0) == 'R') thisFrame.isReceived = true;
+                    if (tokAt(tokens, 1, 0) == 'R') thisFrame.isReceived = true;
                         else thisFrame.isReceived = false;
-                    thisFrame.setFrameId(tokens[3].right(tokens[3].length() - 2).toUInt(nullptr, 16));
-                    if (tokens[4] == "S") {
+                    thisFrame.setFrameId(tok(tokens, 3).right(tok(tokens, 3).length() - 2).toUInt(nullptr, 16));
+                    if (tok(tokens, 4) == "S") {
                         thisFrame.setExtendedFrameFormat(false);
                         thisFrame.setFrameType(QCanBusFrame::DataFrame);
-                    } else if (tokens[4] == "X") {
+                    } else if (tok(tokens, 4) == "X") {
                         thisFrame.setExtendedFrameFormat(true);
                         thisFrame.setFrameType(QCanBusFrame::DataFrame);
-                    } else if (tokens[4] == "SR") {
+                    } else if (tok(tokens, 4) == "SR") {
                         thisFrame.setExtendedFrameFormat(false);
                         thisFrame.setFrameType(QCanBusFrame::RemoteRequestFrame);
                     } else { // XR
                         thisFrame.setExtendedFrameFormat(true);
                         thisFrame.setFrameType(QCanBusFrame::RemoteRequestFrame);
                     }
-                    thisFrame.bus = tokens[2].toInt();
+                    thisFrame.bus = tok(tokens, 2).toInt();
 
-                    int lng = tokens[5].toInt();
+                    int lng = tok(tokens, 5).toInt();
                     if (lng > 8) lng = 8;
                     if (lng < 0) lng = 0;
                     QByteArray bytes(lng, 0);
                     if (thisFrame.frameType() != QCanBusFrame::RemoteRequestFrame) {
                         for (int d = 0; d < lng; d++)
-                            bytes[d] = static_cast<char>(tokens[d + 6].toInt(nullptr, 16));
+                            bytes[d] = static_cast<char>(tok(tokens, d + 6).toInt(nullptr, 16));
                     }
                     thisFrame.setPayload(bytes);
                     frames->append(thisFrame);
@@ -2874,6 +2962,11 @@ bool FrameFileIO::saveLogFile(QString filename, const QVector<CANFrame>* frames)
 
 bool FrameFileIO::isIXXATFile(QString filename)
 {
+    /* An empty or header-only file used to match every one of these probes, because the flag
+     * starts true and is only cleared by contrary evidence. Autodetect then picked whichever
+     * format happened to be tried first. Requiring at least one record that actually parsed
+     * is what makes a probe mean something. */
+    int recordsSeen = 0;
     QFile *inFile = new QFile(filename);
     QByteArray line;
     bool isMatch = true;
@@ -2896,6 +2989,8 @@ bool FrameFileIO::isIXXATFile(QString filename)
         }
 
         if (!line.contains("FORMAT")) isMatch = false;
+        //this format is identified by its header block, so matching it is the evidence
+        else if (isMatch) recordsSeen++;
     }
     catch (...)
     {
@@ -2904,7 +2999,7 @@ bool FrameFileIO::isIXXATFile(QString filename)
 
     inFile->close();
     delete inFile;
-    return isMatch;
+    return isMatch && (recordsSeen > 0);
 }
 
 //"00:01:03.03","223","Std","","00 00 00 00 49 00 00 01 "
@@ -2940,12 +3035,12 @@ bool FrameFileIO::loadIXXATFile(QString filename, QVector<CANFrame>* frames)
             QList<QByteArray> tokens = line.split(',');
             if (line.length() >= 5)
             {
-                QString timePortion = Utility::unQuote(tokens[0]);
+                QString timePortion = Utility::unQuote(tok(tokens, 0));
                 QStringList timeToks = timePortion.split(':');
                 if (timeToks.length() >= 3)
                 {
-                    timeStamp = (timeToks[0].toUInt() * (1000ul * 1000ul * 60ul * 60ul)) + (timeToks[1].toUInt() * (1000ul * 1000ul * 60ul))
-                      + static_cast<uint64_t>(timeToks[2].toDouble() * (1000.0 * 1000.0));
+                    timeStamp = (tok(timeToks, 0).toUInt() * (1000ul * 1000ul * 60ul * 60ul)) + (tok(timeToks, 1).toUInt() * (1000ul * 1000ul * 60ul))
+                      + static_cast<uint64_t>(tok(timeToks, 2).toDouble() * (1000.0 * 1000.0));
                 }
                 else
                 {
@@ -2954,8 +3049,8 @@ bool FrameFileIO::loadIXXATFile(QString filename, QVector<CANFrame>* frames)
                     return false;
                 }
                 thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, timeStamp));
-                thisFrame.setFrameId(Utility::unQuote(tokens[1]).toUInt(nullptr, 16));
-                QString tempStr = Utility::unQuote(tokens[2]).toUpper();
+                thisFrame.setFrameId(Utility::unQuote(tok(tokens, 1)).toUInt(nullptr, 16));
+                QString tempStr = Utility::unQuote(tok(tokens, 2)).toUpper();
                 if (tempStr.length() > 0)
                 {
                     if (tempStr.at(0) == 'S') thisFrame.setExtendedFrameFormat(false);
@@ -2972,11 +3067,13 @@ bool FrameFileIO::loadIXXATFile(QString filename, QVector<CANFrame>* frames)
                 thisFrame.bus = 0;
                 thisFrame.setFrameType(QCanBusFrame::DataFrame);
 
-                QStringList dataToks = Utility::unQuote(tokens[4]).simplified().split(' ');
+                QStringList dataToks = Utility::unQuote(tok(tokens, 4)).simplified().split(' ');
                 int numBytes = dataToks.length();
+                if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
+                if (numBytes > 64) numBytes = 64; //nothing we load has frames bigger than CAN-FD
                 QByteArray bytes(numBytes, 0);
                 if (numBytes > 8) return false;
-                for (int d = 0; d < numBytes; d++) bytes[d] = static_cast<char>(dataToks[d].toInt(nullptr, 16));
+                for (int d = 0; d < numBytes; d++) bytes[d] = static_cast<char>(tok(dataToks, d).toInt(nullptr, 16));
                 thisFrame.setPayload(bytes);
                 frames->append(thisFrame);
             }
@@ -3052,6 +3149,11 @@ bool FrameFileIO::saveIXXATFile(QString filename, const QVector<CANFrame>* frame
 
 bool FrameFileIO::isCANDOFile(QString filename)
 {
+    /* An empty or header-only file used to match every one of these probes, because the flag
+     * starts true and is only cleared by contrary evidence. Autodetect then picked whichever
+     * format happened to be tried first. Requiring at least one record that actually parsed
+     * is what makes a probe mean something. */
+    int recordsSeen = 0;
     QFile *inFile = new QFile(filename);
     int lineCounter = 0;
     QByteArray data;
@@ -3074,6 +3176,13 @@ bool FrameFileIO::isCANDOFile(QString filename)
             lineCounter++;
 
             data = inFile->read(12);
+            /* A record is exactly 12 bytes. A short read at the end of a truncated file used to
+             * fall straight through to data[3] and data[4 + len], which reads past the end. */
+            if (data.length() < 12)
+            {
+                isMatch = false;
+                break;
+            }
 
             int ID = ((data[3] & 0x0F) * 256 + data[2]);
             int len = data[3] >> 4;
@@ -3084,6 +3193,7 @@ bool FrameFileIO::isCANDOFile(QString filename)
                 {
                     if (data[4 + len] != static_cast<char>(0xFF)) isMatch = false;
                 }
+                recordsSeen++;
             }
             else isMatch = false;
         }
@@ -3095,7 +3205,7 @@ bool FrameFileIO::isCANDOFile(QString filename)
 
     inFile->close();
     delete inFile;
-    return isMatch;
+    return isMatch && (recordsSeen > 0);
 }
 
 bool FrameFileIO::loadCANDOFile(QString filename, QVector<CANFrame>* frames)
@@ -3148,6 +3258,8 @@ bool FrameFileIO::loadCANDOFile(QString filename, QVector<CANFrame>* frames)
         thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, tempStamp));
         thisFrame.setFrameId(((uData[3] & 0x0F) * 256 + uData[2]) & 0x7FF);
         int numBytes = uData[3] >> 4;
+        if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
+        if (numBytes > 64) numBytes = 64; //nothing we load has frames bigger than CAN-FD
         QByteArray bytes(numBytes, 0);
 
         if (numBytes <= 8 && thisFrame.frameId() <= 0x7FF)
@@ -3229,6 +3341,11 @@ bool FrameFileIO::saveCANDOFile(QString filename, const QVector<CANFrame>* frame
 
 bool FrameFileIO::isMicrochipFile(QString filename)
 {
+    /* An empty or header-only file used to match every one of these probes, because the flag
+     * starts true and is only cleared by contrary evidence. Autodetect then picked whichever
+     * format happened to be tried first. Requiring at least one record that actually parsed
+     * is what makes a probe mean something. */
+    int recordsSeen = 0;
     QFile *inFile = new QFile(filename);
     QByteArray line;
     bool inComment = false;
@@ -3248,6 +3365,7 @@ bool FrameFileIO::isMicrochipFile(QString filename)
             line = inFile->readLine();
             if (line.length() > 2)
             {
+                recordsSeen++; //this line looks like a record of this format
                 if (line.startsWith("//"))
                 {
                     inComment = !inComment;
@@ -3259,9 +3377,9 @@ bool FrameFileIO::isMicrochipFile(QString filename)
                         QList<QByteArray> tokens = line.split(';');
                         if (tokens.length() >= 4)
                         {
-                            int ID = Utility::ParseStringToNum(tokens[2]);
+                            int ID = Utility::ParseStringToNum(tok(tokens, 2));
                             if (ID < 1 || ID > 0x1FFFFFFF) isMatch = false;
-                            int len = tokens[3].toInt();
+                            int len = tok(tokens, 3).toInt();
                             if ( len > 8 || len < 0 ) isMatch = false;
                             if ( (len + 4)  < tokens.length() ) isMatch = false;
                         }
@@ -3277,7 +3395,7 @@ bool FrameFileIO::isMicrochipFile(QString filename)
     }
     inFile->close();
     delete inFile;
-    return isMatch;
+    return isMatch && (recordsSeen > 0);
 }
 
 //log file from microchip tool
@@ -3330,20 +3448,22 @@ bool FrameFileIO::loadMicrochipFile(QString filename, QVector<CANFrame>* frames)
                     QList<QByteArray> tokens = line.split(';');
                     if (tokens.length() >= 4)
                     {
-                        timeStamp = tokens[0].toInt() * 1000;
+                        timeStamp = tok(tokens, 0).toInt() * 1000;
                         thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, timeStamp));
-                        if (tokens[1].at(0) == 'R') thisFrame.isReceived = true;
+                        if (tokAt(tokens, 1, 0) == 'R') thisFrame.isReceived = true;
                             else thisFrame.isReceived = false;
                         thisFrame.setFrameType(QCanBusFrame::DataFrame);
-                        thisFrame.setFrameId(static_cast<quint32>( Utility::ParseStringToNum(tokens[2])) );
+                        thisFrame.setFrameId(static_cast<quint32>( Utility::ParseStringToNum(tok(tokens, 2))) );
                         if (thisFrame.frameId() <= 0x7FF) thisFrame.setExtendedFrameFormat(false);
                             else thisFrame.setExtendedFrameFormat(true);
                         thisFrame.bus = 0;
-                        int numBytes = tokens[3].toInt();
+                        int numBytes = tok(tokens, 3).toInt();
+                        if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
+                        if (numBytes > 64) numBytes = 64; //nothing we load has frames bigger than CAN-FD
                         QByteArray bytes(numBytes, 0);
                         if (thisFrame.payload().length() > 8) thisFrame.payload().resize(8);
                         if (thisFrame.payload().length() + 4 > tokens.length()) thisFrame.payload().resize( tokens.length() - 4 );
-                        for (int d = 0; d < numBytes; d++) bytes[d] = static_cast<char>( Utility::ParseStringToNum(tokens[4 + d]) );
+                        for (int d = 0; d < numBytes; d++) bytes[d] = static_cast<char>( Utility::ParseStringToNum(tok(tokens, 4 + d)) );
                         thisFrame.setPayload(bytes);
                         frames->append(thisFrame);
                     }
@@ -3430,6 +3550,11 @@ bool FrameFileIO::saveMicrochipFile(QString filename, const QVector<CANFrame>* f
 
 bool FrameFileIO::isTraceFile(QString filename)
 {
+    /* An empty or header-only file used to match every one of these probes, because the flag
+     * starts true and is only cleared by contrary evidence. Autodetect then picked whichever
+     * format happened to be tried first. Requiring at least one record that actually parsed
+     * is what makes a probe mean something. */
+    int recordsSeen = 0;
     QFile *inFile = new QFile(filename);
     QByteArray line;
     int lineCounter = 0;
@@ -3450,6 +3575,7 @@ bool FrameFileIO::isTraceFile(QString filename)
             line = line.trimmed();
             if (line.length() > 2)
             {
+                recordsSeen++; //this line looks like a record of this format
                 if (line.startsWith(";"))
                 {
                     // a comment. Ignore it.
@@ -3459,14 +3585,14 @@ bool FrameFileIO::isTraceFile(QString filename)
                     QList<QByteArray> tokens = line.split('\t');
                     if (tokens.length() >= 5)
                     {
-                        QList<QByteArray> timestampToks = tokens[1].split(':');
+                        QList<QByteArray> timestampToks = tok(tokens, 1).split(':');
                         if (timestampToks.size() != 4) isMatch = false;
 
-                        long ID = tokens[2].toLong(nullptr, 16);
+                        long ID = tok(tokens, 2).toLong(nullptr, 16);
                         if (ID < 1 || ID > 0x1FFFFFFF) isMatch = false;
-                        int len = tokens[3].toInt();
+                        int len = tok(tokens, 3).toInt();
                         if (len > 8 || len < 0) isMatch = false;
-                        QList<QByteArray> dataToks = tokens[4].split(' ');
+                        QList<QByteArray> dataToks = tok(tokens, 4).split(' ');
                         if (len > dataToks.length()) isMatch = false;
                     }
                     else isMatch = false;
@@ -3481,7 +3607,7 @@ bool FrameFileIO::isTraceFile(QString filename)
 
     inFile->close();
     delete inFile;
-    return isMatch;
+    return isMatch && (recordsSeen > 0);
 }
 
 /*
@@ -3550,13 +3676,13 @@ bool FrameFileIO::loadTraceFile(QString filename, QVector<CANFrame>* frames)
                 QList<QByteArray> tokens = line.split('\t');
                 if (tokens.length() >= 5)
                 {
-                    QList<QByteArray> timestampToks = tokens[1].split(':');
+                    QList<QByteArray> timestampToks = tok(tokens, 1).split(':');
                     
                     if (timestampToks.length() >= 4) {
-                        timeStamp = timestampToks[0].toInt() * 1000000l * 60 * 60;
-                        timeStamp += timestampToks[1].toInt() * 1000000l * 60;
-                        timeStamp += timestampToks[2].toInt() * 1000000l;
-                        timeStamp += timestampToks[3].toInt() * 100;
+                        timeStamp = tok(timestampToks, 0).toInt() * 1000000l * 60 * 60;
+                        timeStamp += tok(timestampToks, 1).toInt() * 1000000l * 60;
+                        timeStamp += tok(timestampToks, 2).toInt() * 1000000l;
+                        timeStamp += tok(timestampToks, 3).toInt() * 100;
                     } else {
                         timeStamp = 0; // Or whatever fallback
                         foundErrors = true;
@@ -3565,17 +3691,19 @@ bool FrameFileIO::loadTraceFile(QString filename, QVector<CANFrame>* frames)
 
                     thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint32_t>(timeStamp)));
 
-                    thisFrame.setFrameId(static_cast<uint32_t>(tokens[2].toLong(nullptr, 16)));
+                    thisFrame.setFrameId(static_cast<uint32_t>(tok(tokens, 2).toLong(nullptr, 16)));
                     if (thisFrame.frameId() <= 0x7FF) thisFrame.setExtendedFrameFormat(false);
                         else thisFrame.setExtendedFrameFormat(true);
                     thisFrame.bus = 0;
                     thisFrame.setFrameType(QCanBusFrame::DataFrame);
-                    int numBytes = tokens[3].toInt();
+                    int numBytes = tok(tokens, 3).toInt();
                     if (numBytes > 8) numBytes = 8;
+                    if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
+                    if (numBytes > 64) numBytes = 64; //nothing we load has frames bigger than CAN-FD
                     QByteArray bytes(numBytes, 0);
-                    QList<QByteArray> dataToks = tokens[4].split(' ');
+                    QList<QByteArray> dataToks = tok(tokens, 4).split(' ');
                     int limit = qMin(numBytes, (int)dataToks.length());
-                    for (int d = 0; d < limit; d++) bytes[d] = static_cast<char>(dataToks[d].toInt(nullptr, 16));
+                    for (int d = 0; d < limit; d++) bytes[d] = static_cast<char>(tok(dataToks, d).toInt(nullptr, 16));
                     thisFrame.setPayload(bytes);
                     frames->append(thisFrame);
                 }
@@ -3749,6 +3877,11 @@ bool FrameFileIO::saveCanDumpFile(QString filename, const QVector<CANFrame> * fr
 
 bool FrameFileIO::isCanDumpFile(QString filename)
 {
+    /* An empty or header-only file used to match every one of these probes, because the flag
+     * starts true and is only cleared by contrary evidence. Autodetect then picked whichever
+     * format happened to be tried first. Requiring at least one record that actually parsed
+     * is what makes a probe mean something. */
+    int recordsSeen = 0;
     QFile *inFile = new QFile(filename);
     QByteArray line;
     QList<QByteArray> tokens;
@@ -3773,13 +3906,14 @@ bool FrameFileIO::isCanDumpFile(QString filename)
             line = inFile->readLine().toUpper();
             if (line.length() > 1)
             {
+                recordsSeen++; //this line looks like a record of this format
                 /* tokenize */
                 tokens.clear();
                 tokens = line.simplified().split(' ');
                 if(tokens.size() < 3) isMatch = false;
 
                 /* timestamp */                
-                QRegularExpressionMatch timeExpMatched = timeExp.match(tokens[0]);
+                QRegularExpressionMatch timeExpMatched = timeExp.match(tok(tokens, 0));
                 if(!timeExpMatched.hasMatch()) {
                     isMatch = false;
                 }
@@ -3796,19 +3930,19 @@ bool FrameFileIO::isCanDumpFile(QString filename)
                         isMatch = false;
                         continue;
                     }
-                    int ID = tokens[2].toULong(nullptr, 16);
+                    int ID = tok(tokens, 2).toULong(nullptr, 16);
                     if (ID > 0x1FFFFFFF || ID == 0) isMatch = false;
-                    if (tokens[3].size() < 2) {
+                    if (tok(tokens, 3).size() < 2) {
                         isMatch = false;
                         continue;
                     }
-                    int len = tokens[3].at(1) - '0';
+                    int len = tokAt(tokens, 3, 1) - '0';
                     if (len < 0 || len > 8) isMatch = false;
                 }
                 else  //the more concise format
                 {
                     /* ID & value */
-                    //qDebug() << tokens[2];
+                    //qDebug() << tok(tokens, 2);
                     if (tokens.size() < 3)
                     {
                         isMatch = false;
@@ -3816,7 +3950,7 @@ bool FrameFileIO::isCanDumpFile(QString filename)
                     }
 
 
-                    QRegularExpressionMatch IdValExpMatched = IdValExp.match(tokens[2]);
+                    QRegularExpressionMatch IdValExpMatched = IdValExp.match(tok(tokens, 2));
                     if(!IdValExpMatched.hasMatch())
                     {
                         isMatch = false;
@@ -3868,7 +4002,7 @@ bool FrameFileIO::isCanDumpFile(QString filename)
     }
     inFile->close();
     delete inFile;
-    return isMatch;
+    return isMatch && (recordsSeen > 0);
 }
 
 /*
@@ -3911,11 +4045,11 @@ bool FrameFileIO::loadCanDumpFile(QString filename, QVector<CANFrame>* frames)
             if(tokens.size()<3) continue;
 
             /* timestamp */
-            QRegularExpressionMatch timeExpMatched = timeExp.match(tokens[0]);
+            QRegularExpressionMatch timeExpMatched = timeExp.match(tok(tokens, 0));
             if(!timeExpMatched.hasMatch()) continue;
             
             //Sort out the bus
-            std::string busString = tokens[1].toStdString();
+            std::string busString = tok(tokens, 1).toStdString();
             const char* busStringPtr = busString.c_str();
             
             int busNum = 0;
@@ -3941,27 +4075,29 @@ bool FrameFileIO::loadCanDumpFile(QString filename, QVector<CANFrame>* frames)
                 //(1551774790.942758) can1 7A8 [8] F4 DC D1 83 0E 02 00 00
                 //(1551774790.942758) can1 7A8 [08] F4 DC D1 83 0E 02 00 00
                 //     0               1     2   3  4 5  6  7  8  9  10 11
-                thisFrame.setFrameId(tokens[2].toLong(nullptr, 16));
+                thisFrame.setFrameId(tok(tokens, 2).toLong(nullptr, 16));
                 if (thisFrame.frameId() > 0x7FF) thisFrame.setExtendedFrameFormat(true);
                 else thisFrame.setExtendedFrameFormat(false);
                 thisFrame.setFrameType(QCanBusFrame::DataFrame);
                 int numBytes;
-		if (tokens[3].at(2) == ']')
-		    numBytes = tokens[3].at(1) - '0';
+		if (tokAt(tokens, 3, 2) == ']')
+		    numBytes = tokAt(tokens, 3, 1) - '0';
 		else
-		    numBytes = (tokens[3].at(1) - '0')*10 + (tokens[3].at(2) - '0');
+		    numBytes = (tokAt(tokens, 3, 1) - '0')*10 + (tokAt(tokens, 3, 2) - '0');
+                if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
+                if (numBytes > 64) numBytes = 64; //nothing we load has frames bigger than CAN-FD
                 QByteArray bytes(numBytes, 0);
                 for (int c = 0; c < numBytes; c++)
                 {
-                    if ((4 + c) < tokens.size()) bytes[c] = static_cast<char>(tokens[4 + c].toInt(nullptr, 16));
+                    if ((4 + c) < tokens.size()) bytes[c] = static_cast<char>(tok(tokens, 4 + c).toInt(nullptr, 16));
                 }
                 thisFrame.setPayload(bytes);
             }
             else  //the more concise format (first one from list above)
             {
                 /* ID & value */
-                //qDebug() << tokens[2];
-                QRegularExpressionMatch IdValExpMatched = IdValExp.match(tokens[2]);
+                //qDebug() << tok(tokens, 2);
+                QRegularExpressionMatch IdValExpMatched = IdValExp.match(tok(tokens, 2));
                 if(!IdValExpMatched.hasMatch())
                 {
                     qDebug() << "ID regex didn't match!";
@@ -4088,6 +4224,8 @@ bool FrameFileIO::loadLawicelFile(QString filename, QVector<CANFrame>* frames)
             thisFrame.bus = 0;
             line.remove(0, 3);
             int numBytes = line.length() / 2;
+            if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
+            if (numBytes > 64) numBytes = 64; //nothing we load has frames bigger than CAN-FD
             QByteArray bytes(numBytes, 0);
             for (int d = 0; d < numBytes; d++)
             {
@@ -4104,6 +4242,11 @@ bool FrameFileIO::loadLawicelFile(QString filename, QVector<CANFrame>* frames)
 
 bool FrameFileIO::isKvaserFile(QString filename)
 {
+    /* An empty or header-only file used to match every one of these probes, because the flag
+     * starts true and is only cleared by contrary evidence. Autodetect then picked whichever
+     * format happened to be tried first. Requiring at least one record that actually parsed
+     * is what makes a probe mean something. */
+    int recordsSeen = 0;
     QFile *inFile = new QFile(filename);
     QByteArray line;
     int lineCounter = 0;
@@ -4129,6 +4272,7 @@ bool FrameFileIO::isKvaserFile(QString filename)
             line = inFile->readLine().toUpper();
 
             if (line.length() > 70) {
+                recordsSeen++; //this line looks like a record of this format
                 //Chn Identifier Flg   DLC  D0...1...2...3...4...5...6..D7       Time     Dir
                 // 0    000000AD         8  FF  FF  00  00  00  00  00  00     154.266550 R
                 int len = line.mid(21, 3).simplified().toInt();
@@ -4143,7 +4287,7 @@ bool FrameFileIO::isKvaserFile(QString filename)
     }
     inFile->close();
     delete inFile;
-    return isMatch;
+    return isMatch && (recordsSeen > 0);
 }
 
 //Chn Identifier Flg   DLC  D0...1...2...3...4...5...6..D7       Time     Dir
@@ -4191,6 +4335,8 @@ bool FrameFileIO::loadKvaserFile(QString filename, QVector<CANFrame> *frames, bo
                 else thisFrame.setExtendedFrameFormat(false);
             thisFrame.setFrameType(QCanBusFrame::DataFrame);
             int numBytes = line.mid(21, 3).simplified().toInt();
+            if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
+            if (numBytes > 64) numBytes = 64; //nothing we load has frames bigger than CAN-FD
             QByteArray bytes(numBytes, 0);
             for (int i = 0; i < numBytes; i++) {
                 bytes[i] = line.mid(25 + i * 4, 3).simplified().toInt(nullptr, base);
@@ -4210,6 +4356,11 @@ bool FrameFileIO::loadKvaserFile(QString filename, QVector<CANFrame> *frames, bo
 
 bool FrameFileIO::isCabanaFile(QString filename)
 {
+    /* An empty or header-only file used to match every one of these probes, because the flag
+     * starts true and is only cleared by contrary evidence. Autodetect then picked whichever
+     * format happened to be tried first. Requiring at least one record that actually parsed
+     * is what makes a probe mean something. */
+    int recordsSeen = 0;
     QFile *inFile = new QFile(filename);
     QByteArray line;
     int lineCounter = 0;
@@ -4232,10 +4383,11 @@ bool FrameFileIO::isCabanaFile(QString filename)
             line = inFile->readLine().simplified();
             if (line.length() > 2)
             {
+                recordsSeen++; //this line looks like a record of this format
                 QList<QByteArray> tokens = line.split(',');
                 if (tokens.length() >= 3 && tokens.length() < 5)
                 {
-                    int ID = tokens[1].toInt();
+                    int ID = tok(tokens, 1).toInt();
                     if (ID < 1 || ID > 0x1FFFFFFF) isMatch = false;
                 }
                 else isMatch = false;
@@ -4249,7 +4401,7 @@ bool FrameFileIO::isCabanaFile(QString filename)
 
     inFile->close();
     delete inFile;
-    return isMatch;
+    return isMatch && (recordsSeen > 0);
 }
 
 //Cabana uses a CSV file with four columns
@@ -4293,9 +4445,9 @@ bool FrameFileIO::loadCabanaFile(QString filename, QVector<CANFrame>* frames)
             QList<QByteArray> tokens = line.split(',');
             if (tokens.length() >= 3)
             {
-                if (tokens[0].length() > 1)
+                if (tok(tokens, 0).length() > 1)
                 {
-                    double temp = tokens[0].toDouble();
+                    double temp = tok(tokens, 0).toDouble();
                     temp = temp * 1000000;
 
                     if(!timeStampBaseSet)
@@ -4319,17 +4471,17 @@ bool FrameFileIO::loadCabanaFile(QString filename, QVector<CANFrame>* frames)
                     lastTimeStamp = thisFrame.timeStamp().microSeconds();
                 }
 
-                thisFrame.setFrameId(tokens[1].toInt());
+                thisFrame.setFrameId(tok(tokens, 1).toInt());
                 if (thisFrame.frameId() > 0x7ff) thisFrame.setExtendedFrameFormat(true);
                     else thisFrame.setExtendedFrameFormat(false);
 
                 thisFrame.setFrameType(QCanBusFrame::DataFrame);
 
                 thisFrame.isReceived = true;
-                thisFrame.bus = tokens[2].toInt();
+                thisFrame.bus = tok(tokens, 2).toInt();
                 QByteArray bytes(8,0);
                 {
-                    unsigned long long int tempData = tokens[3].toULongLong(nullptr, 16);
+                    unsigned long long int tempData = tok(tokens, 3).toULongLong(nullptr, 16);
                     bytes[0] = ((tempData >> 56) & 0xFF);
                     bytes[1] = ((tempData >> 48) & 0xFF);
                     bytes[2] = ((tempData >> 40) & 0xFF);
@@ -4341,7 +4493,7 @@ bool FrameFileIO::loadCabanaFile(QString filename, QVector<CANFrame>* frames)
                 }
                 
                 // Shift the bytes back correctly so we have a frame that is the proper length
-                unsigned int framelength = tokens[3].length() / 2;
+                unsigned int framelength = tok(tokens, 3).length() / 2;
                 QByteArray finalbytes(framelength,0);
                 uint8_t bytes_shifted_by = 8 - framelength;
                 for (unsigned int j = 0; j < framelength; j++)
@@ -4434,17 +4586,28 @@ bool FrameFileIO::isTeslaAPFile(QString filename)
         return false;
     }
 
+    //an empty file is not a Tesla AP log, and neither is one that holds no whole records
+    int recordsSeen = 0;
+
     while (!inFile->atEnd())
     {
-        inFile->read((char *)&record, sizeof(TeslaAPCANRecord));
+        memset(&record, 0, sizeof(TeslaAPCANRecord));
+        /* Records are fixed size. A partial one at the end means this isn't the format (and used
+         * to leave the tail of the struct holding whatever was on the stack). */
+        if (inFile->read((char *)&record, sizeof(TeslaAPCANRecord)) != (qint64)sizeof(TeslaAPCANRecord))
+        {
+            isValidFile = false;
+            break;
+        }
         if (record.id > 0x7FF) isValidFile = false;
         if ((record.ctr >> 4) > 8) isValidFile = false;
         if ((record.ctr & 0xF) > 6) isValidFile = false;
+        recordsSeen++;
     }
 
     inFile->close();
     delete inFile;
-    return isValidFile;
+    return isValidFile && (recordsSeen > 0);
 }
 
 bool FrameFileIO::loadTeslaAPFile(QString filename, QVector<CANFrame>* frames)
@@ -4474,7 +4637,14 @@ bool FrameFileIO::loadTeslaAPFile(QString filename, QVector<CANFrame>* frames)
             lineCounter = 0;
         }
 
-        inFile->read((char *)&record, sizeof(TeslaAPCANRecord));
+        /* A file whose length isn't a whole number of records leaves the tail of this struct
+         * holding whatever was on the stack, so stop rather than decode garbage. */
+        memset(&record, 0, sizeof(TeslaAPCANRecord));
+        if (inFile->read((char *)&record, sizeof(TeslaAPCANRecord)) != (qint64)sizeof(TeslaAPCANRecord))
+        {
+            foundErrors = true;
+            break;
+        }
 
         thisFrame.isReceived = true;
         thisFrame.setExtendedFrameFormat(false); //format is incapable of extended frames
@@ -4485,6 +4655,8 @@ bool FrameFileIO::loadTeslaAPFile(QString filename, QVector<CANFrame>* frames)
         thisFrame.setFrameId(record.id);
         int numBytes = (record.ctr >> 4);
         thisFrame.bus = (record.ctr & 0xF);
+        if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
+        if (numBytes > 64) numBytes = 64; //nothing we load has frames bigger than CAN-FD
         QByteArray bytes(numBytes, 0);
 
         if (numBytes <= 8)
@@ -5069,9 +5241,9 @@ bool FrameFileIO::loadCANServerFile(QString filename, QVector<CANFrame>* frames)
                 //Log mark message (the same format in v1 or v2.  Just a different identifier byte)
 
                 //Read in the size of the mark
-                uint8_t markSize[1];
-                inFile->read((char*)&markSize, 1);
-                
+                uint8_t markSize[1] = {0}; //a short read would otherwise leave this uninitialized
+                if (inFile->read((char*)&markSize, 1) != 1) break;
+
                 //Read in the mark message
                 QByteArray markData = inFile->read(markSize[0]);
                 
@@ -5108,9 +5280,10 @@ bool FrameFileIO::loadCANServerFile(QString filename, QVector<CANFrame>* frames)
                     frameCounter = 0;
                 }
 
-                uint8_t frameheaderdata[5];
-                inFile->read((char*)frameheaderdata, 5);
-                
+                //a truncated file would otherwise leave part of this reading stale stack bytes
+                uint8_t frameheaderdata[5] = {0, 0, 0, 0, 0};
+                if (inFile->read((char*)frameheaderdata, 5) != 5) break;
+
                 uint32_t frametimeoffset = 0;
                 if (logVersion == 1)
                 {
@@ -5212,8 +5385,18 @@ bool FrameFileIO::loadWiresharkFile(QString filename, QVector<CANFrame>* frames)
             lineCounter = 0;
         }
         
+        /* Everything below reads at fixed offsets into the captured packet. A short capture (a
+         * truncated file, or a capture of some other protocol) would otherwise decode whatever
+         * happened to be left in the shared buffer from the previous packet. */
+        if (packetHeader.caplen < 24)
+        {
+            foundErrors = true;
+            packetData = (const char*)pcap_next(pcap_data_file, &packetHeader);
+            continue;
+        }
+
         timeStamp = packetHeader.ts.tv_sec * 1000000 + packetHeader.ts.tv_usec;
-        if (0 == startTimestamp) 
+        if (0 == startTimestamp)
         {
             startTimestamp = timeStamp;
         }
@@ -5233,6 +5416,11 @@ bool FrameFileIO::loadWiresharkFile(QString filename, QVector<CANFrame>* frames)
         }
         thisFrame.bus = 0;
         int numBytes = *(packetData+20);
+        if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
+        if (numBytes > 64) numBytes = 64; //nothing we load has frames bigger than CAN-FD
+        //never read payload the capture doesn't actually contain
+        if ((quint32)(24 + numBytes) > packetHeader.caplen) numBytes = (int)packetHeader.caplen - 24;
+        if (numBytes < 0) numBytes = 0;
         QByteArray bytes(numBytes, 0);
         if (thisFrame.payload().length() > 8) thisFrame.payload().resize(8);
         for (int d = 0; d < numBytes; d++) 
@@ -5295,6 +5483,15 @@ bool FrameFileIO::loadWiresharkSocketCANFile(QString filename, QVector<CANFrame>
             lineCounter = 0;
         }
         thisFrame.bus = 0;
+
+        /* A SocketCAN capture record is 16 bytes. Anything shorter and the fixed offsets below
+         * would decode leftovers from the previous packet in the shared buffer. */
+        if (packetHeader.caplen < 16)
+        {
+            foundErrors = true;
+            packetData = (const char*) pcap_next(pcap_data_file, &packetHeader);
+            continue;
+        }
 
         // Timestamp
         timeStamp = packetHeader.ts.tv_sec * 1000000 + packetHeader.ts.tv_usec;
@@ -5360,6 +5557,10 @@ bool FrameFileIO::isWiresharkSocketCANFile(QString filename)
     pcap_data_file = NULL;
     return true;
 }
+
+//MDF4 needs the mdflib submodule. When it is not built the two entry points below
+//return false and every place that offers .mf4 to the user is compiled out as well.
+#ifdef MDF4_SUPPORT
 
 bool FrameFileIO::saveMDF4File(QString filename, const QVector<CANFrame>* frames)
 {
@@ -5665,3 +5866,23 @@ bool FrameFileIO::loadMDF4File(QString filename, QVector<CANFrame>* frames)
     reader.Close();
     return !frames->isEmpty();
 }
+
+#else
+
+bool FrameFileIO::saveMDF4File(QString filename, const QVector<CANFrame>* frames)
+{
+    Q_UNUSED(filename);
+    Q_UNUSED(frames);
+    qDebug() << "MDF4 support was not compiled in";
+    return false;
+}
+
+bool FrameFileIO::loadMDF4File(QString filename, QVector<CANFrame>* frames)
+{
+    Q_UNUSED(filename);
+    Q_UNUSED(frames);
+    qDebug() << "MDF4 support was not compiled in";
+    return false;
+}
+
+#endif

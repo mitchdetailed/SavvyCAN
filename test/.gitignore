@@ -1,0 +1,15 @@
+# build output
+release/
+debug/
+Makefile*
+.qmake.stash
+object_script.*
+*.o
+moc_*
+savvycan_tests
+savvycan_tests.exe
+# test result files
+res*.txt
+out_*.txt
+full.txt
+testout.txt

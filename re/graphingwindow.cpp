@@ -20,6 +20,8 @@ GraphingWindow::GraphingWindow(const QVector<CANFrame> *frames, QWidget *parent)
 
     modelFrames = frames;
     dbcHandler = DBCHandler::getReference();
+    //graphs cache DBC_SIGNAL pointers, which have to be dropped before their file is destroyed
+    connect(dbcHandler, &DBCHandler::dbcFileAboutToBeRemoved, this, &GraphingWindow::handleDBCFileRemoved);
 
     ui->graphingView->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectAxes |
                                     QCP::iSelectLegend | QCP::iSelectPlottables);
@@ -620,6 +622,29 @@ void GraphingWindow::editSelectedGraph()
     }
 }
 
+/*
+ * A DBC file is going away. Any graph built from one of its signals still has a usable definition
+ * (ID, start bit, length, scaling are all copied into GraphParams), so rather than deleting the
+ * graph we just forget the signal pointer. The graph keeps plotting from its raw bit definition
+ * instead of asking the signal to decode, which is the least surprising outcome for the user.
+ */
+void GraphingWindow::handleDBCFileRemoved(DBCFile *pFile)
+{
+    if (!pFile) return;
+
+    bool changed = false;
+    for (int i = 0; i < graphParams.count(); i++)
+    {
+        if (graphParams[i].associatedSignal && pFile->ownsSignal(graphParams[i].associatedSignal))
+        {
+            graphParams[i].associatedSignal = nullptr;
+            changed = true;
+        }
+    }
+
+    if (changed) ui->graphingView->replot();
+}
+
 void GraphingWindow::removeAllGraphs()
 {
     QMessageBox::StandardButton confirmDialog;
@@ -994,6 +1019,11 @@ void GraphingWindow::loadDefinitions()
                 //should probably do better at merging all the code that is the same between all these formats instead of duplication...
                 if (tokens[0] == "Z") //very newest format, adds ability to set bus number
                 {
+                    if (tokens.length() < 13)
+                    {
+                        qDebug() << "Truncated Z format graph line, skipping it";
+                        continue;
+                    }
                     gp.ID = tokens[1].toUInt(nullptr, 16);
                     gp.mask = tokens[2].toULongLong(nullptr, 16);
                     gp.startBit = tokens[3].toInt();
@@ -1030,7 +1060,7 @@ void GraphingWindow::loadDefinitions()
                    }
                    if (tokens.length() > 22)
                    {
-                       DBC_MESSAGE *msg = dbcHandler->findMessage(gp.ID);
+                       DBC_MESSAGE *msg = dbcHandler->findMessage(gp.ID, gp.bus);
                        if (msg)
                        {
                             gp.associatedSignal = msg->sigHandler->findSignalByName(tokens[22]);
@@ -1042,6 +1072,11 @@ void GraphingWindow::loadDefinitions()
                 }
                 else if (tokens[0] == "X") //second newest format based around signals
                 {
+                    if (tokens.length() < 12)
+                    {
+                        qDebug() << "Truncated X format graph line, skipping it";
+                        continue;
+                    }
                     gp.ID = tokens[1].toUInt(nullptr, 16);
                     gp.mask = tokens[2].toULongLong(nullptr, 16);
                     gp.startBit = tokens[3].toInt();
@@ -1078,7 +1113,7 @@ void GraphingWindow::loadDefinitions()
                    }
                    if (tokens.length() > 21)
                    {
-                       DBC_MESSAGE *msg = dbcHandler->findMessage(gp.ID);
+                       DBC_MESSAGE *msg = dbcHandler->findMessage(gp.ID, gp.bus);
                        if (msg)
                        {
                             gp.associatedSignal = msg->sigHandler->findSignalByName(tokens[21]);
@@ -1090,12 +1125,24 @@ void GraphingWindow::loadDefinitions()
                 }
                 else //one of the two older formats then
                 {
+                    if (tokens.length() < 6)
+                    {
+                        qDebug() << "Truncated old format graph line, skipping it";
+                        continue;
+                    }
                     gp.ID = tokens[0].toUInt(nullptr, 16);
                     gp.bus = -1;
                     if (tokens[1] == "S") //old signal based graph definition
                     {
+                        //this format can't be interpreted without a DBC file to look the signal up in
+                        DBCFile *dbcFile = dbcHandler->getFileByIdx(0);
+                        if (!dbcFile)
+                        {
+                            qDebug() << "Old signal based graph definition but no DBC file is loaded, skipping it";
+                            continue;
+                        }
                         //tokens[2] is the signal name. Need to use the message ID and this name to look it up
-                        DBC_MESSAGE *msg = dbcHandler->getFileByIdx(0)->messageHandler->findMsgByID(gp.ID);
+                        DBC_MESSAGE *msg = dbcFile->messageHandler->findMsgByID(gp.ID);
                         if (msg != nullptr)
                         {
                             DBC_SIGNAL *sig = msg->sigHandler->findSignalByName(tokens[2]);
@@ -1120,6 +1167,11 @@ void GraphingWindow::loadDefinitions()
                     }
                     else //old standard graph definition
                     {
+                        if (tokens.length() < 11)
+                        {
+                            qDebug() << "Truncated old standard graph line, skipping it";
+                            continue;
+                        }
                         //hard part - this all changed drastically
                         //the difference between intel and motorola format is whether
                         //start is larger than end byte or not.

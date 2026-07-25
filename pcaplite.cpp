@@ -117,6 +117,13 @@ const unsigned char *pcap_next_ng(pcap_t *p, struct pcap_pkthdr *h) {
             return (NULL);
         }
 
+        /* block_size comes out of the file. A zero or undersized value means seeking to
+           "the next block" lands us right back where we started and this loop spins forever,
+           hanging the program on a corrupt capture. */
+        if (bh.block_size < sizeof(bh)) {
+            return (NULL);
+        }
+
         if (bh.block_type != ENCHANCED_PACKET_BLOCK) {
             if (INTERFACE_DESCRITION_BLOCK == bh.block_type) {
                 // Seek to start of options part in the header
@@ -132,6 +139,12 @@ const unsigned char *pcap_next_ng(pcap_t *p, struct pcap_pkthdr *h) {
                     unsigned int option_file_length = 4*(oh.option_length/4) + ((oh.option_length%4) ? 4:0);
 
                     
+                    /* a zero length option never advances the file position either, so the
+                       option walk below would spin on the same bytes forever */
+                    if (0 == oh.option_length && 0 == oh.option_type) {
+                        break; //end of options marker
+                    }
+
                     // read in the buffer if it's large enough or skip
                     if (option_file_length <= sizeof(pcap_buffer)) {
                         bytes_read = fread(pcap_buffer, 1, option_file_length, p->file);

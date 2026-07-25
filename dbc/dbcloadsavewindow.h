@@ -43,6 +43,10 @@ private:
     DBCMainEditor *editorWindow;
     bool inhibitCellProcessing;
 
+    static QString busToText(int bus);
+    static bool textToBus(const QString &text, int &bus);
+    void setBusCell(int row, int bus);
+
     void swapTableRows(bool up);
     QList<QTableWidgetItem*> takeRow(int row);
     void setRow(int row, const QList<QTableWidgetItem*>& rowItems);

@@ -95,6 +95,99 @@ public:
         return originalPos;
     }
 
+    /*
+     * Turns a CAN error frame into something a human can act on.
+     *
+     * SavvyCAN marks an error frame by setting bit 29 of the ID, matching SocketCAN's CAN_ERR_FLAG.
+     * The rest of the SocketCAN encoding puts the error class in the low bits of the ID and the
+     * details in the eight data bytes, which is what this decodes. Drivers that only know "this was
+     * an error" still get a sensible line out of it because the class bits alone are meaningful.
+     */
+    static QString decodeErrorFrame(uint32_t frameId, const QByteArray &data)
+    {
+        QStringList parts;
+
+        //error classes, from the low bits of the ID
+        if (frameId & 0x00000001) parts << "TX timeout";
+        if (frameId & 0x00000002) parts << "Lost arbitration";
+        if (frameId & 0x00000004) parts << "Controller problem";
+        if (frameId & 0x00000008) parts << "Protocol violation";
+        if (frameId & 0x00000010) parts << "Transceiver problem";
+        if (frameId & 0x00000020) parts << "No ACK";
+        if (frameId & 0x00000040) parts << "BUS OFF";
+        if (frameId & 0x00000080) parts << "Bus error";
+        if (frameId & 0x00000100) parts << "Controller restarted";
+
+        //data[1] carries the controller status when the controller problem bit is set
+        if (data.length() > 1)
+        {
+            const quint8 ctrl = (quint8)data.at(1);
+            if (ctrl & 0x01) parts << "RX buffer overflow";
+            if (ctrl & 0x02) parts << "TX buffer overflow";
+            if (ctrl & 0x04) parts << "RX warning level";
+            if (ctrl & 0x08) parts << "TX warning level";
+            if (ctrl & 0x10) parts << "RX error passive";
+            if (ctrl & 0x20) parts << "TX error passive";
+            if (ctrl & 0x40) parts << "Back to error active";
+        }
+
+        //data[2] is the kind of protocol violation
+        if (data.length() > 2)
+        {
+            const quint8 prot = (quint8)data.at(2);
+            if (prot & 0x01) parts << "Bit error";
+            if (prot & 0x02) parts << "Form error";
+            if (prot & 0x04) parts << "Stuff error";
+            if (prot & 0x08) parts << "Cannot send dominant bit";
+            if (prot & 0x10) parts << "Cannot send recessive bit";
+            if (prot & 0x20) parts << "Bus overload";
+            if (prot & 0x40) parts << "Active error announcement";
+            if (prot & 0x80) parts << "Error while transmitting";
+        }
+
+        //data[3] says where in the frame it went wrong
+        if (data.length() > 3)
+        {
+            const quint8 loc = (quint8)data.at(3);
+            QString locStr;
+            switch (loc)
+            {
+            case 0x02: locStr = "ID bits 28-21"; break;
+            case 0x03: locStr = "start of frame"; break;
+            case 0x04: locStr = "bit SRTR"; break;
+            case 0x05: locStr = "bit IDE"; break;
+            case 0x06: locStr = "ID bits 20-18"; break;
+            case 0x07: locStr = "ID bits 17-13"; break;
+            case 0x08: locStr = "CRC sequence"; break;
+            case 0x09: locStr = "reserved bit 0"; break;
+            case 0x0A: locStr = "data section"; break;
+            case 0x0B: locStr = "data length code"; break;
+            case 0x0C: locStr = "bit RTR"; break;
+            case 0x0D: locStr = "reserved bit 1"; break;
+            case 0x0E: locStr = "ID bits 4-0"; break;
+            case 0x0F: locStr = "ID bits 12-5"; break;
+            case 0x12: locStr = "intermission"; break;
+            case 0x18: locStr = "CRC delimiter"; break;
+            case 0x19: locStr = "ACK slot"; break;
+            case 0x1A: locStr = "end of frame"; break;
+            case 0x1B: locStr = "ACK delimiter"; break;
+            default: break;
+            }
+            if (!locStr.isEmpty()) parts << QString("at %1").arg(locStr);
+        }
+
+        //the last two bytes are the controller's own error counters, the most useful part
+        if (data.length() > 7)
+        {
+            const quint8 txErr = (quint8)data.at(6);
+            const quint8 rxErr = (quint8)data.at(7);
+            if (txErr || rxErr) parts << QString("TX err %1, RX err %2").arg(txErr).arg(rxErr);
+        }
+
+        if (parts.isEmpty()) return QStringLiteral("Error frame (no detail reported)");
+        return parts.join(", ");
+    }
+
     static QString unQuote(QString inStr)
     {
         QStringList temp;

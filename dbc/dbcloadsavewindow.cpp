@@ -7,6 +7,51 @@
 #include "helpwindow.h"
 #include "connections/canconmanager.h"
 
+//A DBC file that is not tied to one particular bus stores -1 internally. Showing that as a bare
+//number confuses people so the bus column says "All" instead. Typing any of the words below
+//(or -1) puts it back to the all buses setting.
+static const QString ALL_BUSES_TEXT = QStringLiteral("All");
+
+QString DBCLoadSaveWindow::busToText(int bus)
+{
+    if (bus < 0) return ALL_BUSES_TEXT;
+    return QString::number(bus);
+}
+
+bool DBCLoadSaveWindow::textToBus(const QString &text, int &bus)
+{
+    const QString trimmed = text.trimmed();
+
+    if (trimmed.compare(ALL_BUSES_TEXT, Qt::CaseInsensitive) == 0 ||
+        trimmed.compare(QStringLiteral("any"), Qt::CaseInsensitive) == 0 ||
+        trimmed == QStringLiteral("*") || trimmed == QStringLiteral("-1"))
+    {
+        bus = -1;
+        return true;
+    }
+
+    bool ok = false;
+    const int val = trimmed.toInt(&ok);
+    //toInt hands back a zero for anything it can't parse, so don't trust it without the flag
+    if (!ok || val < 0) return false;
+
+    bus = val;
+    return true;
+}
+
+//writes the bus column for a row without tripping cellChanged
+void DBCLoadSaveWindow::setBusCell(int row, int bus)
+{
+    const bool wasInhibited = inhibitCellProcessing;
+    inhibitCellProcessing = true;
+
+    QTableWidgetItem *item = ui->tableFiles->item(row, 1);
+    if (item) item->setText(busToText(bus));
+    else ui->tableFiles->setItem(row, 1, new QTableWidgetItem(busToText(bus)));
+
+    inhibitCellProcessing = wasInhibited;
+}
+
 DBCLoadSaveWindow::DBCLoadSaveWindow(const QVector<CANFrame> *frames, QWidget *parent) :
     QDialog(parent),
     ui(new Ui::DBCLoadSaveWindow)
@@ -29,6 +74,8 @@ DBCLoadSaveWindow::DBCLoadSaveWindow(const QVector<CANFrame> *frames, QWidget *p
     ui->tableFiles->setColumnWidth(2, 120);
     ui->tableFiles->setColumnWidth(3, 90);
     ui->tableFiles->horizontalHeader()->setStretchLastSection(true);
+    if (QTableWidgetItem *busHeader = ui->tableFiles->horizontalHeaderItem(1))
+        busHeader->setToolTip("Which bus this file decodes. \"All\" (or -1) means every bus, otherwise use the bus number starting at 0.");
 
     // Populate table
     for (int idx=0; idx<dbcHandler->getFileCount(); idx++)
@@ -36,7 +83,7 @@ DBCLoadSaveWindow::DBCLoadSaveWindow(const QVector<CANFrame> *frames, QWidget *p
         DBCFile * file = dbcHandler->getFileByIdx(idx);
         ui->tableFiles->insertRow(ui->tableFiles->rowCount());
         ui->tableFiles->setItem(idx, 0, new QTableWidgetItem(file->getFilename()));
-        QString bus = QString::number(file->getAssocBus() );
+        QString bus = busToText(file->getAssocBus());
         ui->tableFiles->setItem(idx, 1, new QTableWidgetItem(bus));
 
         QComboBox * mc_item = addMatchingCriteriaCombobox(idx);
@@ -139,16 +186,22 @@ void DBCLoadSaveWindow::newFile()
 {
     int idx = dbcHandler->createBlankFile();
     idx = ui->tableFiles->rowCount();
+    DBCFile *file = dbcHandler->getFileByIdx(idx);
+
+    inhibitCellProcessing = true;
     ui->tableFiles->insertRow(ui->tableFiles->rowCount());
     ui->tableFiles->setItem(idx, 0, new QTableWidgetItem("UNNAMEDFILE"));
-    ui->tableFiles->setItem(idx, 1, new QTableWidgetItem("-1"));
+    ui->tableFiles->setItem(idx, 1, new QTableWidgetItem(busToText(file ? file->getAssocBus() : -1)));
 
     QComboBox * mc_item = addMatchingCriteriaCombobox(idx);
     mc_item->setCurrentIndex(EXACT);
 
     QTableWidgetItem *item = new QTableWidgetItem("");
     item->setCheckState(Qt::Checked);
-    ui->tableFiles->setItem(idx, 3, item);    
+    ui->tableFiles->setItem(idx, 3, item);
+    inhibitCellProcessing = false;
+
+    updateSettings();
 }
 
 void DBCLoadSaveWindow::loadFile()
@@ -196,7 +249,7 @@ void DBCLoadSaveWindow::loadFile()
         int idx = ui->tableFiles->rowCount();
         ui->tableFiles->insertRow(ui->tableFiles->rowCount());
         ui->tableFiles->setItem(idx, 0, new QTableWidgetItem(file->getFilename()));
-        ui->tableFiles->setItem(idx, 1, new QTableWidgetItem("-1"));
+        ui->tableFiles->setItem(idx, 1, new QTableWidgetItem(busToText(file->getAssocBus())));
 
         DBC_ATTRIBUTE *attr = file->findAttributeByName("matchingcriteria");
         QComboBox * mc_item = addMatchingCriteriaCombobox(idx);
@@ -333,14 +386,22 @@ void DBCLoadSaveWindow::cellChanged(int row, int col)
     if (col == 1) //the bus column
     {
         DBCFile *file = dbcHandler->getFileByIdx(row);
-        int bus = ui->tableFiles->item(row, col)->text().toInt();
+        if (!file) return;
+
         //int numBuses = CANConManager::getInstance()->getNumBuses();
-        if (bus > -2)
+        int bus = -1;
+        if (textToBus(ui->tableFiles->item(row, col)->text(), bus))
         {
             file->setAssocBus(bus);
+            setBusCell(row, bus); //normalize what is shown, -1 and stray spaces become "All"
+            updateSettings();
         }
-        updateSettings();
-    } 
+        else
+        {
+            //not something we can make sense of, put back what the file actually has
+            setBusCell(row, file->getAssocBus());
+        }
+    }
     else if (col == 3) // labelfilters
     {
         DBCFile *file = dbcHandler->getFileByIdx(row);

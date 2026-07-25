@@ -2,6 +2,9 @@
 #include <QNetworkDatagram>
 #include <QThread>
 
+//how many buses per connection we keep settings for. Nothing SavvyCAN talks to has more than this.
+#define MAX_SAVED_BUSES 8
+
 #include "connectionwindow.h"
 #include "mainwindow.h"
 #include "helpwindow.h"
@@ -56,6 +59,11 @@ ConnectionWindow::ConnectionWindow(QWidget *parent) :
     connect(ui->btnClearDebug, &QPushButton::clicked, this, &ConnectionWindow::handleClearDebugText);
     connect(ui->btnNewConnection, &QPushButton::clicked, this, &ConnectionWindow::handleNewConn);
     connect(ui->btnResetConn, &QPushButton::clicked, this, &ConnectionWindow::handleResetConn);
+
+    //the health readout ticks on its own rather than on every frame, which would be far too often
+    connect(&healthTimer, &QTimer::timeout, this, &ConnectionWindow::updateBusHealth);
+    healthTimer.setInterval(1000);
+    healthTimer.start();
     connect(ui->tableConnections->selectionModel(), &QItemSelectionModel::currentRowChanged, this, &ConnectionWindow::currentRowChanged);
     connect(ui->tabBuses, &QTabBar::currentChanged, this, &ConnectionWindow::currentTabChanged);
     connect(ui->btnSaveBus, &QPushButton::clicked, this, &ConnectionWindow::saveBusSettings);
@@ -289,12 +297,45 @@ void ConnectionWindow::handleRemoveConn()
     /* remove connection from model & manager */
     connModel->remove(conn_p);
 
-    /* stop and delete connection */
+    /* stop and delete connection. deleteLater rather than delete: other parts of the program
+     * (frame sender, script windows) can be holding this pointer across a tick, and there may be
+     * queued signal deliveries still pointed at the object. Letting the event loop reap it once
+     * the stack unwinds turns a use-after-free into a no-op. */
     conn_p->stop();
-    delete conn_p;
+    conn_p->deleteLater();
 
     /* select first connection in list */
     ui->tableConnections->selectRow(0);
+}
+
+//grab the settings of every bus a connection has so they can be restored onto another one
+QList<CANBus> ConnectionWindow::captureBusConfig(CANConnection *conn_p)
+{
+    QList<CANBus> buses;
+    if (!conn_p) return buses;
+
+    for (int i = 0; i < conn_p->getNumBuses(); i++)
+    {
+        CANBus bus;
+        if (conn_p->getBusSettings(i, bus)) buses.append(bus);
+        else break; //nothing configured past this point
+    }
+
+    return buses;
+}
+
+//push a captured set of bus settings back into a connection
+void ConnectionWindow::applyBusConfig(CANConnection *conn_p, const QList<CANBus> &buses)
+{
+    if (!conn_p) return;
+
+    /* Deliberately not bounded by getNumBuses() here. A connection that has only just been started
+     * may not have worked out how many buses its hardware has yet, and every driver bound checks the
+     * index for itself anyway, so an extra call is harmless. */
+    for (int i = 0; i < buses.count(); i++)
+    {
+        conn_p->setBusSettings(i, buses[i]);
+    }
 }
 
 void ConnectionWindow::handleResetConn()
@@ -307,7 +348,7 @@ void ConnectionWindow::handleResetConn()
     int selIdx = ui->tableConnections->selectionModel()->currentIndex().row();
     if (selIdx <0) return;
 
-    qDebug() << "remove connection at index: " << selIdx;
+    qDebug() << "reset connection at index: " << selIdx;
 
     CANConnection* conn_p = connModel->getAtIdx(selIdx);
     if(!conn_p) return;
@@ -315,11 +356,26 @@ void ConnectionWindow::handleResetConn()
     type = conn_p->getType();
     port = conn_p->getPort();
     driver = conn_p->getDriver();
-    serSpeed = 0; //TODO: implement these
-    busSpeed = 0;
-    dataRate = 0;
-    canFd = false;
+    serSpeed = conn_p->getSerialSpeed();
 
+    /* Take a copy of how the device is set up before we tear it down, otherwise the replacement
+     * comes back with nothing but defaults. The constructor only takes the first bus so the rest
+     * get pushed back in once the new connection exists. */
+    const QList<CANBus> buses = captureBusConfig(conn_p);
+
+    if (buses.count() > 0)
+    {
+        busSpeed = buses[0].getSpeed();
+        canFd = buses[0].isCanFD();
+        dataRate = buses[0].getDataRate();
+    }
+    else
+    {
+        qDebug() << "reset: the connection had no bus settings to preserve";
+        busSpeed = 0;
+        dataRate = 0;
+        canFd = false;
+    }
 
     /* stop and delete connection */
     conn_p->stop();
@@ -327,7 +383,11 @@ void ConnectionWindow::handleResetConn()
     conn_p = nullptr;
 
     conn_p = create(type, port, driver, serSpeed, busSpeed,canFd,dataRate);
-    if (conn_p) connModel->replace(selIdx, conn_p);
+    if (conn_p)
+    {
+        applyBusConfig(conn_p, buses);
+        connModel->replace(selIdx, conn_p);
+    }
 }
 
 /* status */
@@ -379,6 +439,51 @@ void ConnectionWindow::saveBusSettings()
         bus.setDataRate(ui->cbDataRate->currentText().toInt());
         conn_p->setBusSettings(offset, bus);
     }
+}
+
+/*
+ * Shows how busy the selected bus is. The figures come from the traffic itself rather than from
+ * the adapter, so they mean the same thing for every connection type - a socketcand or MQTT link
+ * reports load just as a local adapter does.
+ */
+void ConnectionWindow::updateBusHealth()
+{
+    const int selIdx = ui->tableConnections->selectionModel()->currentIndex().row();
+    CANConnection *conn_p = connModel->getAtIdx(selIdx);
+
+    //nothing selected, so there is nothing to report on
+    if (!conn_p)
+    {
+        ui->lblHealthLoad->setText("-");
+        ui->lblHealthRate->setText("-");
+        ui->lblHealthCounts->setText("-");
+        ui->lblHealthErrors->setText("-");
+        ui->lblHealthErrors->setStyleSheet("");
+        return;
+    }
+
+    //the tab index is the connection's own bus number, statistics are keyed by global bus number
+    const int localBus = qMax(0, ui->tabBuses->currentIndex());
+    const int busBase = CANConManager::getInstance()->getBusBase(conn_p);
+
+    /* Default constructed stats are all zero, which is exactly the right answer for a bus that is
+     * connected but has not carried a frame yet. Showing dashes there reads as "broken" when the
+     * bus is merely quiet. */
+    CANBusStats stats;
+    if (busBase >= 0) CANConManager::getInstance()->getBusStats(busBase + localBus, stats);
+
+    CANBus bus;
+    const bool haveSpeed = conn_p->getBusSettings(localBus, bus) && bus.getSpeed() > 0;
+
+    if (haveSpeed) ui->lblHealthLoad->setText(QString::number(stats.busLoadPercent, 'f', 1) + " %");
+    else ui->lblHealthLoad->setText("(needs bus speed)");
+
+    ui->lblHealthRate->setText(QString::number(stats.frameRate));
+    ui->lblHealthCounts->setText(QString("%1 / %2").arg(stats.framesReceived).arg(stats.framesSent));
+
+    ui->lblHealthErrors->setText(QString::number(stats.errorFrames));
+    //make error frames stand out, they are the thing worth noticing here
+    ui->lblHealthErrors->setStyleSheet(stats.errorFrames > 0 ? "color: red; font-weight: bold;" : "");
 }
 
 void ConnectionWindow::populateBusDetails(int offset)
@@ -561,9 +666,47 @@ void ConnectionWindow::loadConnections()
     if (portNames.size() != driverNames.size() || devTypes.size() != driverNames.size() ||  busSpeeds.size() != driverNames.size() || isCanFds.size() != driverNames.size() ||
 	DataRates.size() != driverNames.size() || serialSpeeds.size() != driverNames.size() ) return;
 
+    /* Bus 0 is handled through the constructor above for backwards compatibility, the rest of the
+     * buses on a multi bus device get pushed in afterwards. Anything a settings file doesn't have
+     * simply isn't restored, so an older file still loads. */
+    QVector<int> allSpeeds[MAX_SAVED_BUSES];
+    QVector<int> allDataRates[MAX_SAVED_BUSES];
+    QVector<int> allCanFds[MAX_SAVED_BUSES];
+    QVector<int> allListenOnly[MAX_SAVED_BUSES];
+    QVector<int> allActive[MAX_SAVED_BUSES];
+
+    for (int busIdx = 0; busIdx < MAX_SAVED_BUSES; busIdx++)
+    {
+        allSpeeds[busIdx] = settings.value(QString("connections/busSpeeds_%1").arg(busIdx)).value<QVector<int>>();
+        allDataRates[busIdx] = settings.value(QString("connections/DataRates_%1").arg(busIdx)).value<QVector<int>>();
+        allCanFds[busIdx] = settings.value(QString("connections/isCanFds_%1").arg(busIdx)).value<QVector<int>>();
+        allListenOnly[busIdx] = settings.value(QString("connections/listenOnly_%1").arg(busIdx)).value<QVector<int>>();
+        allActive[busIdx] = settings.value(QString("connections/isActive_%1").arg(busIdx)).value<QVector<int>>();
+    }
+
     for(int i = 0 ; i < portNames.size() ; i++)
     {
       CANConnection* conn_p = create((CANCon::type)devTypes[i], portNames[i], driverNames[i], serialSpeeds[i], busSpeeds[i], isCanFds[i] ? true : false, DataRates[i]);
+
+        QList<CANBus> buses;
+        for (int busIdx = 0; busIdx < MAX_SAVED_BUSES; busIdx++)
+        {
+            //an array that isn't the right length was never saved for this many connections
+            if (allSpeeds[busIdx].size() != portNames.size()) break;
+
+            CANBus bus;
+            bus.setSpeed(allSpeeds[busIdx][i]);
+            if (allDataRates[busIdx].size() == portNames.size()) bus.setDataRate(allDataRates[busIdx][i]);
+            if (allCanFds[busIdx].size() == portNames.size()) bus.setCanFD(allCanFds[busIdx][i] ? true : false);
+            if (allListenOnly[busIdx].size() == portNames.size()) bus.setListenOnly(allListenOnly[busIdx][i] ? true : false);
+            //settings written before buses had an enabled flag should come back enabled
+            if (allActive[busIdx].size() == portNames.size()) bus.setActive(allActive[busIdx][i] ? true : false);
+            else bus.setActive(true);
+
+            buses.append(bus);
+        }
+        applyBusConfig(conn_p, buses);
+
         /* add connection to model */
         connModel->add(conn_p);
     }
@@ -582,32 +725,59 @@ void ConnectionWindow::saveConnections()
     QVector<int> devTypes;
     QVector<QString> driverNames;
     QVector<int> serialSpeeds;
-    QVector<int> busSpeeds;
-    QVector<int> DataRates;
-    QVector<int> CanFds;
- 
+
+    //one array per bus index so a multi bus device keeps the settings of all of its buses
+    QVector<int> busSpeeds[MAX_SAVED_BUSES];
+    QVector<int> dataRates[MAX_SAVED_BUSES];
+    QVector<int> canFds[MAX_SAVED_BUSES];
+    QVector<int> listenOnly[MAX_SAVED_BUSES];
+    QVector<int> isActive[MAX_SAVED_BUSES];
+
     /* save connections */
     foreach(CANConnection* conn_p, conns)
-      { CANBus bus;
-
-        if (conn_p->getBusSettings(0, bus)) {
-          busSpeeds.append(bus.getSpeed());
-	  CanFds.append(bus.isCanFD() ? 1 : 0);
-	  DataRates.append(bus.getDataRate());
-        }
-	serialSpeeds.append(conn_p->getSerialSpeed());
+    {
+        serialSpeeds.append(conn_p->getSerialSpeed());
         portNames.append(conn_p->getPort());
         devTypes.append(conn_p->getType());
         driverNames.append(conn_p->getDriver());
+
+        /* Every array has to end up the same length as the others, the loader throws the whole lot
+         * away otherwise. So a bus we can't read still gets a placeholder entry. */
+        for (int busIdx = 0; busIdx < MAX_SAVED_BUSES; busIdx++)
+        {
+            CANBus bus;
+            if (busIdx < conn_p->getNumBuses() && conn_p->getBusSettings(busIdx, bus))
+            {
+                busSpeeds[busIdx].append(bus.getSpeed());
+                canFds[busIdx].append(bus.isCanFD() ? 1 : 0);
+                dataRates[busIdx].append(bus.getDataRate());
+                listenOnly[busIdx].append(bus.isListenOnly() ? 1 : 0);
+                isActive[busIdx].append(bus.isActive() ? 1 : 0);
+            }
+            else
+            {
+                busSpeeds[busIdx].append(0);
+                canFds[busIdx].append(0);
+                dataRates[busIdx].append(0);
+                listenOnly[busIdx].append(0);
+                isActive[busIdx].append(0);
+            }
+        }
     }
 
     settings.setValue("connections/portNames", QVariant::fromValue(portNames));
     settings.setValue("connections/types", QVariant::fromValue(devTypes));
     settings.setValue("connections/driverNames", QVariant::fromValue(driverNames));
-    settings.setValue("connections/busSpeeds_0", QVariant::fromValue(busSpeeds));
-    settings.setValue("connections/isCanFds_0", QVariant::fromValue(CanFds)); 
-    settings.setValue("connections/DataRates_0", QVariant::fromValue(DataRates)); 
-    settings.setValue("connections/serialSpeeds", QVariant::fromValue(serialSpeeds)); 
+    settings.setValue("connections/serialSpeeds", QVariant::fromValue(serialSpeeds));
+
+    for (int busIdx = 0; busIdx < MAX_SAVED_BUSES; busIdx++)
+    {
+        settings.setValue(QString("connections/busSpeeds_%1").arg(busIdx), QVariant::fromValue(busSpeeds[busIdx]));
+        settings.setValue(QString("connections/isCanFds_%1").arg(busIdx), QVariant::fromValue(canFds[busIdx]));
+        settings.setValue(QString("connections/DataRates_%1").arg(busIdx), QVariant::fromValue(dataRates[busIdx]));
+        settings.setValue(QString("connections/listenOnly_%1").arg(busIdx), QVariant::fromValue(listenOnly[busIdx]));
+        settings.setValue(QString("connections/isActive_%1").arg(busIdx), QVariant::fromValue(isActive[busIdx]));
+    }
 }
 
 void ConnectionWindow::moveConnUp()

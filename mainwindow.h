@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include <QMainWindow>
+#include <QSortFilterProxyModel>
 #include <QSerialPort>
 #include <QSerialPortInfo>
 #include "canframemodel.h"
@@ -153,6 +154,9 @@ private:
 
     //canbus related data
     CANFrameModel *model;
+    /* Sits between the model and the table and owns the sort order. Indexes from the view are its
+     * indexes, so mapToSource is needed before using a row against the model's frame list. */
+    QSortFilterProxyModel *proxyModel;
     DBCHandler *dbcHandler;
     QByteArray inputBuffer;
     QTimer updateTimer;
@@ -213,6 +217,10 @@ private:
     bool isConnected;
     QPoint contextMenuPosition;
     bool rowExpansionActive = false;
+    /* Rows the user has expanded or collapsed by hand, keyed by row with true meaning expanded.
+     * The frame model resets itself wholesale on every refresh, which makes the table forget every
+     * row height it was given, so these have to be reapplied afterwards. */
+    QHash<int, bool> rowHeightOverrides;
 
     //private methods
     QString getSignalNameFromPosition(QPoint pos);
@@ -230,6 +238,9 @@ private:
     void writeSettings();
     bool eventFilter(QObject *obj, QEvent *event);
     void manageRowExpansion();
+    //set one row's height, and put every remembered row height back after a model reset
+    void applyRowHeight(int row, bool expanded);
+    void reapplyRowHeights();
     void disableAutoRowExpansion();
     void createSenderRow();
     void processSenderCellChange(int line, int col);

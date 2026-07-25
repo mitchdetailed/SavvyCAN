@@ -41,6 +41,8 @@ protected:
     virtual bool piSendFrame(const CANFrame&);
 
     void disconnectDevice();
+    //publish the current status so the connection window's table refreshes
+    void sendStatus();
 
 private slots:
     void errorReceived(QCanBusDevice::CanBusError) const;

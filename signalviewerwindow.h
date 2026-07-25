@@ -31,6 +31,8 @@ private slots:
     void clearSignalsTable(bool);
     void saveDefinitions();
     void loadDefinitions(bool);
+    //drop any rows pointing into a DBC file that is about to be destroyed
+    void handleDBCFileRemoved(DBCFile *pFile);
 
 private:
     Ui::SignalViewerWindow *ui;

@@ -48,6 +48,19 @@
          </property>
         </widget>
        </item>
+       <item>
+        <widget class="QLabel" name="lblOverlapWarning">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+         <property name="toolTip">
+          <string>Signals in the same message should not share bits</string>
+         </property>
+        </widget>
+       </item>
       </layout>
      </item>
      <item>

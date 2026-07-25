@@ -41,6 +41,8 @@ SignalViewerWindow::SignalViewerWindow(const QVector<CANFrame> *frames, QWidget 
     verticalHeader->setFont(QFont());
 
     dbcHandler = DBCHandler::getReference();
+    //we hold DBC_SIGNAL pointers, so we have to let go of them before their file is destroyed
+    connect(dbcHandler, &DBCHandler::dbcFileAboutToBeRemoved, this, &SignalViewerWindow::handleDBCFileRemoved);
     currentlySelectedMsg = nullptr;
 
     connect(ui->cbNodes, SIGNAL(currentIndexChanged(int)), this, SLOT(loadMessages(int)));
@@ -150,6 +152,37 @@ void SignalViewerWindow::removeSelectedSignal()
     if (selRow < 0) return; //no selected row
     signalList.removeAt(selRow);
     ui->tableViewer->removeRow(selRow);
+}
+
+/*
+ * A DBC file is about to be destroyed. Every signal we are watching that lives inside it has to go
+ * now, while the pointers are still valid - once this returns the objects are gone and anything
+ * still referring to them would be reading freed memory on the next update.
+ */
+void SignalViewerWindow::handleDBCFileRemoved(DBCFile *pFile)
+{
+    if (!pFile) return;
+
+    for (int row = signalList.size() - 1; row >= 0; row--)
+    {
+        if (!pFile->ownsSignal(signalList.at(row))) continue;
+
+        signalList.removeAt(row);
+        if (row < ui->tableViewer->rowCount()) ui->tableViewer->removeRow(row);
+    }
+
+    //the currently selected message may have belonged to that file too
+    if (currentlySelectedMsg)
+    {
+        for (int m = 0; m < pFile->messageHandler->getCount(); m++)
+        {
+            if (pFile->messageHandler->findMsgByIdx(m) == currentlySelectedMsg)
+            {
+                currentlySelectedMsg = nullptr;
+                break;
+            }
+        }
+    }
 }
 
 void SignalViewerWindow::loadNodes()

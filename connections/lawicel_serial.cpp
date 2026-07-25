@@ -364,7 +364,9 @@ void LAWICELSerial::disconnectDevice() {
 
         }
         serial->disconnect(); //disconnect all signals
-        delete serial;
+        /* This can be reached from the port's own error signal (device unplugged). Deleting the
+         * sender while it is mid-emission is undefined behavior, so let the event loop do it. */
+        serial->deleteLater();
         serial = nullptr;
     }
 

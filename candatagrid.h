@@ -58,19 +58,30 @@ public:
     void setCellTextState(int bitPos, GridTextState state);
     GridTextState getCellTextState(int bitPos);
     void setUsedSignalNum(int bit, int signal);
+    void clearUsedSignalNums();
     void setSignalNames(int sigIdx, const QString sigName);
     void clearSignalNames();
     int getUsedSignalNum(int bit);
     GridMode getMode();
     void setMode(GridMode mode);
     void setBytesToDraw(int num);
+    //when drag mode is on the left button drags cells around instead of emitting gridClicked
+    void setDragEnabled(bool enabled);
+    bool isDragEnabled();
 
 protected:
     void mousePressEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
+    void mouseMoveEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
+    void mouseReleaseEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
 
 signals:
     void gridClicked(int bitClicked);
     void gridRightClicked(int bitClicked);
+    //only emitted when drag mode is enabled. Begin fires on the press, move fires each time the
+    //cursor crosses into a different cell, end fires when the button comes back up.
+    void gridDragBegin(int bitClicked);
+    void gridDragMove(int bitUnderCursor);
+    void gridDragEnd();
 
 private:
     Ui::CANDataGrid *ui;
@@ -84,6 +95,9 @@ private:
     GridTextState textStates[64][8]; //first dimension is bytes, second is bits
     QPoint upperLeft, gridSize;
     GridMode gridMode;
+    bool dragEnabled;
+    bool dragging;
+    int dragLastBit;
     QBrush blackBrush, whiteBrush, redBrush, greenBrush, grayBrush;
     QBrush greenHashBrush, blackHashBrush;
     QPainter *painter;
@@ -110,6 +124,8 @@ private:
     void paintCommonBeginning();
     void paintCommonEnding();    
     int gridToBitPosition(int x, int y);
+    //turns a widget coordinate into a bit number. Points that aren't over a cell are rejected.
+    bool pointToBit(const QPoint &pos, int &bit);
     QPoint getGridPointFromBitPosition(int bitPos);
     int getSignalRowRun(int sigNum, int startBit);
 };

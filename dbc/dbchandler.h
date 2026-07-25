@@ -85,6 +85,12 @@ public:
     QString getFullFilename();
     QString getFilename();
     QString getFilenameNoExt();
+    /**
+     * @brief Does this signal live inside this file?
+     * @note Used when reacting to DBCHandler::dbcFileAboutToBeRemoved so a window can tell whether
+     * a pointer it is holding is about to be destroyed. Compares by address, not by name.
+     */
+    bool ownsSignal(const DBC_SIGNAL *sig);
     QString getPath();
     int getAssocBus();
     void setAssocBus(int bus);
@@ -131,7 +137,8 @@ public:
     DBC_MESSAGE* findMessage(const QString msgName);
     DBC_MESSAGE* findMessage(const QString msgName, const QString fullyQualifiedNodeName);
     DBC_MESSAGE* findMessage(const QString msgName, const QString nodeName, const QString fileNameNoExt);
-    DBC_MESSAGE* findMessage(uint32_t id);
+    //bus defaults to -1 which means "caller doesn't know the bus" and searches every loaded file
+    DBC_MESSAGE* findMessage(uint32_t id, int bus = -1);
     DBC_MESSAGE* findMessageForFilter(uint32_t id, MatchingCriteria_t * matchingCriteria);
     int getFileCount();
     DBCFile* getFileByIdx(int idx);
@@ -141,8 +148,23 @@ public:
     DBCFile* loadSecretCSVFile(QString);
     static DBCHandler *getReference();
 
+signals:
+    /**
+     * @brief Emitted just before a loaded DBC file is destroyed.
+     * @param pFile - the file that is about to go away
+     *
+     * Windows that hold DBC_MESSAGE* or DBC_SIGNAL* pointers into a file must drop them when they
+     * see this, because everything inside the file is deleted immediately afterwards. Use
+     * DBCFile::ownsSignal() to work out whether a pointer you are holding belongs to it.
+     */
+    void dbcFileAboutToBeRemoved(DBCFile *pFile);
+
 private:
-    QList<DBCFile> loadedFiles;
+    /* Files live on the heap and the list holds pointers, so a DBC_MESSAGE* or DBC_SIGNAL* handed
+     * out to the rest of the program stays valid no matter how the list is grown, shuffled or
+     * shrunk. Storing DBCFile by value here invalidated every outstanding pointer whenever the
+     * list reallocated or an entry was removed, which crashed any window still showing a signal. */
+    QList<DBCFile*> loadedFiles;
 
     DBCHandler();
     static DBCHandler *instance;

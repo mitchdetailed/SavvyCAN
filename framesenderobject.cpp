@@ -301,7 +301,7 @@ void FrameSenderObject::processIncomingFrame(CANFrame *frame)
             if (passedChecks && (thisTrigger->triggerMask & (TriggerMask::TRG_SIGNAL | TriggerMask::TRG_ID) ) )
             {
                 bool sigCheckPassed = false;
-                DBC_MESSAGE *msg = dbcHandler->findMessage(thisTrigger->ID);
+                DBC_MESSAGE *msg = dbcHandler->findMessage(thisTrigger->ID, thisTrigger->bus);
                 if (msg)
                 {
                     DBC_SIGNAL *sig = msg->sigHandler->findSignalByName(thisTrigger->sigName);
