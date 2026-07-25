@@ -33,6 +33,7 @@ public slots:
     void handleConnTypeChanged();
     void handleDeviceTypeChanged();
     void handleCreateButton();
+    void handleScanDevices();
 
 private:
     Ui::NewConnectionDialog *ui;
@@ -50,6 +51,23 @@ private:
     void selectLawicel();
     void selectCANserver();
     void selectCANlogserver();
+    void selectGSUSB();
+    void selectSeeed();
+    void selectRobotell();
+    void selectCanalystII();
+    void selectIxxat();
+    void selectPythonCan();
+    void selectUdpMulticast();
+    //fills the port list from a driver's device scan. quiet keeps it silent when nothing turns up.
+    bool populateScannedDevices(CANCon::type type, bool quiet);
+    void selectUsb2Can();
+    void selectIscan();
+    void selectNican();
+    void selectNeousys();
+    //shared setup for the plain "serial port plus a CAN speed" style adapters
+    void selectSerialAdapter(bool showBusSpeed, bool showSerialSpeed, int defaultSerialSpeed);
+    void populateCANSpeeds();
+    void populateSerialSpeeds();
     bool isSerialBusAvailable();
     void setPortName(CANCon::type pType, QString pPortName, QString pDriver);
 };

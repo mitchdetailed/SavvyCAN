@@ -84,7 +84,6 @@ CANFrameModel::CANFrameModel(QObject *parent)
     needFilterRefresh = false;
     lastUpdateNumFrames = 0;
     timeFormat =  "MMM-dd HH:mm:ss.zzz";
-    sortDirAsc = false;
     bytesPerLine = 8;
     lastFilteredUpdateCount = 0;
     hasAnyDisabledFilter = false;
@@ -104,6 +103,7 @@ void CANFrameModel::setHexMode(bool mode)
         useHexMode = mode;
         Utility::decimalMode = !useHexMode;
         this->endResetModel();
+    syncViewRowCount();
     }
 }
 
@@ -114,6 +114,7 @@ void CANFrameModel::setUseColorsByCanId(bool mode)
         this->beginResetModel();
         useColorsByCanId = mode;
         this->endResetModel();
+    syncViewRowCount();
     }
 }
 
@@ -125,6 +126,7 @@ void CANFrameModel::setTimeStyle(TimeStyle newStyle)
         timeStyle = newStyle;
         Utility::timeStyle = newStyle;
         this->endResetModel();
+    syncViewRowCount();
     }
 }
 
@@ -137,6 +139,7 @@ void CANFrameModel::setInterpretMode(bool mode)
         this->beginResetModel();
         interpretFrames = mode;
         this->endResetModel();
+    syncViewRowCount();
     }
 }
 
@@ -151,6 +154,7 @@ void CANFrameModel::setTimeFormat(QString format)
     timeFormat = format;
     beginResetModel(); //reset model to show new time format
     endResetModel();
+    syncViewRowCount();
 }
 
 void CANFrameModel::setIgnoreDBCColors(bool mode)
@@ -160,6 +164,7 @@ void CANFrameModel::setIgnoreDBCColors(bool mode)
         beginResetModel(); //reset model to update the view
         ignoreDBCColors = mode;
         endResetModel();
+        syncViewRowCount();
     }
 }
 
@@ -199,6 +204,7 @@ void CANFrameModel::normalizeTiming()
         filteredFrames[i].setTimeStamp(QCanBusFrame::TimeStamp(0, filteredFrames[i].timeStamp().microSeconds() - timeOffset));
     }
     this->endResetModel();
+    syncViewRowCount();
 
     mutex.unlock();
 }
@@ -209,6 +215,7 @@ void CANFrameModel::setOverwriteMode(bool mode)
     overwriteDups = mode;
     recalcOverwrite();
     endResetModel();
+    syncViewRowCount();
 }
 
 void CANFrameModel::setClearMode(bool mode)
@@ -258,7 +265,7 @@ void CANFrameModel::setAllFilters(bool state)
  * quicksort on the columns and interpret the columns numerically. But, correct or not, this implementation is quite fast
  * and sorts the columns properly.
 */
-uint64_t CANFrameModel::getCANFrameVal(QVector<CANFrame> *frames, int row, Column col)
+uint64_t CANFrameModel::getCANFrameVal(const QVector<CANFrame> *frames, int row, Column col) const
 {
     uint64_t temp = 0;
     if (row >= frames->count()) return 0;
@@ -295,78 +302,22 @@ uint64_t CANFrameModel::getCANFrameVal(QVector<CANFrame> *frames, int row, Colum
     return 0;
 }
 
-void CANFrameModel::qSortCANFrameAsc(QVector<CANFrame> *frames, Column column, int lowerBound, int upperBound)
+/*
+ * Overwrite mode keeps a lookup from CAN ID to the row showing that ID, so an arriving frame can
+ * replace the row it belongs to. Every row that moves invalidates it, so it has to be rebuilt after
+ * a sort - otherwise updates land on whatever row happens to now sit at the remembered index,
+ * overwriting an unrelated frame.
+ */
+void CANFrameModel::rebuildOverwriteIndex()
 {
-    int p, i, j;
-    qDebug() << "Lower " << lowerBound << " Upper" << upperBound;
-    if (lowerBound < upperBound)
+    if (!overwriteDups) return;
+
+    overwriteIndex.clear();
+    for (int i = 0; i < filteredFrames.size(); i++)
     {
-        uint64_t piv = getCANFrameVal(frames, lowerBound + (upperBound - lowerBound) / 2, column);
-        i = lowerBound - 1;
-        j = upperBound + 1;
-        for (;;){
-            do {
-                i++;
-            } while ((i < upperBound) && getCANFrameVal(frames, i, column) < piv);
-
-            do
-            {
-                j--;
-            } while ((j > lowerBound) && getCANFrameVal(frames, j, column) > piv);
-            if (i < j) {
-                CANFrame temp = frames->at(i);
-                frames->replace(i, frames->at(j));
-                frames->replace(j, temp);
-            }
-            else {p = j; break;}
-        }
-
-        qSortCANFrameAsc(frames, column, lowerBound, p);
-        qSortCANFrameAsc(frames, column, p+1, upperBound);
+        const uint64_t augID = (uint64_t)filteredFrames[i].frameId() | ((uint64_t)filteredFrames[i].bus << 29ull);
+        overwriteIndex[augID] = i;
     }
-}
-
-void CANFrameModel::qSortCANFrameDesc(QVector<CANFrame> *frames, Column column, int lowerBound, int upperBound)
-{
-    int p, i, j;
-    qDebug() << "Lower " << lowerBound << " Upper" << upperBound;
-    if (lowerBound < upperBound)
-    {
-        uint64_t piv = getCANFrameVal(frames, lowerBound + (upperBound - lowerBound) / 2, column);
-        i = lowerBound - 1;
-        j = upperBound + 1;
-        for (;;){
-            do {
-                i++;
-            } while ((i < upperBound) && getCANFrameVal(frames, i, column) > piv);
-
-            do
-            {
-                j--;
-            } while ((j > lowerBound) && getCANFrameVal(frames, j, column) < piv);
-            if (i < j) {
-                CANFrame temp = frames->at(i);
-                frames->replace(i, frames->at(j));
-                frames->replace(j, temp);
-            }
-            else {p = j; break;}
-        }
-
-        qSortCANFrameDesc(frames, column, lowerBound, p);
-        qSortCANFrameDesc(frames, column, p+1, upperBound);
-    }
-}
-
-void CANFrameModel::sortByColumn(int column)
-{
-    mutex.lock();
-    sortDirAsc = !sortDirAsc;
-    if (sortDirAsc) qSortCANFrameAsc(&filteredFrames, Column(column), 0, filteredFrames.size()-1);
-    else qSortCANFrameDesc(&filteredFrames, Column(column), 0, filteredFrames.size()-1);
-
-    beginResetModel();
-    endResetModel();
-    mutex.unlock();
 }
 
 //End of custom sorting code
@@ -430,6 +381,7 @@ void CANFrameModel::recalcOverwrite()
     }*/
 
     endResetModel();
+    syncViewRowCount();
     mutex.unlock();
 }
 
@@ -448,6 +400,14 @@ QVariant CANFrameModel::data(const QModelIndex &index, int role) const
 
     const unsigned char *data = reinterpret_cast<const unsigned char *>(thisFrame.payload().constData());
     int dataLen = thisFrame.payload().size();
+
+    /* The value a sorting proxy should order this cell by. The displayed text is no good for that -
+     * IDs are hex strings, timestamps are formatted - so hand out the underlying number instead and
+     * let the proxy compare those. */
+    if (role == CANFrameModel::SortRole)
+    {
+        return QVariant((qulonglong)getCANFrameVal(&filteredFrames, index.row(), Column(index.column())));
+    }
 
     if (role == Qt::BackgroundRole)
     {
@@ -553,7 +513,8 @@ QVariant CANFrameModel::data(const QModelIndex &index, int role) const
                     if (!((i+1) % bytesPerLine) && (i != (dataLen - 1))) tempString.append("\n");
                 }
             }
-            if (thisFrame.frameType() == QCanBusFrame::ErrorFrame)
+            //bit 29 is SavvyCAN's error flag, which not every driver pairs with an ErrorFrame type
+            if (thisFrame.frameType() == QCanBusFrame::ErrorFrame || (thisFrame.frameId() & 0x20000000))
             {
                  tempString = "ERROR";
             }
@@ -584,7 +545,15 @@ QVariant CANFrameModel::data(const QModelIndex &index, int role) const
                 if (thisFrame.error() & thisFrame.ControllerRestartError) tempString.append("\nController restart err");
                 if (thisFrame.error() & thisFrame.UnknownError) tempString.append("\nUnknown error type");
             }
-            //TODO: technically the actual returned bytes for an error frame encode some more info. Not interpreting it yet.
+
+            /* Anything with bit 29 set is an error frame in SavvyCAN's convention, whether or not
+             * the driver also flagged a frame type. The ID and payload carry the SocketCAN error
+             * encoding, which says what actually went wrong and how high the error counters are. */
+            if (thisFrame.frameId() & 0x20000000)
+            {
+                tempString.append("\n");
+                tempString.append(Utility::decodeErrorFrame(thisFrame.frameId(), thisFrame.payload()));
+            }
 
             //now, if we're supposed to interpret the data and the DBC handler is loaded then use it
             if ( (dbcHandler != nullptr) && interpretFrames && (thisFrame.frameType() == thisFrame.DataFrame) )
@@ -730,7 +699,11 @@ void CANFrameModel::addFrame(const CANFrame& frame, bool autoRefresh = false)
                 tempFrame.frameCount = 1;
                 filteredFrames.append(tempFrame);
                 lastFilteredUpdateCount++;
-                if (autoRefresh) endInsertRows();
+                if (autoRefresh)
+                {
+                    endInsertRows();
+                    syncViewRowCount();
+                }
             }
         }
         catch (const std::exception& ex)
@@ -747,6 +720,14 @@ void CANFrameModel::addFrame(const CANFrame& frame, bool autoRefresh = false)
             tempFrame.frameCount = filteredFrames[idx].frameCount + 1;
             tempFrame.timedelta = tempFrame.timeStamp().microSeconds() - filteredFrames[idx].timeStamp().microSeconds();
             filteredFrames.replace(idx, tempFrame);
+            /* This row's contents changed rather than a new row appearing. Note it so the next
+             * refresh can repaint it - previously the whole model was reset to achieve this. */
+            markRowDirty(idx);
+            if (autoRefresh)
+            {
+                const QModelIndex changed = index(idx, 0);
+                emit dataChanged(changed, index(idx, columnCount(QModelIndex()) - 1));
+            }
         }
         else
         {
@@ -757,7 +738,11 @@ void CANFrameModel::addFrame(const CANFrame& frame, bool autoRefresh = false)
                 tempFrame.timedelta = 0;
                 overwriteIndex[augID] = filteredFrames.size();
                 filteredFrames.append(tempFrame);
-                if (autoRefresh) endInsertRows();
+                if (autoRefresh)
+                {
+                    endInsertRows();
+                    syncViewRowCount();
+                }
             }
         }
         frames.append(tempFrame);
@@ -786,17 +771,11 @@ void CANFrameModel::addFrames(const CANConnection*, const QVector<CANFrame>& pFr
         beginRemoveRows(QModelIndex(), 0, toRemove - 1);
         filteredFrames.remove(0, toRemove);
         endRemoveRows();
+        syncViewRowCount();
         qDebug() << "filteredFrames removed, new count: " << filteredFrames.length();
         lastFilteredUpdateCount = 0;
-        if (overwriteDups)
-        {
-            overwriteIndex.clear();
-            for (int i = 0; i < filteredFrames.size(); i++)
-            {
-                uint64_t augID = (uint64_t)filteredFrames[i].frameId() | ((uint64_t)filteredFrames[i].bus << 29ull);
-                overwriteIndex[augID] = i;
-            }
-        }
+        //trimming from the front shifts every remaining row, so the ID to row lookup is stale
+        rebuildOverwriteIndex();
         mutex.unlock();
     }
 
@@ -834,6 +813,7 @@ void CANFrameModel::sendRefresh()
         lastUpdateNumFrames = 0;
         lastFilteredUpdateCount = 0;
         endResetModel();
+        syncViewRowCount();
         mutex.unlock();
     }
 }
@@ -842,17 +822,71 @@ void CANFrameModel::sendRefresh(int pos)
 {
     beginInsertRows(QModelIndex(), pos, pos);
     endInsertRows();
+    syncViewRowCount();
 }
 
 //issue a refresh for the last num entries in the model.
 //used by the serial worker to do batch updates so it doesn't
 //have to send thousands of messages per second
+void CANFrameModel::markRowDirty(int row)
+{
+    if (row < 0) return;
+    if (mDirtyRowLow < 0 || row < mDirtyRowLow) mDirtyRowLow = row;
+    if (row > mDirtyRowHigh) mDirtyRowHigh = row;
+}
+
+/*
+ * Tell the view what changed since the last time we were called.
+ *
+ * This used to reset the entire model on every call, which happens several times a second while
+ * frames are coming in. A reset tells the view that everything it knows is void, so it throws away
+ * per row state - row heights, and the user's selection - and re-lays out the whole table. That is
+ * why an expanded row snapped shut again during capture or playback, and why the table got heavy
+ * under load.
+ *
+ * Appends are now reported as inserts and in place changes as dataChanged, both of which leave the
+ * rest of the view alone. A full reset is still used when something happened that these cannot
+ * describe, which is the safe fallback rather than the normal path.
+ */
 int CANFrameModel::sendBulkRefresh()
 {
     if (lastUpdateNumFrames <= 0) return 0;
 
-    beginResetModel();
-    endResetModel();
+    const int newRowCount = filteredFrames.count();
+    const int oldRowCount = mViewRowCount;
+    const int lastCol = columnCount(QModelIndex()) - 1;
+
+    if (newRowCount < oldRowCount || oldRowCount < 0)
+    {
+        /* Rows vanished without us announcing it, so we can't describe the difference. Only happens
+         * if something bypassed the notifications above; a reset always leaves the view correct. */
+        qDebug() << "Bulk refresh sees fewer rows than the view has (" << newRowCount << "vs" << oldRowCount << ") - falling back to a model reset";
+        beginResetModel();
+        endResetModel();
+        syncViewRowCount();
+    }
+    else
+    {
+        if (newRowCount > oldRowCount)
+        {
+            beginInsertRows(QModelIndex(), oldRowCount, newRowCount - 1);
+            endInsertRows();
+            syncViewRowCount();
+        }
+
+        /* Rows that were rewritten in place - overwrite mode replacing a frame with a newer one of
+         * the same ID. Report the touched span so those rows repaint. */
+        if (mDirtyRowLow >= 0 && lastCol >= 0)
+        {
+            const int low = qMin(mDirtyRowLow, newRowCount - 1);
+            const int high = qMin(mDirtyRowHigh, newRowCount - 1);
+            if (low >= 0 && high >= low)
+                emit dataChanged(index(low, 0), index(high, lastCol));
+        }
+    }
+
+    mDirtyRowLow = -1;
+    mDirtyRowHigh = -1;
 
     int num = lastUpdateNumFrames;
     lastUpdateNumFrames = 0;
@@ -875,6 +909,7 @@ void CANFrameModel::clearFrames()
     frames.reserve(preallocSize);
     filteredFrames.reserve(preallocSize);
     this->endResetModel();
+    syncViewRowCount();
     lastUpdateNumFrames = 0;
     lastFilteredUpdateCount = 0;
     overwriteIndex.clear();

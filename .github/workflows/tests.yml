@@ -1,0 +1,60 @@
+name: Tests
+
+# Runs on pull requests and on any branch push, unlike the packaging workflow which only fires on
+# master. The point is to catch a regression before it is merged, not after it ships.
+on:
+  push:
+  pull_request:
+
+jobs:
+  unittests:
+    name: Unit tests (Linux)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Prepare Environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-render-util0 libxcb-xinerama0 libxcb-randr0 libxkbcommon-x11-0 \
+            libusb-1.0-0-dev
+
+      - name: Prepare Qt Libraries
+        uses: jurplel/install-qt-action@v4
+
+      - name: Build application
+        run: |
+          qmake CONFIG+=release SavvyCAN.pro
+          make -j$(nproc)
+
+      - name: Build tests
+        working-directory: test
+        run: |
+          qmake CONFIG+=release test.pro
+          make -j$(nproc)
+
+      # The tests never open a window but Qt still wants a platform plugin, so run them offscreen.
+      - name: Run tests
+        working-directory: test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ./savvycan_tests -o results.txt,txt
+
+      - name: Show results
+        if: always()
+        working-directory: test
+        run: |
+          for f in results_*.txt; do
+            echo "===== $f ====="
+            cat "$f"
+          done
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test/results_*.txt

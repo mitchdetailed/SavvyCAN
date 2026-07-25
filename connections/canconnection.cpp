@@ -100,8 +100,9 @@ void CANConnection::start()
 
 void CANConnection::suspend(bool pSuspend)
 {
-    /* execute in mThread_p context */
-    if( mThread_p && (mThread_p != QThread::currentThread()) ) {
+    /* execute in mThread_p context. If the thread is no longer running a blocking queued call
+     * would never return, so in that case just run directly - the device is torn down anyway. */
+    if( mThread_p && mThread_p->isRunning() && (mThread_p != QThread::currentThread()) ) {
         QMetaObject::invokeMethod(this, "suspend",
                                   Qt::BlockingQueuedConnection,
                                   Q_ARG(bool, pSuspend));
@@ -139,8 +140,9 @@ void CANConnection::stop()
 
 bool CANConnection::getBusSettings(int pBusIdx, CANBus& pBus)
 {
-    /* make sure we execute in mThread context */
-    if( mThread_p && (mThread_p != QThread::currentThread()) ) {
+    /* make sure we execute in mThread context - unless the thread is gone, in which case a
+     * blocking queued call would hang forever and reading the stored config directly is safe */
+    if( mThread_p && mThread_p->isRunning() && (mThread_p != QThread::currentThread()) ) {
         bool ret;
         QMetaObject::invokeMethod(this, "getBusSettings",
                                   Qt::BlockingQueuedConnection,
@@ -156,8 +158,9 @@ bool CANConnection::getBusSettings(int pBusIdx, CANBus& pBus)
 
 void CANConnection::setBusSettings(int pBusIdx, CANBus pBus)
 {
-    /* make sure we execute in mThread context */
-    if( mThread_p && (mThread_p != QThread::currentThread()) ) {
+    /* make sure we execute in mThread context - unless the thread is gone, in which case a
+     * blocking queued call would hang forever. Every driver tolerates being poked while stopped. */
+    if( mThread_p && mThread_p->isRunning() && (mThread_p != QThread::currentThread()) ) {
         QMetaObject::invokeMethod(this, "setBusSettings",
                                   Qt::BlockingQueuedConnection,
                                   Q_ARG(int, pBusIdx),
@@ -171,8 +174,9 @@ void CANConnection::setBusSettings(int pBusIdx, CANBus pBus)
 
 bool CANConnection::sendFrame(const CANFrame& pFrame)
 {
-    /* make sure we execute in mThread context */
-    if( mThread_p && (mThread_p != QThread::currentThread()) )
+    /* make sure we execute in mThread context - unless the thread is gone, in which case a
+     * blocking queued call would hang the sender forever. Drivers check their handles anyway. */
+    if( mThread_p && mThread_p->isRunning() && (mThread_p != QThread::currentThread()) )
     {
         bool ret;
         QMetaObject::invokeMethod(this, "sendFrame",
@@ -186,9 +190,11 @@ bool CANConnection::sendFrame(const CANFrame& pFrame)
     txFrame = getQueue().get();
     if (txFrame)
     {
-        *txFrame = pFrame;        
-    }    
-    getQueue().queue();
+        *txFrame = pFrame;
+        /* only advance the write index when we actually got a slot. Advancing on a full queue
+         * pushes the write index onto the read index which corrupts the whole ring. */
+        getQueue().queue();
+    }
 
     return piSendFrame(pFrame);
 }
@@ -196,8 +202,8 @@ bool CANConnection::sendFrame(const CANFrame& pFrame)
 
 bool CANConnection::sendFrames(const QList<CANFrame>& pFrames)
 {
-    /* make sure we execute in mThread context */
-    if( mThread_p && (mThread_p != QThread::currentThread()) )
+    /* make sure we execute in mThread context - see sendFrame for why isRunning matters */
+    if( mThread_p && mThread_p->isRunning() && (mThread_p != QThread::currentThread()) )
     {
         bool ret;
         QMetaObject::invokeMethod(this, "sendFrames",
@@ -371,10 +377,11 @@ void CANConnection::checkTargettedFrame(CANFrame &frame)
     if (mBusData.size() == 0) return;
 
     int bus = frame.bus;
+    if (bus < 0) bus = 0;
     if (bus > (mBusData.length() - 1)) bus = mBusData.length() - 1;
 
     if (mBusData[bus].mTargettedFrames.length() == 0) return;
-    foreach (const CANFltObserver filt, mBusData[frame.bus].mTargettedFrames)
+    foreach (const CANFltObserver filt, mBusData[bus].mTargettedFrames)
     {
         //qDebug() << "Checking filter with id " << filt.id << " mask " << filt.mask;
         maskedID = frame.frameId() & filt.mask;

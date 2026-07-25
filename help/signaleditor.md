@@ -11,6 +11,8 @@ First of all, here are the things that might otherwise pass under the radar but 
 
 * The 8x8 data grid is not locked that way. CAN-FD signals are supported and so up to 64 bytes can be shown in the bitfield. The bitfield will automatically adjust for the number of bytes in a given message. However, you can also switch the views yourself by middle clicking in the bitfield.
 
+* The signal you are editing can be moved by dragging it. Press and hold the left mouse button on any bit that belongs to the signal and then drag left, right, up, or down. The bit you grabbed follows the mouse and the rest of the signal comes with it, so dragging left/right shifts the signal a bit at a time while dragging up/down moves it a byte at a time. The signal will refuse to move past the end of the message, and the whole drag counts as a single undo step. If you press the left button somewhere that does not belong to the signal you're editing you'll hear the system warning sound instead - use right click to switch to that signal first, or type a position into "Start Bit".
+
 * If you right click a different signal in the bitfield you will then be editing that signal instead. This lets you quickly move between signals in the same message. However, this only works for other signals that are either not multiplexed (if you started with a non-multiplexed signal when editing) or otherwise only other signals that have the same multiplexor value.
 
 

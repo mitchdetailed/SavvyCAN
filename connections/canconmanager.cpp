@@ -57,6 +57,7 @@ void CANConManager::stopAllConnections()
 
 void CANConManager::add(CANConnection* pConn_p)
 {
+    QMutexLocker locker(&mConnsMutex);
     mConns.append(pConn_p);
 }
 
@@ -64,11 +65,13 @@ void CANConManager::add(CANConnection* pConn_p)
 void CANConManager::remove(CANConnection* pConn_p)
 {
     //disconnect(pConn_p, 0, this, 0);
+    QMutexLocker locker(&mConnsMutex);
     mConns.removeOne(pConn_p);
 }
 
 void CANConManager::replace(int idx, CANConnection* pConn_p)
 {
+    QMutexLocker locker(&mConnsMutex);
     if (idx < 0 || idx >= mConns.size()) return;
     CANConnection *original = mConns[idx];
     mConns.replace(idx, pConn_p);
@@ -128,6 +131,12 @@ void CANConManager::refreshCanList()
         foreach (CANConnection* conn_p, mConns)
             refreshConnection((CANConnection*)conn_p);
     }
+
+    /* Rates have to be recalculated on the clock, not on frame arrival. Doing it inside
+     * refreshConnection meant an idle bus never got here at all (that function returns early when
+     * its queue is empty), so a quiet bus showed nothing and a bus that went quiet kept displaying
+     * whatever rate it last had. */
+    updateStatsRates();
 }
 
 uint64_t CANConManager::getTimeBasis()
@@ -192,7 +201,119 @@ void CANConManager::refreshConnection(CANConnection* pConn_p)
     }
 
     if(frames.size())
+    {
+        accumulateStats(frames);
         emit framesReceived(pConn_p, frames);
+    }
+}
+
+/*
+ * Count frames and bits per bus. Bus load is worked out from the frame's own bit count rather than
+ * asked of the hardware, which means it works for every connection type - including socketcand,
+ * MQTT and the python-can transports where no controller is reachable to ask.
+ */
+void CANConManager::accumulateStats(const QVector<CANFrame> &frames)
+{
+    QMutexLocker locker(&mStatsMutex);
+
+    foreach (const CANFrame &frame, frames)
+    {
+        const int bus = frame.bus;
+        if (bus < 0 || bus > 255) continue; //nonsense bus number, don't grow the vector for it
+        if (bus >= mBusStats.size()) mBusStats.resize(bus + 1);
+
+        CANBusStats &stats = mBusStats[bus];
+
+        if (frame.isReceived) stats.framesReceived++;
+        else stats.framesSent++;
+        stats.framesThisPeriod++;
+
+        //SavvyCAN marks an error frame by setting bit 29 of the ID
+        if (frame.frameId() & 0x20000000) stats.errorFrames++;
+
+        /* Frame length on the wire: 44 bits of overhead for a standard frame, 64 for extended,
+         * plus the payload. Bit stuffing adds up to a fifth on top in the worst case, so apply the
+         * usual 1.2 factor - this is an estimate and is presented as one. */
+        const int payloadBits = frame.payload().length() * 8;
+        const int overhead = frame.hasExtendedFrameFormat() ? 64 : 44;
+        stats.bitsThisPeriod += (uint64_t)((overhead + payloadBits) * 1.2);
+    }
+}
+
+//once a second turn the accumulated counts into a frame rate and a bus load percentage
+void CANConManager::updateStatsRates()
+{
+    /* Give every bus that exists an entry, whether or not it has ever carried a frame. Without
+     * this a connected but silent bus has no statistics at all and the health panel has nothing
+     * to show - which reads as "broken" rather than the "quiet" it actually is. */
+    {
+        QMutexLocker locker(&mStatsMutex);
+        const int totalBuses = getNumBuses();
+        if (mBusStats.size() < totalBuses) mBusStats.resize(totalBuses);
+    }
+
+    if (!mStatsTimer.isValid())
+    {
+        mStatsTimer.start();
+        return;
+    }
+
+    const qint64 elapsed = mStatsTimer.elapsed();
+    if (elapsed < 1000) return;
+
+    /* Collect the bus speeds first, before taking the stats lock. getBusSettings marshals into the
+     * connection's worker thread with a blocking call, and holding a mutex across that would tie
+     * the statistics to whatever a driver happens to be doing. */
+    QVector<int> busSpeeds;
+    int busBase = 0;
+    foreach (CANConnection *conn, mConns)
+    {
+        for (int i = 0; i < conn->getNumBuses(); i++)
+        {
+            CANBus bus;
+            const int speed = conn->getBusSettings(i, bus) ? bus.getSpeed() : 0;
+            if (busBase + i >= busSpeeds.size()) busSpeeds.resize(busBase + i + 1);
+            busSpeeds[busBase + i] = speed;
+        }
+        busBase += conn->getNumBuses();
+    }
+
+    QMutexLocker locker(&mStatsMutex);
+
+    const double seconds = (double)elapsed / 1000.0;
+    for (int i = 0; i < mBusStats.size(); i++)
+    {
+        CANBusStats &stats = mBusStats[i];
+        const int speed = (i < busSpeeds.size()) ? busSpeeds[i] : 0;
+
+        stats.frameRate = (int)((double)stats.framesThisPeriod / seconds);
+
+        if (speed > 0)
+            stats.busLoadPercent = qMin(100.0, ((double)stats.bitsThisPeriod / seconds) / (double)speed * 100.0);
+        else
+            stats.busLoadPercent = 0.0; //without a configured speed a percentage is meaningless
+
+        stats.framesThisPeriod = 0;
+        stats.bitsThisPeriod = 0;
+    }
+
+    mStatsTimer.restart();
+}
+
+bool CANConManager::getBusStats(int busNum, CANBusStats &stats)
+{
+    QMutexLocker locker(&mStatsMutex);
+
+    if (busNum < 0 || busNum >= mBusStats.size()) return false;
+    stats = mBusStats[busNum];
+    return true;
+}
+
+void CANConManager::resetBusStats()
+{
+    QMutexLocker locker(&mStatsMutex);
+    for (int i = 0; i < mBusStats.size(); i++) mBusStats[i].reset();
+    mStatsTimer.restart();
 }
 
 /*
@@ -210,6 +331,10 @@ bool CANConManager::sendFrame(const CANFrame& pFrame)
 {
     int busBase = 0;
     CANFrame workingFrame = pFrame;
+
+    /* This runs on the frame sender's thread while the GUI thread adds and removes connections,
+     * so the walk over the list has to be locked or a removal mid-send is a use-after-free. */
+    QMutexLocker locker(&mConnsMutex);
 
     if (mConns.size() == 0)
     {

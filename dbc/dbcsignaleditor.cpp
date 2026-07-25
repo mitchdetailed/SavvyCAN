@@ -1,5 +1,6 @@
 #include "dbcsignaleditor.h"
 #include "ui_dbcsignaleditor.h"
+#include <QApplication>
 #include <QDateTime>
 #include <QDebug>
 #include <QMenu>
@@ -47,6 +48,10 @@ DBCSignalEditor::DBCSignalEditor(QWidget *parent) :
     dbcMessage = nullptr;
     currentSignal = nullptr;
     inhibitMsgProc = false;
+    bitDragActive = false;
+    bitDragMoved = false;
+    bitDragAnchorBit = -1;
+    bitDragStartBit = 0;
 
     QStringList headers2;
     headers2 << "Value" << "Text";
@@ -63,8 +68,13 @@ DBCSignalEditor::DBCSignalEditor(QWidget *parent) :
     ui->comboType->addItem("STRING");
 
     ui->bitfield->setMode(GridMode::SIGNAL_VIEW);
+    //the left button drags the signal being edited around rather than teleporting it to the click
+    ui->bitfield->setDragEnabled(true);
+    ui->bitfield->setToolTip(tr("Drag the highlighted signal to move it. Right click another signal to edit it instead."));
 
-    connect(ui->bitfield, SIGNAL(gridClicked(int)), this, SLOT(bitfieldLeftClicked(int)));
+    connect(ui->bitfield, SIGNAL(gridDragBegin(int)), this, SLOT(bitfieldDragBegin(int)));
+    connect(ui->bitfield, SIGNAL(gridDragMove(int)), this, SLOT(bitfieldDragMove(int)));
+    connect(ui->bitfield, SIGNAL(gridDragEnd()), this, SLOT(bitfieldDragEnd()));
     connect(ui->bitfield, SIGNAL(gridRightClicked(int)), this, SLOT(bitfieldRightClicked(int)));
 
     connect(ui->valuesTable, SIGNAL(customContextMenuRequested(QPoint)), this, SLOT(onCustomMenuValues(QPoint)));
@@ -798,6 +808,10 @@ void DBCSignalEditor::refreshBitGrid()
                                                 : motorolaLSBfromStartBit(currentSignal->startBit, currentSignal->signalSize);
         ui->txtStartBit->setText(QString::number(lsb));
     }
+
+    /* Every path that moves or resizes the signal ends up here, so this is the one place the
+     * overlap warning needs refreshing from. */
+    checkForOverlap();
 }
 
 /* fillValueTable also handles "enabled" state */
@@ -834,35 +848,220 @@ void DBCSignalEditor::fillValueTable(DBC_SIGNAL *sig)
     inhibitCellChanged = false;
 }
 
-//Left clicking the grid sets the "starting bit" for the current signal
-void DBCSignalEditor::bitfieldLeftClicked(int bit)
+//Does the signal we're editing occupy the given bit? The grid's usedSignalNum map can't answer
+//this because signals are allowed to overlap and the last one written wins there. The grid draws
+//the signal being edited on top of any overlap so grabbing it has to work the same way.
+bool DBCSignalEditor::currentSignalCoversBit(int bit)
 {
-    if (currentSignal == nullptr) return;
+    if (!currentSignal) return false;
 
-    pushToUndoBuffer();
-    currentSignal->startBit = bit;
-    if (currentSignal->valType == SP_FLOAT)
+    const int size = currentSignal->signalSize;
+    if (size < 1) return false;
+
+    if (currentSignal->intelByteOrder)
+        return (bit >= currentSignal->startBit) && (bit < currentSignal->startBit + size);
+
+    //motorola walks back through the byte then jumps to the top of the next one
+    int walk = currentSignal->startBit;
+    for (int i = 0; i < size; i++)
     {
-        if (dbcMessage)
+        if (walk == bit) return true;
+        if (walk % 8 == 0) walk += 15;
+        else walk--;
+    }
+    return false;
+}
+
+//the full set of bits the current signal sits on, in the same numbering the bit grid uses
+QList<int> DBCSignalEditor::currentSignalBits()
+{
+    QList<int> bits;
+    if (!currentSignal) return bits;
+
+    const int size = currentSignal->signalSize;
+    if (size < 1) return bits;
+
+    if (currentSignal->intelByteOrder)
+    {
+        for (int i = 0; i < size; i++) bits.append(currentSignal->startBit + i);
+    }
+    else
+    {
+        int walk = currentSignal->startBit;
+        for (int i = 0; i < size; i++)
         {
-            int maxBit = ((dbcMessage->len * 8) - 32 + 7);
-            if (maxBit < 0) maxBit = 0;
-            if (currentSignal->startBit > maxBit) currentSignal->startBit = maxBit;
+            bits.append(walk);
+            if (walk % 8 == 0) walk += 15;
+            else walk--;
         }
-        else if (currentSignal->startBit > 31) currentSignal->startBit = 39;
     }
 
-    if (currentSignal->valType == DP_FLOAT)
+    return bits;
+}
+
+/*
+ * A DBC message is not supposed to have two signals sharing a bit, but nothing stops you doing it -
+ * and dragging a signal around the grid makes it easy to do by accident. Rather than refusing the
+ * edit (there are legitimate reasons to pass through an overlapping state while rearranging things)
+ * this just says so, and names the signal that is in the way.
+ */
+void DBCSignalEditor::checkForOverlap()
+{
+    if (!ui->lblOverlapWarning) return;
+
+    auto clear = [this]() {
+        ui->lblOverlapWarning->setText("");
+        ui->lblOverlapWarning->setStyleSheet("");
+    };
+
+    if (!currentSignal || !dbcMessage || !dbcMessage->sigHandler)
     {
-        if (dbcMessage)
-        {
-            int maxBit = ((dbcMessage->len * 8) - 64 + 7);
-            if (maxBit < 0) maxBit = 0;
-            if (currentSignal->startBit > maxBit) currentSignal->startBit = maxBit;
-        }
-        else currentSignal->startBit = 7;
+        clear();
+        return;
     }
-    fillSignalForm(currentSignal);
+
+    const QList<int> ourBits = currentSignalBits();
+    if (ourBits.isEmpty())
+    {
+        clear();
+        return;
+    }
+
+    //also flag a signal that has been pushed off the end of the message while we are here
+    const int maxBit = (int)(dbcMessage->len * 8) - 1;
+    QStringList problems;
+    foreach (int bit, ourBits)
+    {
+        if (bit > maxBit)
+        {
+            problems << QString("extends past the end of the %1 byte message").arg(dbcMessage->len);
+            break;
+        }
+    }
+
+    QSet<QString> clashes;
+    for (int x = 0; x < dbcMessage->sigHandler->getCount(); x++)
+    {
+        DBC_SIGNAL *other = dbcMessage->sigHandler->findSignalByIdx(x);
+        if (!other || other == currentSignal) continue;
+
+        /* Only signals that can be present at the same time can really clash. Two signals under
+         * different multiplex values share the bits by design, which is the whole point of
+         * multiplexing. */
+        if (other->multiplexParent || currentSignal->multiplexParent)
+        {
+            if (other->multiplexParent != currentSignal->multiplexParent) continue;
+            if (!other->multiplexesIdenticalToSignal(currentSignal)) continue;
+        }
+
+        //walk the other signal's bits the same way we walked ours
+        const int otherSize = other->signalSize;
+        if (otherSize < 1) continue;
+
+        bool overlaps = false;
+        if (other->intelByteOrder)
+        {
+            for (int i = 0; i < otherSize && !overlaps; i++)
+                overlaps = ourBits.contains(other->startBit + i);
+        }
+        else
+        {
+            int walk = other->startBit;
+            for (int i = 0; i < otherSize && !overlaps; i++)
+            {
+                overlaps = ourBits.contains(walk);
+                if (walk % 8 == 0) walk += 15;
+                else walk--;
+            }
+        }
+
+        if (overlaps) clashes.insert(other->name);
+    }
+
+    if (!clashes.isEmpty())
+    {
+        QStringList names = clashes.values();
+        names.sort();
+        problems << QString("overlaps %1").arg(names.join(", "));
+    }
+
+    if (problems.isEmpty())
+    {
+        clear();
+        return;
+    }
+
+    ui->lblOverlapWarning->setText(QString("⚠ This signal %1").arg(problems.join("; ")));
+    ui->lblOverlapWarning->setStyleSheet("color: #b06000; font-weight: bold;");
+}
+
+//Would the current signal still fit inside the message if it started at the given bit?
+bool DBCSignalEditor::signalFitsAtStartBit(int startBit)
+{
+    if (!currentSignal) return false;
+
+    const int maxBit = dbcMessage ? (int)(dbcMessage->len * 8) - 1 : 511;
+    if (startBit < 0 || startBit > maxBit) return false;
+
+    if (currentSignal->intelByteOrder) return (startBit + currentSignal->signalSize - 1) <= maxBit;
+
+    //motorola bits walk back through the byte then jump forward so the last bit is the highest one
+    return motorolaLSBfromStartBit(startBit, currentSignal->signalSize) <= maxBit;
+}
+
+//Pressing the left button grabs the signal being edited so it can be dragged around the grid.
+//Grabbing anywhere else isn't a valid grab, so say so with the system warning sound. Use right
+//click to switch to editing whichever signal owns the bit you're pointing at.
+void DBCSignalEditor::bitfieldDragBegin(int bit)
+{
+    bitDragActive = false;
+    bitDragMoved = false;
+
+    if (!currentSignalCoversBit(bit))
+    {
+        QApplication::beep();
+        return;
+    }
+
+    bitDragActive = true;
+    bitDragAnchorBit = bit;
+    bitDragStartBit = currentSignal->startBit;
+    ui->bitfield->setCursor(Qt::ClosedHandCursor);
+}
+
+//The grabbed cell follows the cursor and the rest of the signal comes along with it. Shifting
+//startBit by however far the grabbed cell moved does exactly that for both byte orders.
+void DBCSignalEditor::bitfieldDragMove(int bit)
+{
+    if (!bitDragActive || currentSignal == nullptr) return;
+
+    const int newStartBit = bitDragStartBit + (bit - bitDragAnchorBit);
+    if (newStartBit == currentSignal->startBit) return;
+    //ran into the end of the message, just stay where we are until the cursor comes back
+    if (!signalFitsAtStartBit(newStartBit)) return;
+
+    if (!bitDragMoved)
+    {
+        //one undo entry for the whole drag instead of one per bit crossed
+        pushToUndoBuffer();
+        dbcFile->setDirtyFlag();
+        bitDragMoved = true;
+    }
+
+    currentSignal->startBit = newStartBit;
+    refreshBitGrid();
+}
+
+void DBCSignalEditor::bitfieldDragEnd()
+{
+    const bool moved = bitDragMoved;
+
+    bitDragActive = false;
+    bitDragMoved = false;
+    ui->bitfield->unsetCursor();
+
+    //the rest of the form shows the start bit too so bring it back in sync
+    if (moved && currentSignal) fillSignalForm(currentSignal);
 }
 
 //Right clicking the grid starts editing on whichever signal currently "owns" that bit.
@@ -895,6 +1094,9 @@ void DBCSignalEditor::generateUsedBits()
     memset(usedBits, 0, 64);
 
     if (!dbcMessage || !dbcMessage->sigHandler) return;
+
+    //ownership is rebuilt from scratch, otherwise bits a signal has moved off of still claim it
+    ui->bitfield->clearUsedSignalNums();
 
     for (int x = 0; x < dbcMessage->sigHandler->getCount(); x++)
     {
@@ -940,7 +1142,9 @@ void DBCSignalEditor::generateUsedBits()
         }
     }
     ui->bitfield->setUsed(usedBits, false);
-    ui->bitfield->setBytesToDraw(dbcMessage->len);
+    //a drag reads cursor position in terms of the current layout so don't reshape the grid
+    //out from under it. The message length can't change mid drag anyway.
+    if (!bitDragActive) ui->bitfield->setBytesToDraw(dbcMessage->len);
 }
 
 //Copy the current signal in its entirety to the undo buffer. Just for safe keeping

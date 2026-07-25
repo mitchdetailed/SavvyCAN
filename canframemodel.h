@@ -30,6 +30,12 @@ class CANFrameModel: public QAbstractTableModel
     Q_OBJECT
 
 public:
+    /* Role a sorting proxy should ask for. Returns the raw number behind a cell rather than the
+     * text shown in it, because the display text sorts wrongly - IDs are hex, timestamps are
+     * formatted, lengths are strings. The model itself never sorts; ordering belongs to the view
+     * layer so that the model can stay append only. */
+    static const int SortRole = Qt::UserRole + 1;
+
     CANFrameModel(QObject *parent = 0);
     virtual ~CANFrameModel();
 
@@ -63,7 +69,6 @@ public:
     void recalcOverwrite();
     bool needsFilterRefresh();
     void insertFrames(const QVector<CANFrame> &newFrames);
-    void sortByColumn(int column);
     int getIndexFromTimeID(unsigned int ID, double timestamp);
     const QVector<CANFrame> *getListReference() const; //thou shalt not modify these frames externally!
     const QVector<CANFrame> *getFilteredListReference() const; //Thus saith the Lord, NO.
@@ -78,9 +83,7 @@ signals:
     void updatedFiltersList();
 
 private:
-    void qSortCANFrameAsc(QVector<CANFrame>* frames, Column column, int lowerBound, int upperBound);
-    void qSortCANFrameDesc(QVector<CANFrame>* frames, Column column, int lowerBound, int upperBound);
-    uint64_t getCANFrameVal(QVector<CANFrame> *frames, int row, Column col);
+    uint64_t getCANFrameVal(const QVector<CANFrame> *frames, int row, Column col) const;
     bool any_filters_are_configured(void);
     bool any_busfilters_are_configured(void);
 
@@ -102,12 +105,28 @@ private:
     int64_t timeOffset;
     int lastUpdateNumFrames;
     uint32_t preallocSize;
-    bool sortDirAsc;
     int bytesPerLine;
     QHash<uint64_t, int> overwriteIndex;
     int lastFilteredUpdateCount;
     bool hasAnyDisabledFilter;
     bool hasAnyDisabledBusFilter;
+
+    /* How many rows the view currently believes exist. Kept in step with every notification we
+     * send it (reset, insert, remove) so that sendBulkRefresh can work out what actually changed
+     * and describe it precisely instead of resetting the whole model. */
+    int mViewRowCount = 0;
+    /* In overwrite mode rows are replaced in place rather than appended. These bracket the rows
+     * touched since the last refresh so we can repaint just those. -1 means nothing was touched. */
+    int mDirtyRowLow = -1;
+    int mDirtyRowHigh = -1;
+
+    //keep mViewRowCount in step after telling the view about a change
+    void syncViewRowCount() { mViewRowCount = filteredFrames.count(); }
+    //remember that a row's contents changed, for the next refresh to report
+    void markRowDirty(int row);
+
+    //rebuild the ID to row lookup, which any row movement invalidates
+    void rebuildOverwriteIndex();
 };
 
 

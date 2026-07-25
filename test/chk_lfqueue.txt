@@ -1,0 +1,13 @@
+********* Start testing of TestLFQueue *********
+Config: Using QtTest library 6.7.2, Qt 6.7.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 11.2.0), windows 11
+PASS   : TestLFQueue::initTestCase()
+PASS   : TestLFQueue::setSize(-1)
+PASS   : TestLFQueue::setSize(0)
+PASS   : TestLFQueue::setSize(10)
+PASS   : TestLFQueue::setSize(2000)
+PASS   : TestLFQueue::exchange(nosleep)
+PASS   : TestLFQueue::exchange(readersleep)
+PASS   : TestLFQueue::exchange(writersleep)
+PASS   : TestLFQueue::cleanupTestCase()
+Totals: 9 passed, 0 failed, 0 skipped, 0 blacklisted, 3893ms
+********* Finished testing of TestLFQueue *********

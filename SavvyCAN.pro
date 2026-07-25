@@ -8,7 +8,7 @@
     error("Current version of Qt ($${QT_VERSION}) is too old, this project requires Qt 5.14 or newer")
 }
 
-QT = core gui printsupport qml serialbus serialport widgets help network opengl
+QT = core gui printsupport qml serialbus serialport widgets help network opengl concurrent
 
 CONFIG(release, debug|release):DEFINES += QT_NO_DEBUG_OUTPUT
 
@@ -68,6 +68,19 @@ SOURCES += main.cpp\
     connections/gvretserial.cpp \
     connections/socketcand.cpp \
     connections/canconmanager.cpp \
+    connections/gsusbconnection.cpp \
+    connections/seeedcan.cpp \
+    connections/robotellcan.cpp \
+    connections/pythoncanserial.cpp \
+    connections/udpmulticast.cpp \
+    utils/msgpackcodec.cpp \
+    connections/canalystii.cpp \
+    connections/kvasercanlib.cpp \
+    connections/ixxatvci.cpp \
+    connections/usb2canlib.cpp \
+    connections/iscanlib.cpp \
+    connections/nicanlib.cpp \
+    connections/neousyscan.cpp \
     re/sniffer/snifferitem.cpp \
     re/sniffer/sniffermodel.cpp \
     re/sniffer/snifferwindow.cpp \
@@ -156,6 +169,7 @@ HEADERS  += mainwindow.h \
     scriptcontainer.h \
     canfilter.h \
     utils/lfqueue.h \
+    utils/msgpackcodec.h \
     motorcontrollerconfigwindow.h \
     connections/canconnection.h \
     connections/serialbusconnection.h \
@@ -163,6 +177,18 @@ HEADERS  += mainwindow.h \
     connections/canconfactory.h \
     connections/gvretserial.h \
     connections/canconmanager.h \
+    connections/gsusbconnection.h \
+    connections/seeedcan.h \
+    connections/robotellcan.h \
+    connections/pythoncanserial.h \
+    connections/udpmulticast.h \
+    connections/canalystii.h \
+    connections/kvasercanlib.h \
+    connections/ixxatvci.h \
+    connections/usb2canlib.h \
+    connections/iscanlib.h \
+    connections/nicanlib.h \
+    connections/neousyscan.h \
     re/sniffer/snifferitem.h \
     re/sniffer/sniffermodel.h \
     re/sniffer/snifferwindow.h \
@@ -242,19 +268,51 @@ RESOURCES += \
     icons.qrc \
     images.qrc
 
+#ASAM MDF4 (.mf4) support needs the mdflib submodule to be checked out and built
+#in third_party/mdflib. Once it is there run qmake with CONFIG+=mdf4 to turn the
+#format on. Without it SavvyCAN simply does not offer .mf4 in the file dialogs.
+mdf4 {
+   DEFINES += MDF4_SUPPORT
+   INCLUDEPATH += $$PWD/third_party/mdflib/include
+   win32-g++ {
+      LIBS += -L$$PWD/third_party/mdflib/build/mdflib -lmdf
+      LIBS += -L"C:/Program Files/mingw64/x86_64-w64-mingw32/lib" -lz
+      LIBS += -L"C:/Program Files/mingw64/opt/lib" -lexpat
+   }
+   !win32-g++ {
+      LIBS += -L$$PWD/third_party/mdflib/build/mdflib -lmdf -lz -lexpat
+   }
+}
+
+#libusb is needed by the GSUSB (Candlelight) connection. On windows we use the
+#copy that ships in third_party, everywhere else we pick up the system one.
 win32-msvc* {
    LIBS += opengl32.lib
+   INCLUDEPATH += $$PWD/third_party/libusb/include
+   contains(QMAKE_TARGET.arch, x86_64) {
+      LIBS += -L$$PWD/third_party/libusb/VS2022/MS64/dll
+   } else {
+      LIBS += -L$$PWD/third_party/libusb/VS2022/MS32/dll
+   }
+   LIBS += -llibusb-1.0
 }
 
 win32-g++ {
    LIBS += libopengl32
-   INCLUDEPATH += $$PWD/third_party/mdflib/include
-   LIBS += -L$$PWD/third_party/mdflib/build/mdflib -lmdf
-   LIBS += -L"C:/Program Files/mingw64/x86_64-w64-mingw32/lib" -lz
-   LIBS += -L"C:/Program Files/mingw64/opt/lib" -lexpat
+   INCLUDEPATH += $$PWD/third_party/libusb/include
+   LIBS += -L$$PWD/third_party/libusb/MinGW64/static -lusb-1.0
 }
 
 unix {
+   packagesExist(libusb-1.0) {
+      CONFIG += link_pkgconfig
+      PKGCONFIG += libusb-1.0
+   } else {
+      #no pkg-config available, fall back to the usual install locations
+      INCLUDEPATH += /usr/include/libusb-1.0 /usr/local/include/libusb-1.0 /opt/homebrew/include/libusb-1.0
+      LIBS += -L/usr/local/lib -L/opt/homebrew/lib -lusb-1.0
+   }
+
    isEmpty(PREFIX) {
       PREFIX=/usr/local
    }

@@ -70,6 +70,8 @@ private slots:
     void mouseWheel();
     void removeSelectedGraph();
     void removeAllGraphs();
+    //forget signal pointers belonging to a DBC file that is about to be destroyed
+    void handleDBCFileRemoved(DBCFile *pFile);
     void contextMenuRequest(QPoint pos);
     void moveLegend();
     void saveGraphs();

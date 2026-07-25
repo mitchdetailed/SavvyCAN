@@ -95,7 +95,13 @@ void SerialBusConnection::piSetBusSettings(int pBusIdx, CANBus bus)
 
     /* if bus is not active we are done */
     if(!bus.isActive())
+    {
+        /* Say so straight away rather than leaving the window showing Connected until the watchdog
+         * next runs. Re-enabling the bus brings this back to Connected below. */
+        setStatus(CANCon::NOT_CONNECTED);
+        sendStatus();
         return;
+    }
 
     /* set configuration */
     /*if (p.useConfigurationEnabled) {
@@ -116,7 +122,14 @@ void SerialBusConnection::piSetBusSettings(int pBusIdx, CANBus bus)
     if (!mDev_p->connectDevice()) {
         disconnectDevice();
         qDebug() << "can't connect device";
+        setStatus(CANCon::NOT_CONNECTED);
     }
+    else
+    {
+        //the bus is enabled and the device took it, so we are on the bus again
+        setStatus(CANCon::CONNECTED);
+    }
+    sendStatus();
 }
 
 
@@ -141,6 +154,13 @@ void SerialBusConnection::disconnectDevice() {
     if(mDev_p) {
         mDev_p->disconnectDevice();
     }
+}
+
+void SerialBusConnection::sendStatus() {
+    CANConStatus stats;
+    stats.conStatus = getStatus();
+    stats.numHardwareBuses = mNumBuses;
+    emit status(stats);
 }
 
 
@@ -227,39 +247,50 @@ void SerialBusConnection::framesReceived()
 }
 
 
+/*
+ * Watchdog, once a second. It keeps the reported status in step with what the device is actually
+ * doing and brings the bus back if it drops out on its own.
+ *
+ * Two things this must NOT do, both of which it used to. It must not stop its own timer when the
+ * device goes down: that left the connection permanently stuck reporting Not Connected, because the
+ * only code that can report Connected again is this function. And it must not force the bus active
+ * when reconnecting: a bus the user deliberately turned off is supposed to stay off, otherwise
+ * unticking "Enable Bus" is undone a second later.
+ */
 void SerialBusConnection::testConnection() {
-    CANConStatus stats;
+    //anything other than Unconnected counts as up, so a device still connecting isn't torn down
+    const bool deviceDown = (!mDev_p || mDev_p->state() == QCanBusDevice::UnconnectedState);
+
+    CANBus bus;
+    const bool haveConfig = getBusConfig(0, bus);
+    //did the user ask for this bus to be on?
+    const bool busWanted = haveConfig && bus.isActive();
 
     switch(getStatus())
     {
         case CANCon::CONNECTED:
-            if (!mDev_p || mDev_p->state() == QCanBusDevice::UnconnectedState) {
-                /* we have lost connectivity */
-                disconnectDevice();
-
+            if (deviceDown) {
+                /* Either we lost the device or the user just turned the bus off. Report it either
+                 * way, but keep this timer running so we can notice it coming back. */
                 setStatus(CANCon::NOT_CONNECTED);
-                stats.conStatus = getStatus();
-                stats.numHardwareBuses = mNumBuses;
-                emit status(stats);
-                piStop();
+                sendStatus();
             }
             break;
-        case CANCon::NOT_CONNECTED:
-            if (mDev_p && mDev_p->state() == QCanBusDevice::UnconnectedState) {
-                /* try to reconnect */
-                CANBus bus;
-                if(getBusConfig(0, bus))
-                {
-                    bus.setActive(true);
-                    setBusSettings(0, bus);
-                }
 
+        case CANCon::NOT_CONNECTED:
+            if (!deviceDown) {
+                //the device came up, most likely because the bus was just re-enabled
                 setStatus(CANCon::CONNECTED);
-                stats.conStatus = getStatus();
-                stats.numHardwareBuses = mNumBuses;
-                emit status(stats);
+                sendStatus();
+            }
+            else if (busWanted && mDev_p) {
+                /* The user wants this bus up but the device isn't. Try to bring it back - the
+                 * settings path reports the resulting status itself, so nothing to do here. This
+                 * is also how the very first connection comes up after piStarted. */
+                setBusSettings(0, bus);
             }
             break;
+
         default: {}
     }
 }

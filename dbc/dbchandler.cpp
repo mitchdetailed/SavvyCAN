@@ -521,6 +521,26 @@ QString DBCFile::getPath()
     return filePath;
 }
 
+/* Walks every message's signals looking for this exact object. Address comparison is the point -
+ * a window holding a DBC_SIGNAL* needs to know whether that particular allocation is about to be
+ * destroyed, which a name lookup could not tell it. */
+bool DBCFile::ownsSignal(const DBC_SIGNAL *sig)
+{
+    if (!sig || !messageHandler) return false;
+
+    for (int m = 0; m < messageHandler->getCount(); m++)
+    {
+        DBC_MESSAGE *msg = messageHandler->findMsgByIdx(m);
+        if (!msg || !msg->sigHandler) continue;
+
+        for (int s = 0; s < msg->sigHandler->getCount(); s++)
+        {
+            if (msg->sigHandler->findSignalByIdx(s) == sig) return true;
+        }
+    }
+    return false;
+}
+
 int DBCFile::getAssocBus()
 {
     return assocBuses;
@@ -1989,13 +2009,13 @@ void DBCHandler::saveDBCFile(int idx)
     dialog.setNameFilters(filters);
     dialog.setViewMode(QFileDialog::Detail);
     dialog.setAcceptMode(QFileDialog::AcceptSave);
-    dialog.selectFile(loadedFiles[idx].getFullFilename());
+    dialog.selectFile(loadedFiles[idx]->getFullFilename());
 
     if (dialog.exec() == QDialog::Accepted)
     {
         filename = dialog.selectedFiles()[0];
         if (!filename.contains('.')) filename += ".dbc";
-        loadedFiles[idx].saveFile(filename);
+        loadedFiles[idx]->saveFile(filename);
         settings.setValue("DBC/LoadSaveDirectory", dialog.directory().path());
     }
 }
@@ -2050,20 +2070,26 @@ int DBCHandler::createBlankFile()
     newFile.dbc_nodes.append(falseNode);
     newFile.setAssocBus(-1);
 
-    loadedFiles.append(newFile);
+    /* heap copy so the file has a stable address for its whole life. The copy constructor fixes up
+     * the internal cross references but call remap anyway in case that ever changes. */
+    DBCFile *heapFile = new DBCFile(newFile);
+    heapFile->remapInternalPointers();
+    loadedFiles.append(heapFile);
     return loadedFiles.size();
 }
 
 DBCFile* DBCHandler::loadDBCFile(QString filename)
 {
     createBlankFile();
-    DBCFile *thisFile = &loadedFiles.last();
+    DBCFile *thisFile = loadedFiles.last();
     if (!thisFile->loadFile(filename))
     {
+        //this file was created moments ago and never handed to anyone, so a real delete is safe
         loadedFiles.removeLast();
-        return loadedFiles.size() > 0 ? &loadedFiles.last() : nullptr;
+        delete thisFile;
+        return loadedFiles.size() > 0 ? loadedFiles.last() : nullptr;
     }
-    return &loadedFiles.last();
+    return loadedFiles.last();
 }
 
 //the only reason to even bother sending the index is to see if
@@ -2106,13 +2132,16 @@ DBCFile* DBCHandler::loadSecretCSVFile(QString filename)
     QByteArray line;
     int lineCounter = 0;
     createBlankFile();
-    thisFile = &loadedFiles.last();
+    thisFile = loadedFiles.last();
 
     QFile *inFile = new QFile(filename);
 
     if (!inFile->open(QIODevice::ReadOnly | QIODevice::Text))
     {
         delete inFile;
+        //pull the freshly created blank file back out so a failed load leaves no phantom entry
+        loadedFiles.removeLast();
+        delete thisFile;
         return nullptr;
     }
 
@@ -2290,14 +2319,17 @@ DBCFile* DBCHandler::loadJSONFile(QString filename)
      DBC_MESSAGE *pMsg;
 
          createBlankFile();
-         thisFile = &loadedFiles.last();
+         thisFile = loadedFiles.last();
 
          QFile *inFile = new QFile(filename);
          if (!inFile->open(QIODevice::ReadOnly | QIODevice::Text))
          {
              qDebug() << "Could not open JSON file for reading.";
              delete inFile;
-             return nullptr;
+             //pull the freshly created blank file back out so a failed load leaves no phantom entry
+        loadedFiles.removeLast();
+        delete thisFile;
+        return nullptr;
          }
          QByteArray wholeFileData = inFile->readAll();
          inFile->close();
@@ -2307,7 +2339,10 @@ DBCFile* DBCHandler::loadJSONFile(QString filename)
          if (jsonDoc.isNull())
          {
              qDebug() << "Couldn't load and parse the JSON file for some reason.";
-             return nullptr;
+             //pull the freshly created blank file back out so a failed load leaves no phantom entry
+        loadedFiles.removeLast();
+        delete thisFile;
+        return nullptr;
          }
          qDebug() << "Loaded JSON";
 
@@ -2456,12 +2491,22 @@ void DBCHandler::removeDBCFile(int idx)
     if (loadedFiles.size() == 0) return;
     if (idx < 0) return;
     if (idx >= loadedFiles.size()) return;
-    loadedFiles.removeAt(idx);
+
+    DBCFile *doomed = loadedFiles.takeAt(idx);
+    /* Tell everyone holding pointers into this file to let go before anything is destroyed. Once
+     * this returns nobody should be referring to it, so it can actually be freed. */
+    emit dbcFileAboutToBeRemoved(doomed);
+    delete doomed;
 }
 
 void DBCHandler::removeAllFiles()
 {
-    loadedFiles.clear();
+    while (!loadedFiles.isEmpty())
+    {
+        DBCFile *doomed = loadedFiles.takeFirst();
+        emit dbcFileAboutToBeRemoved(doomed);
+        delete doomed;
+    }
 }
 
 void DBCHandler::swapFiles(int pos1, int pos2)
@@ -2483,25 +2528,23 @@ void DBCHandler::swapFiles(int pos1, int pos2)
 */
 DBC_MESSAGE* DBCHandler::findMessage(const CANFrame &frame)
 {
-    for(int i = 0; i < loadedFiles.size(); i++)
-    {
-        if (loadedFiles[i].getAssocBus() == -1 || frame.bus == loadedFiles[i].getAssocBus())
-        {
-            DBC_MESSAGE* msg = loadedFiles[i].messageHandler->findMsgByID(frame.frameId());
-            if (msg != nullptr) return msg;
-        }
-    }
-    return nullptr;
+    return findMessage(frame.frameId(), frame.bus);
 }
 
-DBC_MESSAGE* DBCHandler::findMessage(uint32_t id)
+/*
+ * Same as above but for callers that only have an ID. Pass the bus the ID was seen on to
+ * respect the association a DBC file has with a bus. A negative bus means the caller has no
+ * idea which bus is involved so every loaded file is searched.
+*/
+DBC_MESSAGE* DBCHandler::findMessage(uint32_t id, int bus)
 {
     for(int i = 0; i < loadedFiles.size(); i++)
     {
-        DBC_MESSAGE* msg = loadedFiles[i].messageHandler->findMsgByID(id);
-        if (msg != nullptr)
+        //a file associated bus of -1 means the file applies to all buses
+        if (bus < 0 || loadedFiles[i]->getAssocBus() == -1 || bus == loadedFiles[i]->getAssocBus())
         {
-            return msg;
+            DBC_MESSAGE* msg = loadedFiles[i]->messageHandler->findMsgByID(id);
+            if (msg != nullptr) return msg;
         }
     }
     return nullptr;
@@ -2515,12 +2558,12 @@ DBC_MESSAGE* DBCHandler::findMessageForFilter(uint32_t id, MatchingCriteria_t * 
 {
     for(int i = 0; i < loadedFiles.size(); i++)
     {
-        if (loadedFiles[i].messageHandler->filterLabeling())
+        if (loadedFiles[i]->messageHandler->filterLabeling())
         {
-            DBC_MESSAGE* msg = loadedFiles[i].messageHandler->findMsgByID(id);
+            DBC_MESSAGE* msg = loadedFiles[i]->messageHandler->findMsgByID(id);
             if (msg != nullptr) 
             {
-                if (matchingCriteria) *matchingCriteria = loadedFiles[i].messageHandler->getMatchingCriteria();
+                if (matchingCriteria) *matchingCriteria = loadedFiles[i]->messageHandler->getMatchingCriteria();
                 return msg;
             }
         }
@@ -2593,7 +2636,7 @@ DBCFile* DBCHandler::getFileByIdx(int idx)
     if (loadedFiles.size() == 0) return nullptr;
     if (idx < 0) return nullptr;
     if (idx >= loadedFiles.size()) return nullptr;
-    return &loadedFiles[idx];
+    return loadedFiles[idx];
 }
 
 DBCFile* DBCHandler::getFileByName(QString name)
@@ -2601,9 +2644,9 @@ DBCFile* DBCHandler::getFileByName(QString name)
     if (loadedFiles.size() == 0) return nullptr;
     for (int i = 0; i < loadedFiles.size(); i++)
     {
-        if (loadedFiles[i].getFilename().compare(name, Qt::CaseInsensitive) == 0)
+        if (loadedFiles[i]->getFilename().compare(name, Qt::CaseInsensitive) == 0)
         {
-            return &loadedFiles[i];
+            return loadedFiles[i];
         }
     }
     return nullptr;
@@ -2622,7 +2665,8 @@ DBCHandler::DBCHandler()
         DBCFile * file = loadDBCFile(filename);
         if (file)
         {
-            int bus = settings.value("DBC/AssocBus_" + QString::number(i),0).toInt();
+            //-1 (all buses) is the default a freshly loaded file gets, keep that if the key is missing
+            int bus = settings.value("DBC/AssocBus_" + QString::number(i),-1).toInt();
             file->setAssocBus(bus);
 
             MatchingCriteria_t matchingCriteria = (MatchingCriteria_t)settings.value("DBC/MatchingCriteria_" + QString::number(i),0).toInt();

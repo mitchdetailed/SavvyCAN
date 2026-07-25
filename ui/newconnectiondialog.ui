@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>426</width>
-    <height>540</height>
+    <width>880</width>
+    <height>560</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -85,6 +85,90 @@
         </property>
        </widget>
       </item>
+      <item row="8" column="0">
+       <widget class="QRadioButton" name="rbGSUSB">
+        <property name="text">
+         <string>GSUSB (Candlelight)</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QRadioButton" name="rbSeeed">
+        <property name="text">
+         <string>Seeed USB-CAN Analyzer</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QRadioButton" name="rbRobotell">
+        <property name="text">
+         <string>Robotell CAN-USB</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QRadioButton" name="rbCanalystII">
+        <property name="text">
+         <string>CANalyst-II</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QRadioButton" name="rbKvaser">
+        <property name="text">
+         <string>Kvaser (CANlib)</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QRadioButton" name="rbIxxat">
+        <property name="text">
+         <string>IXXAT (VCI)</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="QRadioButton" name="rbPythonCan">
+        <property name="text">
+         <string>python-can over serial</string>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="1">
+       <widget class="QRadioButton" name="rbUdpMulticast">
+        <property name="text">
+         <string>python-can UDP multicast</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2">
+       <widget class="QRadioButton" name="rbUsb2Can">
+        <property name="text">
+         <string>USB2CAN (CANAL)</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="2">
+       <widget class="QRadioButton" name="rbIscan">
+        <property name="text">
+         <string>isCAN (Thorsis)</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="2">
+       <widget class="QRadioButton" name="rbNican">
+        <property name="text">
+         <string>NI-CAN</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="2">
+       <widget class="QRadioButton" name="rbNeousys">
+        <property name="text">
+         <string>Neousys (WDT_DIO)</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
@@ -112,23 +196,37 @@
     </widget>
    </item>
    <item>
-    <widget class="QComboBox" name="cbPort">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="maximumSize">
-      <size>
-       <width>341</width>
-       <height>16777215</height>
-      </size>
-     </property>
-     <property name="editable">
-      <bool>true</bool>
-     </property>
-    </widget>
+    <layout class="QHBoxLayout" name="portLayout">
+     <item>
+      <widget class="QComboBox" name="cbPort">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>700</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="editable">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btnScanDevices">
+       <property name="text">
+        <string>Scan</string>
+       </property>
+       <property name="toolTip">
+        <string>Ask the driver which devices are attached</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
    <item>
     <widget class="QLabel" name="lblSerialSpeed">
