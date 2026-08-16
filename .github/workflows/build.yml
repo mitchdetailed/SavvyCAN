@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - name: Clone
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       # apt-get update first - without it the install can fail on a stale index.
       # libfuse2 is what lets the packaged AppImage run.
@@ -94,7 +94,7 @@ jobs:
             --plugin qt --output appimage
           ls -la ./*.AppImage
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: SavvyCAN-Linux_x64.AppImage
           path: SavvyCAN-*x86_64.AppImage
@@ -105,7 +105,7 @@ jobs:
 
     steps:
       - name: Clone
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Prepare macOS Environment
         run: brew install libusb
@@ -156,7 +156,7 @@ jobs:
           test -f SavvyCAN.dmg
           mv SavvyCAN.dmg SavvyCAN_x64.dmg
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: SavvyCAN-macOS_x64.dmg
           path: SavvyCAN_x64.dmg
@@ -167,7 +167,7 @@ jobs:
 
     steps:
       - name: Clone
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Prepare macOS Environment
         run: brew install libusb
@@ -218,7 +218,7 @@ jobs:
           test -f SavvyCAN.dmg
           mv SavvyCAN.dmg SavvyCAN_arm64.dmg
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: SavvyCAN-macOS_ARM64.dmg
           path: SavvyCAN_arm64.dmg
@@ -229,7 +229,7 @@ jobs:
 
     steps:
       - name: Clone
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Prepare Qt Libraries
         uses: jurplel/install-qt-action@v4
@@ -264,7 +264,7 @@ jobs:
           Copy-Item -Recurse help package\help
           Copy-Item -Recurse examples package\examples
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: SavvyCAN-Windows_x64
           path: package
@@ -277,11 +277,13 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      # Kept on the same major as upload-artifact above; a mismatched pair can
-      # fail to see the artifacts it is meant to collect.
-      - uses: actions/download-artifact@v5
+      # v8 pairs with upload-artifact v7: it reads Content-Type before unzipping
+      # so direct (unzipped) uploads survive, and a digest mismatch is now an
+      # error rather than a warning. Both artifacts here are produced by the
+      # upload steps above in the same run, so they arrive zipped as before.
+      - uses: actions/download-artifact@v8
 
       - name: Zip the Windows build
         run: zip -r SavvyCAN-Windows_x64_CIBuild.zip SavvyCAN-Windows_x64
