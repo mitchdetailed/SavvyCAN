@@ -288,12 +288,29 @@ jobs:
       - name: Zip the Windows build
         run: zip -r SavvyCAN-Windows_x64_CIBuild.zip SavvyCAN-Windows_x64
 
-      - uses: "marvinpinto/action-automatic-releases@latest"
+      # Replaces marvinpinto/action-automatic-releases, which is archived, last
+      # released in 2021 and was pinned by the mutable @latest tag. It also
+      # managed the rolling tag itself and failed one run doing so with
+      # "Resource not accessible by integration".
+      #
+      # Moving the tag here with git rather than leaving it to target_commitish
+      # is deliberate: the action's own documentation notes that creating a ref
+      # through the API is what tends to hit that same 403. checkout persists
+      # credentials, so this push uses the job's contents: write grant.
+      - name: Move the continuous tag to this build
+        run: |
+          git tag -f continuous "$GITHUB_SHA"
+          git push -f origin refs/tags/continuous
+
+      - name: Publish the development build
+        uses: softprops/action-gh-release@v3
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "continuous"
+          tag_name: continuous
+          name: "Development Build"
           prerelease: true
-          title: "Development Build"
+          # Default is false, which would let a missing DMG or AppImage publish
+          # a quietly incomplete release.
+          fail_on_unmatched_files: true
           files: |
             SavvyCAN-Linux_x64.AppImage/SavvyCAN-*x86_64.AppImage
             SavvyCAN-Windows_x64_CIBuild.zip
