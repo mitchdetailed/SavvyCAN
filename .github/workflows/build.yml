@@ -49,11 +49,20 @@ jobs:
 
       - name: Package
         run: |
+          set -x
           make INSTALL_ROOT=appdir install
+          find appdir -maxdepth 4 -type d
           # SavvyCAN loads its translations from applicationDirPath()/translations,
-          # and the binary installs to /usr/bin, so they belong next to it.
+          # and the binary installs to /usr/bin, so they belong next to it. An
+          # unexpanded glob here must not take the whole release build down.
+          shopt -s nullglob
+          qm=(translations/*.qm)
           mkdir -p appdir/usr/bin/translations
-          cp translations/*.qm appdir/usr/bin/translations/
+          if [ ${#qm[@]} -gt 0 ]; then
+            cp "${qm[@]}" appdir/usr/bin/translations/
+          else
+            echo "WARNING: lrelease produced no .qm files - shipping without translations"
+          fi
           wget -c -nv "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
           chmod a+x linuxdeployqt-continuous-x86_64.AppImage
           # linuxdeployqt refuses to run on a distro newer than the oldest still
@@ -91,9 +100,16 @@ jobs:
 
       - name: Package
         run: |
+          set -x
           mkdir -p SavvyCAN.app/Contents/MacOS/translations
           mkdir -p SavvyCAN.app/Contents/MacOS/help
-          cp -R translations/*.qm SavvyCAN.app/Contents/MacOS/translations
+          shopt -s nullglob
+          qm=(translations/*.qm)
+          if [ ${#qm[@]} -gt 0 ]; then
+            cp -R "${qm[@]}" SavvyCAN.app/Contents/MacOS/translations/
+          else
+            echo "WARNING: lrelease produced no .qm files - shipping without translations"
+          fi
           cp -R help/* SavvyCAN.app/Contents/MacOS/help
           # macdeployqt deploys from a fixed plugin whitelist that has no entry for
           # QtSerialBus, so the canbus backends have to be placed by hand. Doing it
@@ -104,7 +120,17 @@ jobs:
           else
             echo "WARNING: no canbus plugins found under $QT_ROOT_DIR - the bundle will lack Qt CAN backends"
           fi
-          macdeployqt SavvyCAN.app -dmg
+          # -dmg drives hdiutil, which is intermittently flaky on CI runners, so
+          # report what macdeployqt actually did and give the image one retry
+          # before failing the build.
+          macdeployqt SavvyCAN.app -dmg -verbose=1 || echo "macdeployqt returned $?"
+          if [ ! -f SavvyCAN.dmg ]; then
+            echo "no DMG produced on the first attempt, retrying"
+            rm -rf SavvyCAN.dmg
+            hdiutil create -verbose -srcfolder SavvyCAN.app -volname SavvyCAN \
+              -format UDZO -ov SavvyCAN.dmg
+          fi
+          test -f SavvyCAN.dmg
           mv SavvyCAN.dmg SavvyCAN_x64.dmg
 
       - uses: actions/upload-artifact@v4
@@ -136,9 +162,16 @@ jobs:
 
       - name: Package
         run: |
+          set -x
           mkdir -p SavvyCAN.app/Contents/MacOS/translations
           mkdir -p SavvyCAN.app/Contents/MacOS/help
-          cp -R translations/*.qm SavvyCAN.app/Contents/MacOS/translations
+          shopt -s nullglob
+          qm=(translations/*.qm)
+          if [ ${#qm[@]} -gt 0 ]; then
+            cp -R "${qm[@]}" SavvyCAN.app/Contents/MacOS/translations/
+          else
+            echo "WARNING: lrelease produced no .qm files - shipping without translations"
+          fi
           cp -R help/* SavvyCAN.app/Contents/MacOS/help
           # macdeployqt deploys from a fixed plugin whitelist that has no entry for
           # QtSerialBus, so the canbus backends have to be placed by hand. Doing it
@@ -149,7 +182,17 @@ jobs:
           else
             echo "WARNING: no canbus plugins found under $QT_ROOT_DIR - the bundle will lack Qt CAN backends"
           fi
-          macdeployqt SavvyCAN.app -dmg
+          # -dmg drives hdiutil, which is intermittently flaky on CI runners, so
+          # report what macdeployqt actually did and give the image one retry
+          # before failing the build.
+          macdeployqt SavvyCAN.app -dmg -verbose=1 || echo "macdeployqt returned $?"
+          if [ ! -f SavvyCAN.dmg ]; then
+            echo "no DMG produced on the first attempt, retrying"
+            rm -rf SavvyCAN.dmg
+            hdiutil create -verbose -srcfolder SavvyCAN.app -volname SavvyCAN \
+              -format UDZO -ov SavvyCAN.dmg
+          fi
+          test -f SavvyCAN.dmg
           mv SavvyCAN.dmg SavvyCAN_arm64.dmg
 
       - uses: actions/upload-artifact@v4
