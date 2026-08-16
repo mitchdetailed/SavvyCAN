@@ -9,6 +9,11 @@ object_script.*
 #Archives
 *.zip
 
+#Installer staging and output (rebuild with installer/build_installer.ps1)
+deploy/
+build-installer/
+installer/*.exe
+
 #gitignore_files directory
 gitignore_files/
 
