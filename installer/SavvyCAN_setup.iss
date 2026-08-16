@@ -86,9 +86,12 @@ begin
     SettingsDir := ExpandConstant('{userappdata}\EVTV');
     if DirExists(SettingsDir) then
     begin
-      if MsgBox('Also remove your SavvyCAN settings (saved connections, window positions)?' + #13#10 +
-                'Choose No to keep them for a future reinstall.',
-                mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+      // SuppressibleMsgBox, not MsgBox: an unattended uninstall (/VERYSILENT
+      // /SUPPRESSMSGBOXES) must take the IDNO branch and leave the settings
+      // alone. Plain MsgBox ignores /SUPPRESSMSGBOXES and ends up deleting them.
+      if SuppressibleMsgBox('Also remove your SavvyCAN settings (saved connections, window positions)?' + #13#10 +
+                            'Choose No to keep them for a future reinstall.',
+                            mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES then
         DelTree(SettingsDir, True, True, True);
     end;
   end;
