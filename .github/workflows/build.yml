@@ -63,13 +63,24 @@ jobs:
           else
             echo "WARNING: lrelease produced no .qm files - shipping without translations"
           fi
-          wget -c -nv "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
-          chmod a+x linuxdeployqt-continuous-x86_64.AppImage
-          # linuxdeployqt refuses to run on a distro newer than the oldest still
-          # supported one unless told otherwise.
-          ./linuxdeployqt-continuous-x86_64.AppImage appdir/usr/share/applications/SavvyCAN.desktop \
-            -appimage -unsupported-allow-new-glibc \
-            -extra-plugins=iconengines,platformthemes/libqgtk3.so,canbus
+          # linuxdeploy rather than linuxdeployqt: the latter quit with a bare
+          # exit code 1 immediately after "Found icons from desktop file" on this
+          # Qt 6.8 build, printing no diagnostic. linuxdeploy and its qt plugin
+          # are maintained and target Qt 6 directly.
+          wget -c -nv "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
+          wget -c -nv "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage"
+          chmod a+x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage
+          # The qt plugin locates Qt through qmake and takes the non-default
+          # plugin set from EXTRA_QT_PLUGINS - canbus is what the CAN backends
+          # live in, and nothing pulls it in automatically.
+          export QMAKE="$(command -v qmake)"
+          export EXTRA_QT_PLUGINS="canbus;iconengines;platformthemes"
+          export ARCH=x86_64
+          ./linuxdeploy-x86_64.AppImage --appdir appdir \
+            -d appdir/usr/share/applications/SavvyCAN.desktop \
+            -i appdir/usr/share/icons/hicolor/256x256/apps/SavvyCAN.png \
+            --plugin qt --output appimage
+          ls -la ./*.AppImage
 
       - uses: actions/upload-artifact@v4
         with:
