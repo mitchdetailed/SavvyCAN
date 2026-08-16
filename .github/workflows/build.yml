@@ -1,70 +1,112 @@
 name: Build
 
+# Packaging workflow: only fires on master, unlike the tests workflow which runs
+# on every branch and pull request.
+#
+# Every job needs the same two things, and missing either one stops the build
+# before a single file compiles:
+#   * Qt 6 with the qtserialbus and qtserialport add-ons. The project asks for
+#     them in SavvyCAN.pro, they are not part of the base Qt install, and qmake
+#     stops at "Unknown module(s) in QT" without them.
+#   * libusb development headers, which the gs_usb/Candlelight backend links
+#     against. Windows uses the copy in third_party, Linux and macOS pick up the
+#     system one (see the unix block in SavvyCAN.pro).
 on:
   push:
     branches:
       - "master"
+  workflow_dispatch:
+
 jobs:
   buildlinux:
     name: Linux x64
     runs-on: ubuntu-22.04
 
     steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      # apt-get update first - without it the install can fail on a stale index.
+      # libfuse2 is what lets the packaged AppImage run.
       - name: Prepare Environment
         run: |
-            sudo apt-get install libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-randr0 libxkbcommon-x11-0 libfuse2
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 \
+            libxcb-xinerama0 libxcb-randr0 libxkbcommon-x11-0 libxcb-cursor0 \
+            libusb-1.0-0-dev libfuse2
 
       - name: Prepare Qt Libraries
-        uses: jurplel/install-qt-action@v3
-
-      - name: Clone
-        uses: actions/checkout@v3
+        uses: jurplel/install-qt-action@v4
+        with:
+          modules: qtserialbus qtserialport
 
       - name: Compile
         run: |
           qmake CONFIG+=release PREFIX=/usr SavvyCAN.pro
-          make -j`grep -c ^processor /proc/cpuinfo`
-          
-      - name: Package     
+          make -j$(nproc)
+          lrelease translations/*.ts
+
+      - name: Package
         run: |
           make INSTALL_ROOT=appdir install
+          # SavvyCAN loads its translations from applicationDirPath()/translations,
+          # and the binary installs to /usr/bin, so they belong next to it.
+          mkdir -p appdir/usr/bin/translations
+          cp translations/*.qm appdir/usr/bin/translations/
           wget -c -nv "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
           chmod a+x linuxdeployqt-continuous-x86_64.AppImage
-          ./linuxdeployqt-continuous-x86_64.AppImage appdir/usr/share/applications/SavvyCAN.desktop -appimage -extra-plugins=iconengines,platformthemes/libqgtk3.so,canbus
+          # linuxdeployqt refuses to run on a distro newer than the oldest still
+          # supported one unless told otherwise.
+          ./linuxdeployqt-continuous-x86_64.AppImage appdir/usr/share/applications/SavvyCAN.desktop \
+            -appimage -unsupported-allow-new-glibc \
+            -extra-plugins=iconengines,platformthemes/libqgtk3.so,canbus
 
       - uses: actions/upload-artifact@v4
         with:
           name: SavvyCAN-Linux_x64.AppImage
           path: SavvyCAN-*x86_64.AppImage
-      
+
   buildmacos86:
     name: macOS x64
     runs-on: macos-15-intel
 
     steps:
-      - name: Prepare macOS Environment
-        run: |
-            brew install qt@5
-            brew link qt@5 --force
-
       - name: Clone
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Compile     
+      - name: Prepare macOS Environment
+        run: brew install libusb
+
+      - name: Prepare Qt Libraries
+        uses: jurplel/install-qt-action@v4
+        with:
+          modules: qtserialbus qtserialport
+
+      - name: Compile
         run: |
           qmake CONFIG+=release CONFIG+=sdk_no_version_check SavvyCAN.pro
-          make -j`sysctl kern.aioprocmax | awk '{print $2}'`
+          make -j$(sysctl -n hw.ncpu)
           lrelease translations/*.ts
 
-      - name: Package     
+      - name: Package
         run: |
           mkdir -p SavvyCAN.app/Contents/MacOS/translations
           mkdir -p SavvyCAN.app/Contents/MacOS/help
           cp -R translations/*.qm SavvyCAN.app/Contents/MacOS/translations
           cp -R help/* SavvyCAN.app/Contents/MacOS/help
+          # macdeployqt deploys from a fixed plugin whitelist that has no entry for
+          # QtSerialBus, so the canbus backends have to be placed by hand. Doing it
+          # before macdeployqt runs means it still rewrites their library paths.
+          if [ -d "$QT_ROOT_DIR/plugins/canbus" ]; then
+            mkdir -p SavvyCAN.app/Contents/PlugIns/canbus
+            cp -R "$QT_ROOT_DIR/plugins/canbus/." SavvyCAN.app/Contents/PlugIns/canbus/
+          else
+            echo "WARNING: no canbus plugins found under $QT_ROOT_DIR - the bundle will lack Qt CAN backends"
+          fi
           macdeployqt SavvyCAN.app -dmg
           mv SavvyCAN.dmg SavvyCAN_x64.dmg
-      
+
       - uses: actions/upload-artifact@v4
         with:
           name: SavvyCAN-macOS_x64.dmg
@@ -75,97 +117,107 @@ jobs:
     runs-on: macos-15
 
     steps:
-      - name: Prepare macOS Environment
-        run: |
-            brew install qt@5
-            brew link qt@5 --force
-
       - name: Clone
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Compile     
+      - name: Prepare macOS Environment
+        run: brew install libusb
+
+      - name: Prepare Qt Libraries
+        uses: jurplel/install-qt-action@v4
+        with:
+          modules: qtserialbus qtserialport
+
+      - name: Compile
         run: |
           qmake CONFIG+=release CONFIG+=sdk_no_version_check SavvyCAN.pro
-          make -j`sysctl kern.aioprocmax | awk '{print $2}'`
+          make -j$(sysctl -n hw.ncpu)
           lrelease translations/*.ts
-      
-      - name: Package     
+
+      - name: Package
         run: |
           mkdir -p SavvyCAN.app/Contents/MacOS/translations
           mkdir -p SavvyCAN.app/Contents/MacOS/help
           cp -R translations/*.qm SavvyCAN.app/Contents/MacOS/translations
           cp -R help/* SavvyCAN.app/Contents/MacOS/help
+          # macdeployqt deploys from a fixed plugin whitelist that has no entry for
+          # QtSerialBus, so the canbus backends have to be placed by hand. Doing it
+          # before macdeployqt runs means it still rewrites their library paths.
+          if [ -d "$QT_ROOT_DIR/plugins/canbus" ]; then
+            mkdir -p SavvyCAN.app/Contents/PlugIns/canbus
+            cp -R "$QT_ROOT_DIR/plugins/canbus/." SavvyCAN.app/Contents/PlugIns/canbus/
+          else
+            echo "WARNING: no canbus plugins found under $QT_ROOT_DIR - the bundle will lack Qt CAN backends"
+          fi
           macdeployqt SavvyCAN.app -dmg
           mv SavvyCAN.dmg SavvyCAN_arm64.dmg
-      
+
       - uses: actions/upload-artifact@v4
         with:
           name: SavvyCAN-macOS_ARM64.dmg
           path: SavvyCAN_arm64.dmg
-          
+
   buildwindows:
     name: Windows x64
     runs-on: windows-2022
 
-    steps:      
-      - name: Prepare Qt Libraries
-        uses: jurplel/install-qt-action@v3
-
+    steps:
       - name: Clone
-        uses: actions/checkout@v3
-      
+        uses: actions/checkout@v4
+
+      - name: Prepare Qt Libraries
+        uses: jurplel/install-qt-action@v4
+        with:
+          modules: qtserialbus qtserialport
+
       - name: Compile
         shell: cmd
-        run: | 
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          qmake CONFIG+=release SavvyCAN.pro
-          nmake /C
-
-      - name: Package
         run: |
-          mkdir package
-          copy "release/SavvyCAN.exe" package/
-          mkdir package/help
-          copy  translations/*.qm package/translations/
-          copy  help/*.md package/help/
-          mkdir package/help/images
-          copy help/images/*.* package/help/images/
-          mkdir package/examples
-          copy examples/*.* package/examples/          
-          copy "${Env:Qt5_Dir}/bin/Qt5Core.dll" package/
-          copy "${Env:Qt5_Dir}/bin/Qt5Gui.dll" package/
-          copy "${Env:Qt5_Dir}/bin/Qt5Network.dll" package/
-          copy "${Env:Qt5_Dir}/bin/Qt5PrintSupport.dll" package/
-          copy "${Env:Qt5_Dir}/bin/Qt5Qml.dll" package/
-          copy "${Env:Qt5_Dir}/bin/Qt5SerialBus.dll" package/
-          copy "${Env:Qt5_Dir}/bin/Qt5SerialPort.dll" package/
-          copy "${Env:Qt5_Dir}/bin/Qt5Widgets.dll" package/
-          mkdir package/imageformats
-          copy "${Env:Qt5_Dir}/plugins/imageformats/*.*" package/imageformats/
-          mkdir package/platforms
-          copy "${Env:Qt5_Dir}/plugins/platforms/*.*" package/platforms/
-          mkdir package/styles
-          copy "${Env:Qt5_Dir}/plugins/styles/*.*" package/styles/
-          mkdir package/canbus
-          copy "${Env:Qt5_Dir}/plugins/canbus/*.*" package/canbus/
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          qmake CONFIG+=release SavvyCAN.pro || exit /b 1
+          nmake || exit /b 1
+
+      # windeployqt works out the Qt runtime instead of copying a hand-written
+      # list of DLLs that silently rots whenever a dependency changes.
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item release\SavvyCAN.exe package\
+          # The MSVC build links the VS2022 import library, so ship the matching DLL.
+          Copy-Item third_party\libusb\VS2022\MS64\dll\libusb-1.0.dll package\
+          windeployqt --release --no-translations package\SavvyCAN.exe
+          # PowerShell does not expand wildcards in arguments to native programs,
+          # and lrelease does no globbing of its own, so feed it real paths.
+          New-Item -ItemType Directory -Force -Path package\translations | Out-Null
+          Get-ChildItem translations\*.ts | ForEach-Object {
+            lrelease $_.FullName -qm (Join-Path 'package\translations' ($_.BaseName + '.qm'))
+            if ($LASTEXITCODE -ne 0) { throw "lrelease failed on $($_.Name) ($LASTEXITCODE)" }
+          }
+          # HelpWindow reads applicationDirPath()/help, so the docs have to ship.
+          Copy-Item -Recurse help package\help
+          Copy-Item -Recurse examples package\examples
 
       - uses: actions/upload-artifact@v4
         with:
           name: SavvyCAN-Windows_x64
           path: package
- 
+
   pre-release:
     name: "pre-release"
     runs-on: "ubuntu-latest"
     needs: [buildwindows, buildmacos86, buildmacos-arm64, buildlinux]
+    permissions:
+      contents: write
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4.1.7
+      - uses: actions/download-artifact@v4
 
-      - name: Display structure of downloaded files
+      - name: Zip the Windows build
         run: zip -r SavvyCAN-Windows_x64_CIBuild.zip SavvyCAN-Windows_x64
+
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
@@ -177,30 +229,39 @@ jobs:
             SavvyCAN-Windows_x64_CIBuild.zip
             SavvyCAN-macOS_x64.dmg/SavvyCAN_x64.dmg
             SavvyCAN-macOS_ARM64.dmg/SavvyCAN_arm64.dmg
-          
+
   notify:
     name: Notify Discord
     runs-on: ubuntu-latest
     needs: [buildwindows, buildmacos86, buildmacos-arm64, buildlinux]
+    # A fork without the webhook secrets should not turn the whole run red.
+    continue-on-error: true
+    # Job level, not step level: a step's own env: block is not visible to that
+    # same step's if:, so the guard below would never see the secrets.
+    env:
+      WEBHOOK_ID: ${{ secrets.WEBHOOK_ID }}
+      WEBHOOK_TOKEN: ${{ secrets.WEBHOOK_TOKEN }}
     steps:
-      - id: msg_var
-        name: remove newlines
-        run: |
-          export release_msg=$(cat << EOF
-          ${{ github.event.head_commit.message }} 
-          EOF
-          )
-          release_msg="${release_msg//$'\n'/'-'}"
-          release_msg="${release_msg//$'\r'/'-'}"
-          release_msg="${release_msg//$'('/'-'}"
-          release_msg="${release_msg//$')'/'-'}"
-          echo $release_msg
-          echo "{msg}={$release_msg}" >> $GITHUB_OUTPUT
-                                                                  
       - name: Notify Discord
+        if: ${{ env.WEBHOOK_ID != '' && env.WEBHOOK_TOKEN != '' }}
+        # The commit message reaches the payload through jq --arg and an env var,
+        # never through shell interpolation: a message containing a quote or a
+        # backslash would otherwise produce invalid JSON and lose the notification.
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SHA: ${{ github.sha }}
         run: |
-          curl -i -H "Accept: application/json" \
-          -H "Content-Type:application/json" \
-          -X POST \
-          --data "{\"content\": null,\"embeds\": [{\"title\": \"${{ github.repository }} Build Complete\",      \"description\": \"${{ steps.msg_var.outputs.msg }} \\nCommit: ${{ github.sha }}\\n[Build Artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts)\",      \"color\": 5131997,      \"author\": {        \"name\": \"Github Builds\"      }    }  ]}" \
-          https://discord.com/api/webhooks/${{ secrets.WEBHOOK_ID }}/${{ secrets.WEBHOOK_TOKEN }}
+          payload=$(jq -n \
+            --arg title "$REPO Build Complete" \
+            --arg msg "$COMMIT_MESSAGE" \
+            --arg sha "$SHA" \
+            --arg url "https://github.com/$REPO/actions/runs/$RUN_ID#artifacts" \
+            '{content: null, embeds: [{title: $title,
+                                       description: ($msg + "\nCommit: " + $sha + "\n[Build Artifacts](" + $url + ")"),
+                                       color: 5131997,
+                                       author: {name: "Github Builds"}}]}')
+          curl -sS -H "Content-Type: application/json" -X POST \
+            --data "$payload" \
+            "https://discord.com/api/webhooks/$WEBHOOK_ID/$WEBHOOK_TOKEN"
