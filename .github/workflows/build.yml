@@ -70,12 +70,24 @@ jobs:
           wget -c -nv "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
           wget -c -nv "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage"
           chmod a+x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage
-          # The qt plugin locates Qt through qmake and takes the non-default
-          # plugin set from EXTRA_QT_PLUGINS - canbus is what the CAN backends
-          # live in, and nothing pulls it in automatically.
           export QMAKE="$(command -v qmake)"
-          export EXTRA_QT_PLUGINS="canbus;iconengines;platformthemes"
           export ARCH=x86_64
+          # EXTRA_QT_PLUGINS was silently ignored for these two - a build with it
+          # set deployed only the qt plugin's own default set and shipped no
+          # canbus directory at all, which costs the AppImage every Qt CAN
+          # backend including socketcan. Copying them into the AppDir up front is
+          # deterministic, and linuxdeploy still resolves their dependencies
+          # because it walks every ELF file it finds under the AppDir.
+          qt_plugins="$(qmake -query QT_INSTALL_PLUGINS)"
+          for p in canbus iconengines; do
+            if [ -d "$qt_plugins/$p" ]; then
+              mkdir -p "appdir/usr/plugins/$p"
+              cp -a "$qt_plugins/$p/." "appdir/usr/plugins/$p/"
+            else
+              echo "WARNING: $qt_plugins/$p not found"
+            fi
+          done
+          ls -la appdir/usr/plugins/canbus
           ./linuxdeploy-x86_64.AppImage --appdir appdir \
             -d appdir/usr/share/applications/SavvyCAN.desktop \
             -i appdir/usr/share/icons/hicolor/256x256/apps/SavvyCAN.png \
