@@ -252,9 +252,26 @@ jobs:
           Copy-Item release\SavvyCAN.exe package\
           # The MSVC build links the VS2022 import library, so ship the matching DLL.
           Copy-Item third_party\libusb\VS2022\MS64\dll\libusb-1.0.dll package\
-          # --compiler-runtime brings the MSVC redistributable DLLs along, so the
-          # installer does not depend on the target machine already having them.
-          windeployqt --release --no-translations --compiler-runtime package\SavvyCAN.exe
+          windeployqt --release --no-translations package\SavvyCAN.exe
+          # The MSVC runtime has to be copied by hand. windeployqt's
+          # --compiler-runtime only acts when the MSVC environment is present,
+          # and vcvars64 from the Compile step runs in a cmd shell whose
+          # variables do not reach this one - passing the flag here silently
+          # shipped no CRT at all, leaving the app to rely on the target machine
+          # already having the redistributable.
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path -LiteralPath $vswhere)) { throw "vswhere not found at $vswhere" }
+          $vsPath = & $vswhere -latest -property installationPath
+          $crt = Get-ChildItem (Join-Path $vsPath 'VC\Redist\MSVC') -Directory |
+                   Sort-Object Name -Descending |
+                   ForEach-Object { Get-ChildItem (Join-Path $_.FullName 'x64') -Directory -Filter 'Microsoft.VC*.CRT' -ErrorAction SilentlyContinue } |
+                   Select-Object -First 1
+          if (-not $crt) { throw "no Visual C++ redistributable found under $vsPath" }
+          Copy-Item (Join-Path $crt.FullName '*.dll') package\
+          $shipped = Get-ChildItem package\*.dll |
+                       Where-Object { $_.Name -match 'vcruntime|msvcp|concrt|vccorlib' }
+          if (-not $shipped) { throw 'no CRT DLLs landed in package\' }
+          $shipped | ForEach-Object { "CRT: $($_.Name)" }
           # PowerShell does not expand wildcards in arguments to native programs,
           # and lrelease does no globbing of its own, so feed it real paths.
           New-Item -ItemType Directory -Force -Path package\translations | Out-Null
