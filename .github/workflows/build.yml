@@ -283,6 +283,37 @@ jobs:
           Copy-Item -Recurse help package\help
           Copy-Item -Recurse examples package\examples
 
+          # qmltooling is the QML debugger, only ever loaded when the app is
+          # started with -qmljsdebugger, and it is the sole reason Qt6Quick gets
+          # deployed - SavvyCAN is a QWidgets app and uses QtQml only for the
+          # scripting engine. qtuiotouchplugin is TUIO touch input. Together
+          # roughly 7 MB of a release download nothing loads. The QtQml
+          # satellite libraries stay: they belong to the engine that runs the
+          # user's scripts.
+          foreach ($dir in 'qmltooling', 'generic') {
+            $p = Join-Path 'package' $dir
+            if (Test-Path -LiteralPath $p) { Remove-Item -Recurse -Force -LiteralPath $p }
+          }
+          $quick = 'package\Qt6Quick.dll'
+          if (Test-Path -LiteralPath $quick) { Remove-Item -Force -LiteralPath $quick }
+
+          # Prove the pruned payload still loads. A DLL removed by mistake shows
+          # up here as STATUS_DLL_NOT_FOUND long before any window is created, so
+          # this catches an over-eager prune without needing a desktop session.
+          $p = Start-Process -FilePath (Resolve-Path package\SavvyCAN.exe) -WorkingDirectory package -PassThru
+          Start-Sleep -Seconds 8
+          if ($p.HasExited) {
+            $code = $p.ExitCode
+            # 0xC0000135 missing DLL, 0xC0000139 missing entry point
+            if ($code -eq -1073741515 -or $code -eq -1073741721) {
+              throw ("SavvyCAN.exe could not load its libraries (exit 0x{0:X8}) - the prune removed something it needs" -f $code)
+            }
+            Write-Host "note: exited early with $code, not a library-load failure"
+          } else {
+            Write-Host 'smoke test: process stayed up, libraries resolved'
+            Stop-Process -Id $p.Id -Force
+          }
+
       # Inno Setup 6 is already on the windows-2022 image, so there is nothing to
       # install. This is the same .iss the local build_installer.ps1 drives, just
       # pointed at the payload this job already staged.
