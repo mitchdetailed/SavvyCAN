@@ -19,7 +19,7 @@ int main(int argc, char* argv[])
     if (argc < 2) { std::cerr << "Usage: mdf4_inspect <file.mf4>\n"; return 1; }
 
     mdf::MdfReader reader(argv[1]);
-    reader.ReadEverythingButData();
+    if (!reader.ReadEverythingButData()) { std::cerr << "Failed to read metadata from " << argv[1] << "\n"; return 1; }
 
     const auto* f = reader.GetFile();
     if (!f) { std::cerr << "Failed to open file\n"; return 1; }
@@ -64,7 +64,7 @@ int main(int argc, char* argv[])
         }
 
         if (bundles.empty()) continue;
-        reader.ReadData(*dg);
+        if (!reader.ReadData(*dg)) { std::cerr << "Failed to read data for data group " << di << "\n"; return 1; }
 
         for (auto& b : bundles) {
             uint64_t n = b.obs_id->NofSamples();

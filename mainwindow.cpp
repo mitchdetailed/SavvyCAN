@@ -346,7 +346,7 @@ void MainWindow::killWindow(QDialog *win)
     if (win)
     {
         win->close();
-        win->deleteLater();
+        delete win;
     }
 }
 
@@ -533,6 +533,7 @@ void MainWindow::processSenderCellChange(int line, int col)
     int numBuses = CANConManager::getInstance()->getNumBuses();
     QByteArray arr;
 
+    QMutexLocker locker(&frameSender->recordMutex());
     tempData = frameSender->getSendRecordRef(line);
 
     if (!tempData)
@@ -543,7 +544,9 @@ void MainWindow::processSenderCellChange(int line, int col)
         dat.count = 0;
         dat.frameCount = 0;
         dat.bus = 0;
+        locker.unlock(); //addSendRecord blocks on the sender thread so don't hold the mutex over it
         frameSender->addSendRecord(dat);
+        locker.relock();
         tempData = frameSender->getSendRecordRef(line);
     }
 
@@ -1193,10 +1196,16 @@ void MainWindow::tickGUIUpdate()
         int numRows = ui->tableSimpleSender->rowCount();
         for (int i = 0; i < numRows; i++)
         {
+            //copy the count out under the mutex; setText can re-enter processSenderCellChange
+            //via cellChanged so the mutex cannot be held while calling it
+            frameSender->recordMutex().lock();
             tempData = frameSender->getSendRecordRef(i);
-            if (tempData)
+            bool hasRecord = (tempData != nullptr);
+            int sendCount = hasRecord ? tempData->count : 0;
+            frameSender->recordMutex().unlock();
+            if (hasRecord)
             {
-                ui->tableSimpleSender->item(i, SIMP_COL::SC_COL_COUNT)->setText(QString::number( tempData->count ));
+                ui->tableSimpleSender->item(i, SIMP_COL::SC_COL_COUNT)->setText(QString::number( sendCount ));
             }
         }
 

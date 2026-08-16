@@ -133,7 +133,8 @@ void FrameSenderObject::removeSendRecord(int idx)
 /*
  * Note: Getting a reference to an item in a QList is a dangerous thing. If anyone
  * or anything happens to reallocate the list you're screwed. So, call this, do the
- * work, and drop the reference as soon as possible.
+ * work, and drop the reference as soon as possible. Callers on other threads must
+ * hold recordMutex() the whole time they use the returned pointer.
 */
 FrameSendData *FrameSenderObject::getSendRecordRef(int idx)
 {
@@ -183,7 +184,7 @@ void FrameSenderObject::timerTriggered()
             if (sendData->triggers.size() == 0)
             {
                 //qDebug() << "No triggers to process";
-                break;
+                continue;
             }
             for (int j = 0; j < sendData->triggers.size(); j++)
             {

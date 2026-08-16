@@ -393,7 +393,7 @@ void DBCMainEditor::refreshTree()
         DBC_NODE newNode;
         newNode.name = "Vector__XXX";
         newNode.comment = "Default node if no other node is specified";
-        dbcFile->dbc_nodes.append(newNode);
+        dbcFile->addNode(newNode);
     }
 
     DBC_NODE *defaultNode = dbcFile->findNodeByName("Vector__XXX");
@@ -627,7 +627,7 @@ void DBCMainEditor::newNode(QString nodeName)
     {
         node.name = nodeName;
     }
-    dbcFile->dbc_nodes.append(node);
+    dbcFile->addNode(node);
     nodePtr = dbcFile->findNodeByName(node.name);
     QTreeWidgetItem *nodeItem = new QTreeWidgetItem();
     nodeItem->setText(0, node.name);
@@ -649,11 +649,7 @@ void DBCMainEditor::copyMessageToNode(DBC_NODE *parentNode, DBC_MESSAGE *source,
 {
     DBC_NODE *node = parentNode;
     if (!node) node = dbcFile->findNodeByIdx(0);
-    QTreeWidgetItem *nodeItem = nullptr;
     DBC_MESSAGE msg;
-    DBC_MESSAGE *msgPtr;
-
-    nodeItem = ui->treeDBC->currentItem();
 
     msg.name = source->name;
     msg.ID = newMsgId;
@@ -697,17 +693,11 @@ void DBCMainEditor::copyMessageToNode(DBC_NODE *parentNode, DBC_MESSAGE *source,
     msg.sigHandler->sort();
 
     dbcFile->messageHandler->addMessage(msg);
-    msgPtr = dbcFile->messageHandler->findMsgByIdx(dbcFile->messageHandler->getCount() - 1);
-    QTreeWidgetItem *newMsgItem = new QTreeWidgetItem();
-    QString msgInfo = Utility::formatCANID(msg.ID) + " " + msg.name;
-    if (msg.comment.size() > 0) msgInfo.append(" - ").append(msg.comment);
-    newMsgItem->setText(0, msgInfo);
-    newMsgItem->setIcon(0, messageIcon);
-    newMsgItem->setData(0, Qt::UserRole, DBCItemTypes::MESG);
-    messageToItem.insert(msgPtr, newMsgItem);
-    itemToMessage.insert(newMsgItem, msgPtr);
-    nodeItem->addChild(newMsgItem);
-    //ui->treeDBC->setCurrentItem(newMsgItem);
+    //appending may have reallocated the message list which invalidates every mapped message
+    //pointer and each signal's parentMessage back-pointer, so fix the cross references and
+    //rebuild the tree
+    dbcFile->remapInternalPointers();
+    refreshTree();
     dbcFile->setDirtyFlag();
 }
 
@@ -777,17 +767,13 @@ void DBCMainEditor::newMessage()
     msg.sender = node;
 
     dbcFile->messageHandler->addMessage(msg);
+    //appending may have reallocated the message list which invalidates every mapped message
+    //pointer and each signal's parentMessage back-pointer, so fix the cross references and
+    //rebuild the tree
+    dbcFile->remapInternalPointers();
+    refreshTree();
     msgPtr = dbcFile->messageHandler->findMsgByIdx(dbcFile->messageHandler->getCount() - 1);
-    QTreeWidgetItem *newMsgItem = new QTreeWidgetItem();
-    QString msgInfo = Utility::formatCANID(msg.ID) + " " + msg.name;
-    if (msg.comment.size() > 0) msgInfo.append(" - ").append(msg.comment);
-    newMsgItem->setText(0, msgInfo);
-    newMsgItem->setIcon(0, messageIcon);
-    newMsgItem->setData(0, Qt::UserRole, DBCItemTypes::MESG);
-    messageToItem.insert(msgPtr, newMsgItem);
-    itemToMessage.insert(newMsgItem, msgPtr);
-    nodeItem->addChild(newMsgItem);
-    ui->treeDBC->setCurrentItem(newMsgItem);
+    if (messageToItem.contains(msgPtr)) ui->treeDBC->setCurrentItem(messageToItem.value(msgPtr));
     dbcFile->setDirtyFlag();
 }
 
@@ -795,9 +781,7 @@ void DBCMainEditor::newSignal()
 {
     QTreeWidgetItem *msgItem = nullptr;
     QTreeWidgetItem *sigItem = nullptr;
-    QTreeWidgetItem *parentItem = nullptr;
     msgItem = ui->treeDBC->currentItem();
-    parentItem = msgItem;
     if (!msgItem) return; //nothing selected!
     int typ = msgItem->data(0, Qt::UserRole).toInt();
     if (typ == DBCItemTypes::NODE) return; //can't add signals to a node!
@@ -805,7 +789,6 @@ void DBCMainEditor::newSignal()
     {
         sigItem = msgItem;
         msgItem = msgItem->parent();
-        parentItem = msgItem;
         //walk up the tree to find the parent msg
         while (msgItem && msgItem->data(0, Qt::UserRole).toInt() != DBCItemTypes::MESG) msgItem = msgItem->parent();
         if (!msgItem) return; //something bad happened. abort.
@@ -841,18 +824,12 @@ void DBCMainEditor::newSignal()
     sig.parentMessage = msg;
     if (!sig.receiver) sig.receiver = &dbcFile->dbc_nodes[0]; //if receiver not set then set it to... something.
     msg->sigHandler->addSignal(sig);
+    //appending may have reallocated the signal list which invalidates every pointer the
+    //item maps held for this message, so fix the cross references and rebuild the tree
+    dbcFile->remapInternalPointers();
+    refreshTree();
     sigPtr = msg->sigHandler->findSignalByIdx(msg->sigHandler->getCount() - 1);
-    QTreeWidgetItem *newSigItem = new QTreeWidgetItem();
-    QString sigInfo = createSignalText(&sig);
-    newSigItem->setText(0, sigInfo);
-    if (sig.isMultiplexed) newSigItem->setIcon(0, multiplexedSignalIcon);
-    else if (sig.isMultiplexor) newSigItem->setIcon(0, multiplexorSignalIcon);
-    else newSigItem->setIcon(0, signalIcon);
-    newSigItem->setData(0, Qt::UserRole, DBCItemTypes::SIG);
-    signalToItem.insert(sigPtr, newSigItem);
-    itemToSignal.insert(newSigItem, sigPtr);
-    parentItem->addChild(newSigItem);
-    ui->treeDBC->setCurrentItem(newSigItem);
+    if (signalToItem.contains(sigPtr)) ui->treeDBC->setCurrentItem(signalToItem.value(sigPtr));
     dbcFile->setDirtyFlag();
 }
 
@@ -892,6 +869,10 @@ void DBCMainEditor::deleteCurrentTreeItem()
             {
                 DBC_NODE *node = itemToNode.value(currItem);
                 deleteNode(node);
+                //deleting shifts the underlying lists, so fix the cross references before the
+                //rebuild walks them
+                dbcFile->remapInternalPointers();
+                refreshTree();
             }
             else
             {
@@ -914,6 +895,10 @@ void DBCMainEditor::deleteCurrentTreeItem()
             {
                 DBC_MESSAGE *msg = itemToMessage.value(currItem);
                 deleteMessage(msg);
+                //deleting shifts the underlying lists, so fix the cross references before the
+                //rebuild walks them
+                dbcFile->remapInternalPointers();
+                refreshTree();
             }
             else
             {
@@ -931,6 +916,10 @@ void DBCMainEditor::deleteCurrentTreeItem()
             {
                 DBC_SIGNAL *sig = itemToSignal.value(currItem);
                 deleteSignal(sig);
+                //deleting shifts the underlying lists, so fix the cross references before the
+                //rebuild walks them
+                dbcFile->remapInternalPointers();
+                refreshTree();
             }
             else
             {
@@ -974,14 +963,9 @@ void DBCMainEditor::deleteNode(DBC_NODE *node)
     ui->treeDBC->removeItemWidget(currItem, 0);
     delete currItem;
 
-    for (int j = 0; j < dbcFile->dbc_nodes.size(); j++)
-    {
-        if (dbcFile->dbc_nodes.at(j).name == node->name)
-        {
-            dbcFile->dbc_nodes.removeAt(j);
-            break;
-        }
-    }
+    //removing a node shifts dbc_nodes so removeNodeByName re-resolves all the
+    //sender/receiver pointers that reference the surviving nodes
+    dbcFile->removeNodeByName(node->name);
 
     dbcFile->setDirtyFlag();
 }

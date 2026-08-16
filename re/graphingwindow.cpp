@@ -805,10 +805,12 @@ void GraphingWindow::saveSpreadsheet()
         int maxCount = 0;
         int numGraphs = graphParams.length();
         for (auto && graph : graphParams) {
+            if (graph.x.isEmpty()) continue;
             xMin = std::min(xMin, graph.x[0]);
             xMax = std::max(xMax, graph.x[graph.x.size() - 1]);
             maxCount = std::max(maxCount, static_cast<int>(graph.x.size()));
         }
+        if (maxCount == 0) return; //no graph has any data so there is nothing to export
         qDebug() << "xMin: " << xMin;
         qDebug() << "xMax: " << xMax;
         qDebug() << "MaxCount: " << maxCount;
@@ -838,8 +840,14 @@ void GraphingWindow::saveSpreadsheet()
             {
                 double value = 0.0;
 
+                if (graphParams[k].x.isEmpty())
+                {
+                    outFile.putChar(',');
+                    continue;
+                }
+
                 // move cursor to last sample before currentX
-                while (graphParams[k].x[indices[k]+1] < currentX)
+                while (indices[k] + 1 < graphParams[k].x.size() && graphParams[k].x[indices[k]+1] < currentX)
                 {
                     indices[k]++;
                 }
@@ -1416,6 +1424,7 @@ void GraphingWindow::createGraph(GraphParams &params, bool createGraphParam)
         frameCache.append(dummy);
     }
 
+    if (params.stride < 1) params.stride = 1;
     int numEntries = frameCache.size() / params.stride;
     if (numEntries < 1) numEntries = 1; //could happen if stride is larger than frame count
 

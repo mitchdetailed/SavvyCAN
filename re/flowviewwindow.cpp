@@ -711,6 +711,13 @@ void FlowViewWindow::btnStopClick()
     playbackActive = false;
     currentPosition = 0;
 
+    if (frameCache.isEmpty())
+    {
+        updateFrameLabel();
+        updateDataView();
+        return;
+    }
+
     memset(currBytes, 0, 64);
     memcpy(currBytes, frameCache.at(currentPosition).payload().constData(), qMin<int>(frameCache.at(currentPosition).payload().length(), 64));
     memcpy(refBytes, currBytes, 64);
@@ -815,7 +822,9 @@ void FlowViewWindow::updateDataView()
 }
 
 void FlowViewWindow::gotoFrame(int frame) {
-    if (frameCache.size() >= frame) currentPosition = frame;
+    if (frameCache.isEmpty()) return;
+
+    if (frame >= 0 && frame < frameCache.size()) currentPosition = frame;
     else currentPosition = 0;
 
     if (ui->cbSync->checkState() == Qt::Checked) emit sendCenterTimeID(frameCache[currentPosition].frameId(), frameCache[currentPosition].timeStamp().microSeconds() / 1000000.0);
@@ -823,6 +832,7 @@ void FlowViewWindow::gotoFrame(int frame) {
 
 void FlowViewWindow::updatePosition(bool forward)
 {
+    if (frameCache.isEmpty()) return;
 
     if (forward)
     {

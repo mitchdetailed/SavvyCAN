@@ -242,8 +242,8 @@ public:
     static uint64_t GetTimeMS()
     {
         QDateTime stamp = QDateTime::currentDateTime();
-        return (((static_cast<uint64_t>(stamp.time().hour()) * 3600ull) + (static_cast<uint64_t>(stamp.time().minute()) * 60ull)
-                 + (static_cast<uint64_t>(stamp.time().second())) * 1000ull) + static_cast<uint64_t>(stamp.time().msec()));
+        return ((((static_cast<uint64_t>(stamp.time().hour()) * 3600ull) + (static_cast<uint64_t>(stamp.time().minute()) * 60ull)
+                 + static_cast<uint64_t>(stamp.time().second())) * 1000ull) + static_cast<uint64_t>(stamp.time().msec()));
     }
 
     //prints hex numbers in uppercase with 0's filling out the number depending

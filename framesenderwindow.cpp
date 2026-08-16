@@ -392,7 +392,8 @@ void FrameSenderWindow::saveSenderFile(QString filename)
                     outString.append("F");
                 }
             } else {
-                outString.append(ui->tableSender->item(c, i)->text());
+                QTableWidgetItem *it = ui->tableSender->item(c, i);
+                outString.append(it ? it->text() : QString());
             }
             outString.append("#");
         }
@@ -446,7 +447,7 @@ void FrameSenderWindow::loadSenderFile(QString filename)
                 ui->tableSender->item(row, ST_COLS::SENDTAB_COL_EN)->setCheckState(Qt::Checked);
             }
             else ui->tableSender->item(row, ST_COLS::SENDTAB_COL_EN)->setCheckState(Qt::Unchecked);
-            if (tokens.length() >= 9) {
+            if (tokens.length() >= ST_COLS::SENDTAB_COL_COUNT) {
                 for (int i = 1; i < ST_COLS::SENDTAB_COL_COUNT; i++)
                 {
                     if (i != ST_COLS::SENDTAB_COL_EXT && i != ST_COLS::SENDTAB_COL_REM) {
@@ -458,12 +459,13 @@ void FrameSenderWindow::loadSenderFile(QString filename)
                     }
                 }
             } else {
-                ui->tableSender->setItem(row, ST_COLS::SENDTAB_COL_BUS, new QTableWidgetItem(QString(tokens[1])));
-                ui->tableSender->setItem(row, ST_COLS::SENDTAB_COL_ID, new QTableWidgetItem(QString(tokens[2])));
-                ui->tableSender->setItem(row, ST_COLS::SENDTAB_COL_LEN, new QTableWidgetItem(QString(tokens[3])));
-                ui->tableSender->setItem(row, ST_COLS::SENDTAB_COL_DATA, new QTableWidgetItem(QString(tokens[4])));
-                ui->tableSender->setItem(row, ST_COLS::SENDTAB_COL_TRIGGER, new QTableWidgetItem(QString(tokens[5])));
-                ui->tableSender->setItem(row, ST_COLS::SENDTAB_COL_MODS, new QTableWidgetItem(QString(tokens[6])));
+                ui->tableSender->setItem(row, ST_COLS::SENDTAB_COL_BUS, new QTableWidgetItem(QString(tokens.value(1))));
+                ui->tableSender->setItem(row, ST_COLS::SENDTAB_COL_ID, new QTableWidgetItem(QString(tokens.value(2))));
+                ui->tableSender->setItem(row, ST_COLS::SENDTAB_COL_MSGNAME, new QTableWidgetItem(QString()));
+                ui->tableSender->setItem(row, ST_COLS::SENDTAB_COL_LEN, new QTableWidgetItem(QString(tokens.value(3))));
+                ui->tableSender->setItem(row, ST_COLS::SENDTAB_COL_DATA, new QTableWidgetItem(QString(tokens.value(4))));
+                ui->tableSender->setItem(row, ST_COLS::SENDTAB_COL_TRIGGER, new QTableWidgetItem(QString(tokens.value(5))));
+                ui->tableSender->setItem(row, ST_COLS::SENDTAB_COL_MODS, new QTableWidgetItem(QString(tokens.value(6))));
             }
             inhibitChanged = false;
             for (int k = 0; k < ST_COLS::SENDTAB_COL_COUNT; k++) processCellChange(row, k);
@@ -730,7 +732,7 @@ void FrameSenderWindow::processModifierText(int line)
 
     //yeah, lots of operations on this one line but it's for a good cause. Removes the convenience English versions of the
     //logical operators and replaces them with the math equivs. Also uppercases and removes all superfluous whitespace
-    modString = ui->tableSender->item(line, 8)->text().toUpper().trimmed().replace("AND", "&").replace("XOR", "^").replace("OR", "|").replace(" ", "");
+    modString = ui->tableSender->item(line, ST_COLS::SENDTAB_COL_MODS)->text().toUpper().trimmed().replace("AND", "&").replace("XOR", "^").replace("OR", "|").replace(" ", "");
     if (modString != "")
     {
         QStringList mods = modString.split(',');
@@ -1097,8 +1099,10 @@ void FrameSenderWindow::processCellChange(int line, int col)
             if (msg)
             {
                 ui->tableSender->blockSignals(true);
-                ui->tableSender->item(line, ST_COLS::SENDTAB_COL_MSGNAME)->setText(msg->name);
-                ui->tableSender->item(line, ST_COLS::SENDTAB_COL_LEN)->setText(QString::number(msg->len));
+                if (ui->tableSender->item(line, ST_COLS::SENDTAB_COL_MSGNAME))
+                    ui->tableSender->item(line, ST_COLS::SENDTAB_COL_MSGNAME)->setText(msg->name);
+                if (ui->tableSender->item(line, ST_COLS::SENDTAB_COL_LEN))
+                    ui->tableSender->item(line, ST_COLS::SENDTAB_COL_LEN)->setText(QString::number(msg->len));
                 ui->tableSender->blockSignals(false);
             }
             qDebug() << "setting ID to " << tempVal << "hex:" << QString::number(tempVal, 16);

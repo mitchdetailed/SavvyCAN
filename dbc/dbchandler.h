@@ -75,6 +75,8 @@ public:
     DBC_NODE *findNodeByName(QString name);
     DBC_NODE *findNodeByNameAndComment(QString fullname);
     DBC_NODE *findNodeByIdx(int idx);
+    void addNode(const DBC_NODE &node);
+    bool removeNodeByName(QString name);
     DBC_VAL_TABLE *findValueTableByName(QString name);
     DBC_ATTRIBUTE *findAttributeByName(QString name, DBC_ATTRIBUTE_TYPE type = ATTR_TYPE_ANY);
     DBC_ATTRIBUTE *findAttributeByIdx(int idx);
@@ -111,6 +113,8 @@ private:
     int assocBuses; //-1 = all buses, 0 = first bus, 1 = second bus, etc.
     bool isDirty; //has the file been modified?
 
+    QList<QString> snapshotNodeReferences();
+    void restoreNodeReferences(const QList<QString> &nodeNames);
     bool parseAttribute(QString inpString, DBC_ATTRIBUTE &attr);
     QVariant processAttributeVal(QString input, DBC_ATTRIBUTE_VAL_TYPE typ);
     DBC_SIGNAL* parseSignalLine(QString line, DBC_MESSAGE *msg);

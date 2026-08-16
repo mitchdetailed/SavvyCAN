@@ -102,13 +102,13 @@ void FirmwareUploaderWindow::gotTargettedFrame(CANFrame frame)
         }
     }
 
-    if (frame.frameId() == (uint32_t)(baseAddress + 0x20)) {
+    if (frame.frameId() == (uint32_t)(baseAddress + 0x20) && (dataLen >= 2) ) {
         qDebug() << "Firmware reception success reply";
         int seq = data[0] + (256 * data[1]);
         if (seq == currentSendingPosition)
         {
             currentSendingPosition++;
-            if (currentSendingPosition * 4 > firmwareSize || currentSendingPosition > 65535)
+            if (currentSendingPosition * 4 >= firmwareSize || currentSendingPosition > 65535)
             {
                 transferInProgress = false;
                 timer->stop();
@@ -143,10 +143,14 @@ void FirmwareUploaderWindow::sendFirmwareChunk()
     output.setFrameId(baseAddress + 0x16);
     bytes[0] = currentSendingPosition & 0xFF;
     bytes[1] = (currentSendingPosition >> 8) & 0xFF;
-    bytes[2] = firmwareData[firmwareLocation++];
-    bytes[3] = firmwareData[firmwareLocation++];
-    bytes[4] = firmwareData[firmwareLocation++];
-    bytes[5] = firmwareData[firmwareLocation++];
+    bytes[2] = (firmwareLocation < firmwareSize) ? firmwareData[firmwareLocation] : 0;
+    firmwareLocation++;
+    bytes[3] = (firmwareLocation < firmwareSize) ? firmwareData[firmwareLocation] : 0;
+    firmwareLocation++;
+    bytes[4] = (firmwareLocation < firmwareSize) ? firmwareData[firmwareLocation] : 0;
+    firmwareLocation++;
+    bytes[5] = (firmwareLocation < firmwareSize) ? firmwareData[firmwareLocation] : 0;
+    firmwareLocation++;
     for (int i = 0; i < 6; i++) xorByte ^= static_cast<unsigned char>(bytes[i]);
     bytes[6] = xorByte;
     output.setPayload(bytes);

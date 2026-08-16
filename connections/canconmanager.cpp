@@ -78,6 +78,14 @@ void CANConManager::replace(int idx, CANConnection* pConn_p)
     original->deleteLater(); original = NULL;
 }
 
+void CANConManager::swap(int idx1, int idx2)
+{
+    QMutexLocker locker(&mConnsMutex);
+    if (idx1 < 0 || idx1 >= mConns.size()) return;
+    if (idx2 < 0 || idx2 >= mConns.size()) return;
+    mConns.swapItemsAt(idx1, idx2);
+}
+
 //Get total number of buses currently registered with the program
 int CANConManager::getNumBuses()
 {

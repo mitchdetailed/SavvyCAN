@@ -229,6 +229,8 @@ void FramePlaybackWindow::saveFilters()
 
 void FramePlaybackWindow::loadFilters()
 {
+    if (!currentSeqItem) return;
+
     QString filename;
     QFileDialog dialog(this);
     QSettings settings;
@@ -260,6 +262,7 @@ void FramePlaybackWindow::loadFilters()
             if (line.length() > 2)
             {
                 QList<QByteArray> tokens = line.split(',');
+                if (tokens.count() < 2) continue;
                 ID = tokens[0].toInt(nullptr, 16);
                 if (tokens[1].toUpper() == "T") checked = true;
                     else checked = false;
@@ -444,8 +447,11 @@ void FramePlaybackWindow::seqTableCellClicked(int row, int col)
     qDebug() << "Row: " << QString::number(row) << " Col: " << QString::number(col);
     if (currentSeqNum != row)
     {
+        //the playback position belongs to the old sequence, so stop (which resets it) before swapping
+        playbackObject.stopPlayback();
         currentSeqNum = row;
         currentSeqItem = &seqItems[row];
+        playbackObject.setSequenceObject(currentSeqItem);
         refreshIDList();
     }
 }
@@ -509,6 +515,7 @@ void FramePlaybackWindow::btnDeleteCurrSeq()
         currentSeqNum = -1;
         currentSeqItem = nullptr;
     }
+    playbackObject.setSequenceObject(currentSeqItem);
     refreshIDList();
     updateFrameLabel();
 }
@@ -539,9 +546,10 @@ void FramePlaybackWindow::btnLoadFile()
         if (currentSeqNum == -1)
         {
             currentSeqNum = 0;
-            currentSeqItem = &seqItems[0];
-            playbackObject.setSequenceObject(currentSeqItem);
         }
+        //the append could have reallocated the list so re-derive the pointer
+        currentSeqItem = &seqItems[currentSeqNum];
+        playbackObject.setSequenceObject(currentSeqItem);
         refreshIDList();
         updateFrameLabel();
     }
@@ -568,9 +576,10 @@ void FramePlaybackWindow::btnLoadLive()
     if (currentSeqNum == -1)
     {
         currentSeqNum = 0;
-        currentSeqItem = &seqItems[0];
-        playbackObject.setSequenceObject(currentSeqItem);
     }
+    //the append could have reallocated the list so re-derive the pointer
+    currentSeqItem = &seqItems[currentSeqNum];
+    playbackObject.setSequenceObject(currentSeqItem);
     refreshIDList();
     updateFrameLabel();
     btnStopClick();
@@ -622,6 +631,7 @@ void FramePlaybackWindow::btnStopClick()
         currentSeqNum = -1;
         currentSeqItem = nullptr;
     }
+    playbackObject.setSequenceObject(currentSeqItem);
     if (ui->tblSequence->rowCount() > 0)
     {
         ui->tblSequence->setCurrentCell(0, 0);

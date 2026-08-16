@@ -332,7 +332,7 @@ void GVRetSerial::connectDevice()
 
         /* connect reading event */
         connect(serial, SIGNAL(readyRead()), this, SLOT(readSerialData()));
-        connect(serial, SIGNAL(error(QSerialPort::SerialPortError)), this, SLOT(serialError(QSerialPort::SerialPortError)));
+        connect(serial, &QSerialPort::errorOccurred, this, &GVRetSerial::serialError);
 
         /* configure */
         serial->setBaudRate(1000000); //most GVRET devices ignore baud, ESP32 needs it set explicitly to the proper value

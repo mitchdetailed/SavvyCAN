@@ -13,19 +13,31 @@
 #define NEOUSYS_CAN_MSG_USE_ID_FILTER 0x00000008
 
 /*
- * WDT_DIO takes a plain C function pointer with no user data argument, so the callback has to find
- * its way back to us through a file scope pointer. Only one Neousys connection can be registered for
- * a port at a time so this is enough. The mutex keeps a callback that is already in flight from
- * touching the object while we're tearing it down.
+ * WDT_DIO takes a plain C function pointer with no user data argument, so the callbacks have to
+ * find their way back to us through file scope pointers. The callback doesn't say which port it
+ * fired for either, so every port gets its own trampoline routing to whichever connection owns
+ * that port. The mutex keeps a callback that is already in flight from touching the object while
+ * we're tearing it down.
  */
-static QMutex neousysCbMutex;
-static NeousysCan *neousysActive = nullptr;
+#define NEOUSYS_MAX_PORTS 2
 
-static void NEOUSYS_CALL neousysRxTrampoline(neousys_can_msg *msgs, unsigned int count)
+static QMutex neousysCbMutex;
+static NeousysCan *neousysActive[NEOUSYS_MAX_PORTS] = {nullptr, nullptr};
+
+static void NEOUSYS_CALL neousysRxTrampoline0(neousys_can_msg *msgs, unsigned int count)
 {
     QMutexLocker locker(&neousysCbMutex);
-    if (neousysActive) neousysActive->receivedFromDriver(msgs, count);
+    if (neousysActive[0]) neousysActive[0]->receivedFromDriver(msgs, count);
 }
+
+static void NEOUSYS_CALL neousysRxTrampoline1(neousys_can_msg *msgs, unsigned int count)
+{
+    QMutexLocker locker(&neousysCbMutex);
+    if (neousysActive[1]) neousysActive[1]->receivedFromDriver(msgs, count);
+}
+
+typedef void (NEOUSYS_CALL *neousysTrampolineFn)(neousys_can_msg *msgs, unsigned int count);
+static const neousysTrampolineFn neousysRxTrampolines[NEOUSYS_MAX_PORTS] = {neousysRxTrampoline0, neousysRxTrampoline1};
 
 NeousysCan::NeousysCan(QString portName, int busSpeed) :
     CANConnection(portName, "NEOUSYS", CANCon::NEOUSYS, 0, busSpeed, false, 0, 1, 4000, true),
@@ -93,6 +105,13 @@ void NeousysCan::unloadLibrary()
 
 bool NeousysCan::startPort()
 {
+    if (mPort >= NEOUSYS_MAX_PORTS)
+    {
+        qDebug() << "NEOUSYS: port" << mPort << "is out of range";
+        emit debugOutput(QString("NEOUSYS: port %1 is out of range, only ports 0 to %2 are supported").arg(mPort).arg(NEOUSYS_MAX_PORTS - 1));
+        return false;
+    }
+
     const CANBus& bus = mBusData[0].mBus;
     const int speed = (bus.getSpeed() > 0) ? bus.getSpeed() : mBusSpeed;
 
@@ -114,15 +133,22 @@ bool NeousysCan::startPort()
     //register before starting so we don't miss anything
     {
         QMutexLocker locker(&neousysCbMutex);
-        neousysActive = this;
+        if (neousysActive[mPort] && neousysActive[mPort] != this)
+        {
+            locker.unlock();
+            qDebug() << "NEOUSYS: port" << mPort << "is already claimed by another connection";
+            emit debugOutput(QString("NEOUSYS: port %1 is already in use by another connection").arg(mPort));
+            return false;
+        }
+        neousysActive[mPort] = this;
     }
 
-    if (CAN_RegisterReceived(mPort, neousysRxTrampoline) == 0)
+    if (CAN_RegisterReceived(mPort, neousysRxTrampolines[mPort]) == 0)
     {
         qDebug() << "NEOUSYS: CAN_RegisterReceived failed";
         emit debugOutput("NEOUSYS: the driver would not accept our receive callback");
         QMutexLocker locker(&neousysCbMutex);
-        neousysActive = nullptr;
+        neousysActive[mPort] = nullptr;
         return false;
     }
 
@@ -131,7 +157,7 @@ bool NeousysCan::startPort()
         qDebug() << "NEOUSYS: CAN_Start failed";
         emit debugOutput(QString("NEOUSYS: could not start port %1").arg(mPort));
         QMutexLocker locker(&neousysCbMutex);
-        neousysActive = nullptr;
+        neousysActive[mPort] = nullptr;
         return false;
     }
 
@@ -144,7 +170,7 @@ void NeousysCan::stopPort()
     //unhook ourselves first so a callback already running finishes before we go away
     {
         QMutexLocker locker(&neousysCbMutex);
-        if (neousysActive == this) neousysActive = nullptr;
+        if (mPort < NEOUSYS_MAX_PORTS && neousysActive[mPort] == this) neousysActive[mPort] = nullptr;
     }
 
     if (mStarted && CAN_Stop) CAN_Stop(mPort);

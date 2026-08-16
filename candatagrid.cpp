@@ -129,7 +129,7 @@ void CANDataGrid::setMode(GridMode mode)
 
 void CANDataGrid::setBytesToDraw(int num)
 {
-    bytesToDraw = num;
+    bytesToDraw = qBound(0, num, 64);
     //this->update();
 }
 
@@ -656,7 +656,7 @@ void CANDataGrid::saveImage(QString filename, int width, int height)
 //have large enough buffers!
 void CANDataGrid::setReference(unsigned char *newRef, bool bUpdate = true)
 {
-    int bytesToTransfer = (bytesToDraw + 7) & 0xF8; //force copying in 8 byte increments
+    int bytesToTransfer = qMin(((bytesToDraw + 7) / 8) * 8, 64); //force copying in 8 byte increments
     memcpy(refData, newRef, bytesToTransfer);
     //clear all data past that point just to be sure we don't have garbage left over
     if (bytesToTransfer < 64) memset(refData + bytesToTransfer, 0, 64 - bytesToTransfer);
@@ -665,7 +665,7 @@ void CANDataGrid::setReference(unsigned char *newRef, bool bUpdate = true)
 
 void CANDataGrid::updateData(unsigned char *newData, bool bUpdate = true)
 {
-    int bytesToTransfer = (bytesToDraw + 7) & 0xF8; //force copying in 8 byte increments
+    int bytesToTransfer = qMin(((bytesToDraw + 7) / 8) * 8, 64); //force copying in 8 byte increments
     memcpy(data, newData, bytesToTransfer);
     //clear all data past that point just to be sure we don't have garbage left over
     if (bytesToTransfer < 64) memset(data + bytesToTransfer, 0, 64 - bytesToTransfer);
@@ -674,7 +674,7 @@ void CANDataGrid::updateData(unsigned char *newData, bool bUpdate = true)
 
 void CANDataGrid::setUsed(unsigned char *newData, bool bUpdate = false)
 {
-    int bytesToTransfer = (bytesToDraw + 7) & 0xF8; //force copying in 8 byte increments
+    int bytesToTransfer = qMin(((bytesToDraw + 7) / 8) * 8, 64); //force copying in 8 byte increments
     memcpy(usedData, newData, bytesToTransfer);
     //clear all data past that point just to be sure we don't have garbage left over
     if (bytesToTransfer < 64) memset(usedData + bytesToTransfer, 0, 64 - bytesToTransfer);

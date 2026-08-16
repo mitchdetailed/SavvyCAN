@@ -19,6 +19,7 @@ public:
     void add(CANConnection* pConn_p);
     void remove(CANConnection* pConn_p);
     void replace(int idx, CANConnection* pConn_p);
+    void swap(int idx1, int idx2);
     QList<CANConnection*>& getConnections();
     void stopAllConnections();
 

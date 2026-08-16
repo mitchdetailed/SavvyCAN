@@ -304,6 +304,7 @@ void ISOTP_HANDLER::processFrame(const CANFrame &frame)
         {
         case 0: //continue to send frames but maybe change inter-frame delay
             waitingForFlow = false;
+            if (frame.payload().size() < 3) break; //need block size and separation time bytes
             //data[1] contains number of frames to send before waiting for next flow control
             framesUntilFlow = data[1];
             if (framesUntilFlow == 0) framesUntilFlow = -1; //-1 means don't count frames and just keep going

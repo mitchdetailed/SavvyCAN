@@ -134,7 +134,6 @@ QList<CANDeviceInfo> KvaserCanlib::enumerateDevices()
     fnInitializeLibrary initLib = (fnInitializeLibrary)lib.resolve("canInitializeLibrary");
     fnGetNumberOfChannels getCount = (fnGetNumberOfChannels)lib.resolve("canGetNumberOfChannels");
     fnGetChannelData getData = (fnGetChannelData)lib.resolve("canGetChannelData");
-    fnUnloadLibrary unloadLib = (fnUnloadLibrary)lib.resolve("canUnloadLibrary");
 
     if (initLib && getCount)
     {
@@ -161,7 +160,8 @@ QList<CANDeviceInfo> KvaserCanlib::enumerateDevices()
             }
         }
 
-        if (unloadLib) unloadLib();
+        //deliberately no canUnloadLibrary here: it would invalidate the handles of any running
+        //Kvaser connection. lib.unload() below releases this scan's module reference.
     }
 
     lib.unload();

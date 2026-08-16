@@ -1,3 +1,4 @@
+#include <QCoreApplication>
 #include <QSettings>
 #include <QThread>
 #include "canconnection.h"
@@ -134,7 +135,13 @@ void CANConnection::stop()
     }
 
     /* 2) call piStop in mThread context */
-    return piStop();
+    piStop();
+
+    /* the worker thread is about to finish and its event loop will never run again, so move
+     * ourself back to the main thread. Otherwise a later deleteLater() posts its event into a
+     * dead queue and the connection (and its QThread) are never destroyed. */
+    if( mThread_p && (mThread_p == QThread::currentThread()) )
+        moveToThread(QCoreApplication::instance()->thread());
 }
 
 
@@ -320,6 +327,7 @@ bool CANConnection::addTargettedFrame(int pBusId, uint32_t ID, uint32_t mask, QO
     target.id = ID;
     target.mask = mask;
     target.observer = receiver;
+    QMutexLocker locker(&mTargettedFramesMutex);
     if (pBusId > -1)
         mBusData[pBusId].mTargettedFrames.append(target);
     else
@@ -353,13 +361,20 @@ bool CANConnection::removeTargettedFrame(int pBusId, uint32_t ID, uint32_t mask,
     target.id = ID;
     target.mask = mask;
     target.observer = receiver;
-    mBusData[pBusId].mTargettedFrames.removeAll(target);
+    QMutexLocker locker(&mTargettedFramesMutex);
+    if (pBusId > -1)
+        mBusData[pBusId].mTargettedFrames.removeAll(target);
+    else
+    {
+        for (int i = 0; i < mBusData.size(); i++) mBusData[i].mTargettedFrames.removeAll(target);
+    }
 
     return true;
 }
 
 bool CANConnection::removeAllTargettedFrames(QObject *receiver)
 {
+    QMutexLocker locker(&mTargettedFramesMutex);
     for (int i = 0; i < getNumBuses(); i++) {
         foreach (const CANFltObserver filt, mBusData[i].mTargettedFrames)
         {
@@ -380,8 +395,14 @@ void CANConnection::checkTargettedFrame(CANFrame &frame)
     if (bus < 0) bus = 0;
     if (bus > (mBusData.length() - 1)) bus = mBusData.length() - 1;
 
-    if (mBusData[bus].mTargettedFrames.length() == 0) return;
-    foreach (const CANFltObserver filt, mBusData[bus].mTargettedFrames)
+    /* copy the list under the lock so the GUI thread can register/remove filters
+     * while we iterate without pulling the buffer out from under us */
+    mTargettedFramesMutex.lock();
+    const QVector<CANFltObserver> targettedFrames = mBusData[bus].mTargettedFrames;
+    mTargettedFramesMutex.unlock();
+
+    if (targettedFrames.length() == 0) return;
+    foreach (const CANFltObserver filt, targettedFrames)
     {
         //qDebug() << "Checking filter with id " << filt.id << " mask " << filt.mask;
         maskedID = frame.frameId() & filt.mask;

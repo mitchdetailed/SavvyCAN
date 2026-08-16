@@ -297,13 +297,16 @@ void MQTT_BUS::clientMessageReceived(const QMQTT::Message& message)
         if (topicParts.size() < 2) {
             return; // malformed topic — do not commit the frame slot
         }
+        const QByteArray payload = message.payload();
+        if (payload.size() < 9) {
+            return; // malformed frame: need 8 timestamp bytes + 1 flags byte, do not commit the frame slot
+        }
         uint32_t frameID = topicParts[1].toUInt();
 
-        QByteArray timeStampBytes = message.payload().left(8);
-        uint64_t timeStamp = qFromLittleEndian<uint64_t>(timeStampBytes.data());
+        uint64_t timeStamp = qFromLittleEndian<uint64_t>(payload.constData());
 
-        int flags = message.payload()[8];
-        frame_p->setPayload(message.payload().right(message.payload().size() - 9));
+        int flags = payload.at(8);
+        frame_p->setPayload(payload.mid(9));
         frame_p->bus = 0;
         frame_p->setExtendedFrameFormat(flags & 1);
         frame_p->setFrameId(frameID);

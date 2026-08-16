@@ -238,7 +238,7 @@ void LAWICELSerial::connectDevice()
 
     /* connect reading event */
     connect(serial, SIGNAL(readyRead()), this, SLOT(readSerialData()));
-    connect(serial, SIGNAL(error(QSerialPort::SerialPortError)), this, SLOT(serialError(QSerialPort::SerialPortError)));
+    connect(serial, &QSerialPort::errorOccurred, this, &LAWICELSerial::serialError);
 
     /* configure */
     serial->setBaudRate(mSerialSpeed);

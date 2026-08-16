@@ -352,6 +352,14 @@ void TriggerDialog::deleteSelectedTrigger()
         QMessageBox::information(this, "Error", "Cannot delete the last trigger");
         return;
     }
+
+    int row = ui->listTriggers->currentRow();
+    if (row < 0 || row >= triggers.size()) return;
+    triggers.removeAt(row);
+    delete ui->listTriggers->takeItem(row);
+    if (row >= triggers.size()) row = triggers.size() - 1;
+    ui->listTriggers->setCurrentRow(row);
+    FillDetails();
 }
 
 void TriggerDialog::saveAndExit()

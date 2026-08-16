@@ -367,9 +367,9 @@ void SignalViewerWindow::saveDefinitions()
 
         if (!filename.contains('.')) filename += ".sdf";
 
-        QFile *outFile = new QFile(filename);
+        QFile outFile(filename);
 
-        if (!outFile->open(QIODevice::WriteOnly | QIODevice::Text))
+        if (!outFile.open(QIODevice::WriteOnly | QIODevice::Text))
             return;
 
         DBC_SIGNAL *sig;
@@ -377,17 +377,17 @@ void SignalViewerWindow::saveDefinitions()
         {
             sig = signalList.at(i);
 
-            outFile->write("SV1");
-            outFile->putChar(',');
-            outFile->write(QString::number(sig->parentMessage->ID, 16).toUtf8());
-            outFile->putChar(',');
-            outFile->write(sig->parentMessage->name.toUtf8());
-            outFile->putChar(',');
-            outFile->write(sig->name.toUtf8());
+            outFile.write("SV1");
+            outFile.putChar(',');
+            outFile.write(QString::number(sig->parentMessage->ID, 16).toUtf8());
+            outFile.putChar(',');
+            outFile.write(sig->parentMessage->name.toUtf8());
+            outFile.putChar(',');
+            outFile.write(sig->name.toUtf8());
 
-            outFile->write("\n");
+            outFile.write("\n");
         }
-        outFile->close();
+        outFile.close();
     }
 }
 
@@ -415,14 +415,14 @@ void SignalViewerWindow::loadDefinitions(bool append)
         filename = dialog.selectedFiles()[0];
         settings.setValue("SignalViewer/LoadSaveDirectory", dialog.directory().path());
 
-        QFile *inFile = new QFile(filename);
+        QFile inFile(filename);
         QByteArray line;
 
-        if (!inFile->open(QIODevice::ReadOnly | QIODevice::Text))
+        if (!inFile.open(QIODevice::ReadOnly | QIODevice::Text))
             return;
 
-        while (!inFile->atEnd()) {
-            line = inFile->readLine().simplified();
+        while (!inFile.atEnd()) {
+            line = inFile.readLine().simplified();
             if (line.length() > 2)
             {
                 QList<QByteArray> tokens = line.split(',');
@@ -457,7 +457,7 @@ void SignalViewerWindow::loadDefinitions(bool append)
                 }
             }
         }
-        inFile->close();
+        inFile.close();
 
         if(loadedSignals.size() > 0)
         {

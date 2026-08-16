@@ -335,12 +335,21 @@ void SnifferModel::update(CANConnection*, QVector<CANFrame>& pFrames)
         quint32 fid = frame.frameId();
         if(!mMap.contains(fid))
         {
-            auto it = std::lower_bound(mOrderedKeys.begin(), mOrderedKeys.end(), fid);
-            int insertRow = static_cast<int>(it - mOrderedKeys.begin());
+            //the announced row has to be computed against whichever containers currently drive
+            //rowCount()/index(), which are the filtered ones while a filter is active
+            QVector<quint32>& activeKeys = mFilter ? mFilteredKeys : mOrderedKeys;
+            auto activeIt = std::lower_bound(activeKeys.begin(), activeKeys.end(), fid);
+            int insertRow = static_cast<int>(activeIt - activeKeys.begin());
             beginInsertRows(QModelIndex(), insertRow, insertRow);
             mMap[fid] = new SnifferItem(frame, mTimeSequence);
             mMap[fid]->update(frame, mTimeSequence, mMuteNotched);
+            auto it = std::lower_bound(mOrderedKeys.begin(), mOrderedKeys.end(), fid);
             mOrderedKeys.insert(it, fid);
+            if (mFilter)
+            {
+                mFilters[fid] = mMap[fid];
+                mFilteredKeys.insert(mFilteredKeys.begin() + insertRow, fid);
+            }
             endInsertRows();
 
             emit idChange(fid, true);

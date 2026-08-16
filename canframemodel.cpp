@@ -20,16 +20,11 @@ CANFrameModel::~CANFrameModel()
 int CANFrameModel::rowCount(const QModelIndex &parent) const
 {
     Q_UNUSED(parent);
-    if (filteredFrames.data())
-    {
-        int rows = filteredFrames.size();
-        return rows;
-    }
-
-     //just in case somehow data is invalid which I have seen before.
-    //But, this should not happen so issue a debugging message too
-    qDebug() << "Invalid data for filteredFrames. Returning 0.";
-    return 0;
+    /* Only the rows the view has been told about. filteredFrames can be ahead of this between
+     * bulk refreshes because frames are appended silently and announced later - reporting the raw
+     * container size here would surface rows no insert signal was ever sent for, and a sorting
+     * proxy would then end up counting those rows twice. */
+    return mViewRowCount;
 }
 
 int CANFrameModel::totalFrameCount()
@@ -102,8 +97,8 @@ void CANFrameModel::setHexMode(bool mode)
         this->beginResetModel();
         useHexMode = mode;
         Utility::decimalMode = !useHexMode;
+        syncViewRowCount();
         this->endResetModel();
-    syncViewRowCount();
     }
 }
 
@@ -113,8 +108,8 @@ void CANFrameModel::setUseColorsByCanId(bool mode)
     {
         this->beginResetModel();
         useColorsByCanId = mode;
+        syncViewRowCount();
         this->endResetModel();
-    syncViewRowCount();
     }
 }
 
@@ -125,8 +120,8 @@ void CANFrameModel::setTimeStyle(TimeStyle newStyle)
         this->beginResetModel();
         timeStyle = newStyle;
         Utility::timeStyle = newStyle;
+        syncViewRowCount();
         this->endResetModel();
-    syncViewRowCount();
     }
 }
 
@@ -138,8 +133,8 @@ void CANFrameModel::setInterpretMode(bool mode)
     {
         this->beginResetModel();
         interpretFrames = mode;
+        syncViewRowCount();
         this->endResetModel();
-    syncViewRowCount();
     }
 }
 
@@ -153,8 +148,8 @@ void CANFrameModel::setTimeFormat(QString format)
     Utility::timeFormat = format;
     timeFormat = format;
     beginResetModel(); //reset model to show new time format
-    endResetModel();
     syncViewRowCount();
+    endResetModel();
 }
 
 void CANFrameModel::setIgnoreDBCColors(bool mode)
@@ -163,8 +158,8 @@ void CANFrameModel::setIgnoreDBCColors(bool mode)
     {
         beginResetModel(); //reset model to update the view
         ignoreDBCColors = mode;
-        endResetModel();
         syncViewRowCount();
+        endResetModel();
     }
 }
 
@@ -203,8 +198,8 @@ void CANFrameModel::normalizeTiming()
     {
         filteredFrames[i].setTimeStamp(QCanBusFrame::TimeStamp(0, filteredFrames[i].timeStamp().microSeconds() - timeOffset));
     }
-    this->endResetModel();
     syncViewRowCount();
+    this->endResetModel();
 
     mutex.unlock();
 }
@@ -214,8 +209,8 @@ void CANFrameModel::setOverwriteMode(bool mode)
     beginResetModel();
     overwriteDups = mode;
     recalcOverwrite();
-    endResetModel();
     syncViewRowCount();
+    endResetModel();
 }
 
 void CANFrameModel::setClearMode(bool mode)
@@ -302,6 +297,13 @@ uint64_t CANFrameModel::getCANFrameVal(const QVector<CANFrame> *frames, int row,
     return 0;
 }
 
+//the one key used everywhere overwrite mode identifies a frame: the full 32 bit ID (flag bits
+//included) sits below the bus number, so frames from different buses can never share a key
+static uint64_t overwriteKey(const CANFrame &frame)
+{
+    return (uint64_t)frame.frameId() | ((uint64_t)frame.bus << 32);
+}
+
 /*
  * Overwrite mode keeps a lookup from CAN ID to the row showing that ID, so an arriving frame can
  * replace the row it belongs to. Every row that moves invalidates it, so it has to be rebuilt after
@@ -315,7 +317,7 @@ void CANFrameModel::rebuildOverwriteIndex()
     overwriteIndex.clear();
     for (int i = 0; i < filteredFrames.size(); i++)
     {
-        const uint64_t augID = (uint64_t)filteredFrames[i].frameId() | ((uint64_t)filteredFrames[i].bus << 29ull);
+        const uint64_t augID = overwriteKey(filteredFrames[i]);
         overwriteIndex[augID] = i;
     }
 }
@@ -333,13 +335,12 @@ void CANFrameModel::recalcOverwrite()
 
     //Look at the current list of frames and turn it into just a list of unique IDs
     QHash<uint64_t, CANFrame> overWriteFrames;
-    uint64_t idAugmented; //id in lower 29 bits, bus number shifted up 29 bits
+    uint64_t idAugmented; //id in lower 32 bits, bus number above them
     foreach(const CANFrame& frame, frames)
     {
         if (frame.frameType() != frame.DataFrame) continue;
 
-        idAugmented = frame.frameId();
-        idAugmented = idAugmented + (frame.bus << 29ull);
+        idAugmented = overwriteKey(frame);
         if (filters[frame.frameId()] && busFilters[frame.bus])
         {
             CANFrame mutableFrame = frame; // copy only for frames that will be stored
@@ -368,7 +369,7 @@ void CANFrameModel::recalcOverwrite()
     overwriteIndex.clear();
     for (int i = 0; i < filteredFrames.size(); i++)
     {
-        uint64_t augID = (uint64_t)filteredFrames[i].frameId() | ((uint64_t)filteredFrames[i].bus << 29ull);
+        uint64_t augID = overwriteKey(filteredFrames[i]);
         overwriteIndex[augID] = i;
     }
 
@@ -380,8 +381,8 @@ void CANFrameModel::recalcOverwrite()
         }
     }*/
 
-    endResetModel();
     syncViewRowCount();
+    endResetModel();
     mutex.unlock();
 }
 
@@ -701,8 +702,8 @@ void CANFrameModel::addFrame(const CANFrame& frame, bool autoRefresh = false)
                 lastFilteredUpdateCount++;
                 if (autoRefresh)
                 {
-                    endInsertRows();
                     syncViewRowCount();
+                    endInsertRows();
                 }
             }
         }
@@ -713,7 +714,7 @@ void CANFrameModel::addFrame(const CANFrame& frame, bool autoRefresh = false)
     }
     else //yes, overwrite dups
     {
-        const uint64_t augID = (uint64_t)tempFrame.frameId() | ((uint64_t)tempFrame.bus << 29ull);
+        const uint64_t augID = overwriteKey(tempFrame);
         if (overwriteIndex.contains(augID))
         {
             int idx = overwriteIndex[augID];
@@ -740,8 +741,8 @@ void CANFrameModel::addFrame(const CANFrame& frame, bool autoRefresh = false)
                 filteredFrames.append(tempFrame);
                 if (autoRefresh)
                 {
-                    endInsertRows();
                     syncViewRowCount();
+                    endInsertRows();
                 }
             }
         }
@@ -768,10 +769,13 @@ void CANFrameModel::addFrames(const CANConnection*, const QVector<CANFrame>& pFr
         mutex.lock();
         int toRemove = (int)(filteredFrames.capacity() * 0.05);
         qDebug() << "filteredFrames count: " << filteredFrames.length() << " of " << filteredFrames.capacity() << " capacity, removing first " << toRemove << " frames";
-        beginRemoveRows(QModelIndex(), 0, toRemove - 1);
+        //the view only knows about mViewRowCount rows - anything appended since the last refresh
+        //is still unannounced and must stay that way so the next bulk refresh can report it
+        const int announced = qMin(toRemove, mViewRowCount);
+        if (announced > 0) beginRemoveRows(QModelIndex(), 0, announced - 1);
         filteredFrames.remove(0, toRemove);
-        endRemoveRows();
-        syncViewRowCount();
+        mViewRowCount -= announced;
+        if (announced > 0) endRemoveRows();
         qDebug() << "filteredFrames removed, new count: " << filteredFrames.length();
         lastFilteredUpdateCount = 0;
         //trimming from the front shifts every remaining row, so the ID to row lookup is stale
@@ -812,8 +816,8 @@ void CANFrameModel::sendRefresh()
         filteredFrames.reserve(preallocSize);
         lastUpdateNumFrames = 0;
         lastFilteredUpdateCount = 0;
-        endResetModel();
         syncViewRowCount();
+        endResetModel();
         mutex.unlock();
     }
 }
@@ -821,8 +825,8 @@ void CANFrameModel::sendRefresh()
 void CANFrameModel::sendRefresh(int pos)
 {
     beginInsertRows(QModelIndex(), pos, pos);
-    endInsertRows();
     syncViewRowCount();
+    endInsertRows();
 }
 
 //issue a refresh for the last num entries in the model.
@@ -862,16 +866,16 @@ int CANFrameModel::sendBulkRefresh()
          * if something bypassed the notifications above; a reset always leaves the view correct. */
         qDebug() << "Bulk refresh sees fewer rows than the view has (" << newRowCount << "vs" << oldRowCount << ") - falling back to a model reset";
         beginResetModel();
-        endResetModel();
         syncViewRowCount();
+        endResetModel();
     }
     else
     {
         if (newRowCount > oldRowCount)
         {
             beginInsertRows(QModelIndex(), oldRowCount, newRowCount - 1);
-            endInsertRows();
             syncViewRowCount();
+            endInsertRows();
         }
 
         /* Rows that were rewritten in place - overwrite mode replacing a frame with a newer one of
@@ -908,8 +912,8 @@ void CANFrameModel::clearFrames()
     }
     frames.reserve(preallocSize);
     filteredFrames.reserve(preallocSize);
-    this->endResetModel();
     syncViewRowCount();
+    this->endResetModel();
     lastUpdateNumFrames = 0;
     lastFilteredUpdateCount = 0;
     overwriteIndex.clear();
@@ -944,9 +948,15 @@ void CANFrameModel::insertFrames(const QVector<CANFrame> &newFrames)
             filters.insert(newFrames[i].frameId(), true);
             needFilterRefresh = true;
         }
-        if (filters[newFrames[i].frameId()])
+        if (!busFilters.contains(newFrames[i].bus))
         {
-            busFilters.insert(newFrames[i].bus, true);
+            // if there are any busFilters already configured, leave the new filter disabled
+            if (hasAnyDisabledBusFilter) {
+                busFilters.insert(newFrames[i].bus, false);
+                // hasAnyDisabledBusFilter stays true
+            } else {
+                busFilters.insert(newFrames[i].bus, true);
+            }
             needFilterRefresh = true;
         }
         if (filters[newFrames[i].frameId()] && busFilters[newFrames[i].bus])
@@ -983,27 +993,30 @@ int CANFrameModel::getIndexFromTimeID(unsigned int ID, double timestamp)
 
 void CANFrameModel::loadFilterFile(QString filename)
 {
-    QFile *inFile = new QFile(filename);
+    QFile inFile(filename);
     QByteArray line;
     int ID;
 
-    if (!inFile->open(QIODevice::ReadOnly | QIODevice::Text))
+    if (!inFile.open(QIODevice::ReadOnly | QIODevice::Text))
         return;
 
     filters.clear();
     busFilters.clear();
 
-    while (!inFile->atEnd()) {
-        line = inFile->readLine().simplified();
+    while (!inFile.atEnd()) {
+        line = inFile.readLine().simplified();
         if (line.length() > 2)
         {
             QList<QByteArray> tokens = line.split(',');
-            ID = tokens[0].toInt(nullptr, 16);
+            if (tokens.count() < 2) continue;
+            bool ok = false;
+            ID = tokens[0].toInt(&ok, 16);
+            if (!ok) continue;
             if (tokens[1].toUpper() == "T") filters.insert(ID, true);
                 else filters.insert(ID, false);
         }
     }
-    inFile->close();
+    inFile.close();
 
     hasAnyDisabledFilter = false;
     for (auto const &val : filters) { if (!val) { hasAnyDisabledFilter = true; break; } }
@@ -1014,21 +1027,21 @@ void CANFrameModel::loadFilterFile(QString filename)
 
 void CANFrameModel::saveFilterFile(QString filename)
 {
-    QFile *outFile = new QFile(filename);
+    QFile outFile(filename);
 
-    if (!outFile->open(QIODevice::WriteOnly | QIODevice::Text))
+    if (!outFile.open(QIODevice::WriteOnly | QIODevice::Text))
         return;
 
     QMap<int, bool>::const_iterator it;
     for (it = filters.begin(); it != filters.end(); ++it)
     {
-        outFile->write(QString::number(it.key(), 16).toUtf8());
-        outFile->putChar(',');
-        if (it.value()) outFile->putChar('T');
-            else outFile->putChar('F');
-        outFile->write("\n");
+        outFile.write(QString::number(it.key(), 16).toUtf8());
+        outFile.putChar(',');
+        if (it.value()) outFile.putChar('T');
+            else outFile.putChar('F');
+        outFile.write("\n");
     }
-    outFile->close();
+    outFile.close();
 }
 
 bool CANFrameModel::needsFilterRefresh()

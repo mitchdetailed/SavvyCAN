@@ -687,6 +687,7 @@ void ConnectionWindow::loadConnections()
     for(int i = 0 ; i < portNames.size() ; i++)
     {
       CANConnection* conn_p = create((CANCon::type)devTypes[i], portNames[i], driverNames[i], serialSpeeds[i], busSpeeds[i], isCanFds[i] ? true : false, DataRates[i]);
+        if (!conn_p) continue;
 
         QList<CANBus> buses;
         for (int busIdx = 0; busIdx < MAX_SAVED_BUSES; busIdx++)
@@ -785,10 +786,7 @@ void ConnectionWindow::moveConnUp()
     int selIdx = ui->tableConnections->selectionModel()->currentIndex().row();
     if (selIdx > 0)
     {
-        CANConnection* selConn = connModel->getAtIdx(selIdx);
-        CANConnection* prevConn = connModel->getAtIdx(selIdx - 1);
-        connModel->replace(selIdx - 1, selConn);
-        connModel->replace(selIdx, prevConn);
+        connModel->swap(selIdx - 1, selIdx);
         ui->tableConnections->selectRow(selIdx - 1);
     }
 }
@@ -798,10 +796,7 @@ void ConnectionWindow::moveConnDown()
     int selIdx = ui->tableConnections->selectionModel()->currentIndex().row();
     if (selIdx < connModel->rowCount() - 1)
     {
-        CANConnection* selConn = connModel->getAtIdx(selIdx);
-        CANConnection* nextConn = connModel->getAtIdx(selIdx + 1);
-        connModel->replace(selIdx + 1, selConn);
-        connModel->replace(selIdx, nextConn);
+        connModel->swap(selIdx, selIdx + 1);
         ui->tableConnections->selectRow(selIdx + 1);
     }
 }

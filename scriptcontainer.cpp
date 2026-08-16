@@ -282,6 +282,7 @@ ISOTPScriptHelper::ISOTPScriptHelper(QJSEngine *engine)
 {
     scriptEngine = engine;
     handler = new ISOTP_HANDLER;
+    handler->setParent(this); //so the handler is destroyed and disconnected along with this helper
     connect(handler, SIGNAL(newISOMessage(ISOTP_MESSAGE)), this, SLOT(newISOMessage(ISOTP_MESSAGE)));
     handler->setReception(true);
     handler->setFlowCtrl(true);
@@ -357,6 +358,7 @@ UDSScriptHelper::UDSScriptHelper(QJSEngine *engine)
 {
     scriptEngine = engine;
     handler = new UDS_HANDLER;
+    handler->setParent(this); //so the handler is destroyed and disconnected along with this helper
     connect(handler, SIGNAL(newUDSMessage(UDS_MESSAGE)), this, SLOT(newUDSMessage(UDS_MESSAGE)));
     handler->setReception(true);
     handler->setFlowCtrl(true); //uds potentially requires flow control so turn it on

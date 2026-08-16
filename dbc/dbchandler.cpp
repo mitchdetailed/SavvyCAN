@@ -69,9 +69,10 @@ bool DBCSignalHandler::addSignal(DBC_SIGNAL &sig)
 bool DBCSignalHandler::removeSignal(DBC_SIGNAL *sig)
 {
     qDebug() << "Total # of signals: " << getCount();
-    for (int i = 0; i < getCount(); i++)
+    //compare by address, not by name - several signals may legally share a name
+    for (int i = getCount() - 1; i >= 0; i--)
     {
-        if (sigs[i].name == sig->name)
+        if (&sigs[i] == sig)
         {
             sigs.removeAt(i);
             qDebug() << "Removed signal at idx " << i;
@@ -446,6 +447,20 @@ void DBCFile::remapInternalPointers()
             if (sig->multiplexParent != nullptr)
                 sig->multiplexParent = msg->multiplexorSignal;
         }
+
+        // multiplexedChildren stores raw signal pointers too, so rebuild it from the
+        // multiplexParent links instead of trusting the (possibly stale) old entries
+        for (int j = 0; j < msg->sigHandler->getCount(); j++)
+        {
+            DBC_SIGNAL *sig = msg->sigHandler->findSignalByIdx(j);
+            if (sig) sig->multiplexedChildren.clear();
+        }
+        for (int j = 0; j < msg->sigHandler->getCount(); j++)
+        {
+            DBC_SIGNAL *sig = msg->sigHandler->findSignalByIdx(j);
+            if (sig && sig->multiplexParent)
+                sig->multiplexParent->multiplexedChildren.append(sig);
+        }
     }
 }
 
@@ -467,6 +482,72 @@ DBC_NODE* DBCFile::findNodeByName(QString name)
         }
     }
     return nullptr;
+}
+
+// msg->sender and sig->receiver point straight into dbc_nodes, which is a contiguous Qt6 QList.
+// Growing or shrinking that list can move every node in memory and leave all of those pointers
+// dangling, so capture the referenced node names before altering the list and re-resolve the
+// pointers afterward. The two functions must walk everything in the same order.
+QList<QString> DBCFile::snapshotNodeReferences()
+{
+    QList<QString> names;
+    for (int i = 0; i < messageHandler->getCount(); i++)
+    {
+        DBC_MESSAGE *msg = messageHandler->findMsgByIdx(i);
+        names.append(msg->sender ? msg->sender->name : QString());
+        for (int j = 0; j < msg->sigHandler->getCount(); j++)
+        {
+            DBC_SIGNAL *sig = msg->sigHandler->findSignalByIdx(j);
+            names.append(sig->receiver ? sig->receiver->name : QString());
+        }
+    }
+    for (int i = 0; i < unassignedSignals.size(); i++)
+        names.append(unassignedSignals[i].receiver ? unassignedSignals[i].receiver->name : QString());
+    return names;
+}
+
+void DBCFile::restoreNodeReferences(const QList<QString> &nodeNames)
+{
+    int idx = 0;
+    for (int i = 0; i < messageHandler->getCount(); i++)
+    {
+        DBC_MESSAGE *msg = messageHandler->findMsgByIdx(i);
+        msg->sender = nodeNames[idx].isEmpty() ? nullptr : findNodeByName(nodeNames[idx]);
+        idx++;
+        for (int j = 0; j < msg->sigHandler->getCount(); j++)
+        {
+            DBC_SIGNAL *sig = msg->sigHandler->findSignalByIdx(j);
+            sig->receiver = nodeNames[idx].isEmpty() ? nullptr : findNodeByName(nodeNames[idx]);
+            idx++;
+        }
+    }
+    for (int i = 0; i < unassignedSignals.size(); i++)
+    {
+        unassignedSignals[i].receiver = nodeNames[idx].isEmpty() ? nullptr : findNodeByName(nodeNames[idx]);
+        idx++;
+    }
+}
+
+void DBCFile::addNode(const DBC_NODE &node)
+{
+    QList<QString> nodeNames = snapshotNodeReferences();
+    dbc_nodes.append(node);
+    restoreNodeReferences(nodeNames);
+}
+
+bool DBCFile::removeNodeByName(QString name)
+{
+    for (int i = 0; i < dbc_nodes.size(); i++)
+    {
+        if (dbc_nodes.at(i).name == name)
+        {
+            QList<QString> nodeNames = snapshotNodeReferences();
+            dbc_nodes.removeAt(i);
+            restoreNodeReferences(nodeNames);
+            return true;
+        }
+    }
+    return false;
 }
 
 DBC_NODE* DBCFile::findNodeByNameAndComment(QString fullname)
@@ -577,7 +658,8 @@ DBC_ATTRIBUTE *DBCFile::findAttributeByIdx(int idx)
 
 void DBCFile::addAttribute(DBC_ATTRIBUTE &attr)
 {
-    if (!findAttributeByName(attr.name))
+    //the same attribute name can legally exist for different object types (BA_DEF_ BO_/SG_/BU_/global)
+    if (!findAttributeByName(attr.name, attr.attrType))
         dbc_attributes.append(attr);
 }
 
@@ -943,7 +1025,7 @@ bool DBCFile::parseAttributeLine(QString line)
     if (match.hasMatch())
     {
         qDebug() << "Found an attribute setting line for a message";
-        DBC_ATTRIBUTE *foundAttr = findAttributeByName(match.captured(1));
+        DBC_ATTRIBUTE *foundAttr = findAttributeByName(match.captured(1), ATTR_TYPE_MESSAGE);
         if (foundAttr)
         {
             qDebug() << "That message attribute does exist";
@@ -975,7 +1057,7 @@ bool DBCFile::parseAttributeLine(QString line)
     if (match.hasMatch())
     {
         qDebug() << "Found an attribute setting line for a signal";
-        DBC_ATTRIBUTE *foundAttr = findAttributeByName(match.captured(1));
+        DBC_ATTRIBUTE *foundAttr = findAttributeByName(match.captured(1), ATTR_TYPE_SIG);
         if (foundAttr)
         {
             qDebug() << "That signal attribute does exist";
@@ -1008,7 +1090,7 @@ bool DBCFile::parseAttributeLine(QString line)
     if (match.hasMatch())
     {
         qDebug() << "Found an attribute setting line for a node";
-        DBC_ATTRIBUTE *foundAttr = findAttributeByName(match.captured(1));
+        DBC_ATTRIBUTE *foundAttr = findAttributeByName(match.captured(1), ATTR_TYPE_NODE);
         if (foundAttr)
         {
             qDebug() << "That node attribute does exist";
@@ -1045,9 +1127,13 @@ bool DBCFile::parseDefaultAttrLine(QString line)
     if (match.hasMatch())
     {
         qDebug() << "Found an attribute default value line, searching for an attribute named " << match.captured(1) << "with data " << match.captured(2);
-        DBC_ATTRIBUTE *found = findAttributeByName(match.captured(1));
-        if (found)
+        //BA_DEF_DEF_ lines don't carry an object type so apply the default to every attribute with this name
+        bool foundAny = false;
+        for (int i = 0; i < dbc_attributes.length(); i++)
         {
+            DBC_ATTRIBUTE *found = &dbc_attributes[i];
+            if (found->name.compare(match.captured(1), Qt::CaseInsensitive) != 0) continue;
+            foundAny = true;
             switch (found->valType)
             {
             case ATTR_STRING:
@@ -1072,8 +1158,8 @@ bool DBCFile::parseDefaultAttrLine(QString line)
                 }
             }
             qDebug() << "Matched an attribute. Setting default value to " << found->defaultValue;
-            return true;
         }
+        if (foundAny) return true;
     }
     return false;
 }
@@ -2087,7 +2173,7 @@ DBCFile* DBCHandler::loadDBCFile(QString filename)
         //this file was created moments ago and never handed to anyone, so a real delete is safe
         loadedFiles.removeLast();
         delete thisFile;
-        return loadedFiles.size() > 0 ? loadedFiles.last() : nullptr;
+        return nullptr;
     }
     return loadedFiles.last();
 }
@@ -2239,6 +2325,7 @@ DBCFile* DBCHandler::loadSecretCSVFile(QString filename)
             //    2                                                                3                4  5  6 7    8       9
             else if (tokens[2].length() > 2) //signal definition continuation of previous message
             {
+                if (!pMsg) continue; //continuation row with no preceding message row
                 DBC_SIGNAL sig;
                 sig.parentMessage = pMsg;
                 sig.name = tokens[3];
@@ -2295,6 +2382,7 @@ DBCFile* DBCHandler::loadSecretCSVFile(QString filename)
             }
             else if (tokens[9].length() > 2) //additional values
             {
+                if (!pSig) continue; //values row with no preceding signal row
                 //$0=Inactive
                 QList<QByteArray> valToks = tokens[9].simplified().mid(1).split('=');
                 if (valToks.length() >= 2) {
@@ -2306,6 +2394,9 @@ DBCFile* DBCHandler::loadSecretCSVFile(QString filename)
             }
         }
     }
+
+    inFile->close();
+    delete inFile;
 
     thisFile->remapInternalPointers();
     thisFile->setDirtyFlag();
@@ -2473,10 +2564,14 @@ DBCFile* DBCHandler::loadJSONFile(QString filename)
                  //if this doesn't have a multiplex parent set but is multiplexed then it must have used
                  //simple multiplexing instead of any extended specification. So, fill in the multiplexor signal here
                  //and also write the extended entry for it too.
-                 if (sig->isMultiplexed && (sig->multiplexParent == nullptr) )
+                 if (sig->isMultiplexed && (sig->multiplexParent == nullptr) && (msg->multiplexorSignal) )
                  {
                      sig->multiplexParent = msg->multiplexorSignal;
                      msg->multiplexorSignal->multiplexedChildren.append(sig);
+                 }
+                 if ( sig->isMultiplexed && (!msg->multiplexorSignal) ) //marked multiplexed but there is no multiplexor.
+                 {
+                     sig->isMultiplexed = false; //can't multiplex if there is no multiplexor!
                  }
              }
          }

@@ -580,7 +580,7 @@ QString UDS_HANDLER::getDetailedMessageAnalysis(const UDS_MESSAGE &msg)
             //subfunc byte specifies address and length format, then address, then size
             dataSize = data[2] >> 4;
             addrSize = data[2] & 0xF;
-            if (dataLen > (dataSize + addrSize))
+            if (dataLen > (dataSize + addrSize + 2))
             {
                 buildString.append("Address: 0x");
                 for (int i = 0; i < addrSize; i++) buildString.append(QString::number(data[3 + i], 16).toUpper().rightJustified(2,'0'));

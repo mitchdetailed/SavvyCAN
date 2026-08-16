@@ -772,6 +772,9 @@ void DBCSignalEditor::refreshBitGrid()
     int startBit, endBit;
 
     startBit = currentSignal->startBit;
+    //the DBC parser doesn't bound the start bit so clamp it to the 64 byte grid before indexing bitpattern
+    if (startBit < 0) startBit = 0;
+    if (startBit > 511) startBit = 511;
 
     bitpattern[startBit / 8] |= 1 << (startBit % 8); //make the start bit a different color to set it apart
     ui->bitfield->setReference(bitpattern, false);

@@ -290,14 +290,14 @@ bool GSUSBConnection::applyBusSettings(int busIdx)
     memset(&mode, 0, sizeof(mode));
     mode.mode = GS_CAN_MODE_RESET;
     mode.flags = 0;
-    int r = ctrlOut(GS_USB_BREQ_MODE, 0, (uint16_t)busIdx, &mode, sizeof(mode));
+    int r = ctrlOut(GS_USB_BREQ_MODE, (uint16_t)busIdx, 0, &mode, sizeof(mode));
     if (r < 0)
     {
         qDebug() << "GSUSB: could not reset bus" << busIdx << r;
         return false;
     }
 
-    r = ctrlOut(GS_USB_BREQ_BITTIMING, 0, (uint16_t)busIdx, &timing, sizeof(timing));
+    r = ctrlOut(GS_USB_BREQ_BITTIMING, (uint16_t)busIdx, 0, &timing, sizeof(timing));
     if (r < 0)
     {
         qDebug() << "GSUSB: could not set bit timing on bus" << busIdx << r;
@@ -308,7 +308,7 @@ bool GSUSBConnection::applyBusSettings(int busIdx)
 
     mode.mode = GS_CAN_MODE_START;
     mode.flags = bus.isListenOnly() ? GS_CAN_MODE_LISTEN_ONLY : GS_CAN_MODE_NORMAL;
-    r = ctrlOut(GS_USB_BREQ_MODE, 0, (uint16_t)busIdx, &mode, sizeof(mode));
+    r = ctrlOut(GS_USB_BREQ_MODE, (uint16_t)busIdx, 0, &mode, sizeof(mode));
     if (r < 0)
     {
         qDebug() << "GSUSB: could not start bus" << busIdx << r;
@@ -362,7 +362,7 @@ void GSUSBConnection::piStop()
         mode.mode = GS_CAN_MODE_RESET;
         mode.flags = 0;
         for (int i = 0; i < mNumBuses; i++) {
-            ctrlOut(GS_USB_BREQ_MODE, 0, (uint16_t)i, &mode, sizeof(mode));
+            ctrlOut(GS_USB_BREQ_MODE, (uint16_t)i, 0, &mode, sizeof(mode));
         }
 
         libusb_release_interface(dev_handle, 0);

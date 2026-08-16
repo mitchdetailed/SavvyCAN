@@ -20,6 +20,9 @@ public:
     FrameSenderObject(const QVector<CANFrame> *frames);
     ~FrameSenderObject();
 
+    //hold this while accessing a record from another thread (see getSendRecordRef)
+    QMutex &recordMutex() { return mutex; }
+
 public slots:
     /**
      * @brief start the device. This calls piStarted

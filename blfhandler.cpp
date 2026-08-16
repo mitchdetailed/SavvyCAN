@@ -31,20 +31,17 @@ bool BLFHandler::loadBLF(QString filename, QVector<CANFrame>* frames)
     BLF_CAN_OBJ canObject;
     BLF_CAN_OBJ2 canObject2;
 
-    QFile *inFile = new QFile(filename);
+    QFile inFile(filename);
 
-    if (!inFile->open(QIODevice::ReadOnly))
+    if (!inFile.open(QIODevice::ReadOnly))
     {
-        delete inFile;
         return false;
     }
     memset(&header, 0, sizeof(header));
     //a short read leaves the header partly uninitialized, so demand the whole thing
-    if (inFile->read((char *)&header, sizeof(header)) != (qint64)sizeof(header))
+    if (inFile.read((char *)&header, sizeof(header)) != (qint64)sizeof(header))
     {
         qDebug() << "File is too short to even hold a BLF header";
-        inFile->close();
-        delete inFile;
         return false;
     }
     if (qFromLittleEndian(header.sig) == 0x47474F4C)
@@ -53,16 +50,14 @@ bool BLFHandler::loadBLF(QString filename, QVector<CANFrame>* frames)
     }
     else
     {
-        inFile->close();
-        delete inFile;
         return false;
     }
 
-    while (!inFile->atEnd())
+    while (!inFile.atEnd())
     {
-        qDebug() << "Position within file: " << inFile->pos();
+        qDebug() << "Position within file: " << inFile.pos();
         memset(&objHeader.base, 0, sizeof(BLF_OBJ_HEADER_BASE));
-        if (inFile->read((char *)&objHeader.base, sizeof(BLF_OBJ_HEADER_BASE)) != (qint64)sizeof(BLF_OBJ_HEADER_BASE))
+        if (inFile.read((char *)&objHeader.base, sizeof(BLF_OBJ_HEADER_BASE)) != (qint64)sizeof(BLF_OBJ_HEADER_BASE))
         {
             qDebug() << "Truncated object header, stopping here";
             break;
@@ -79,8 +74,8 @@ bool BLFHandler::loadBLF(QString filename, QVector<CANFrame>* frames)
             }
             int readSize = objHeader.base.objSize - sizeof(BLF_OBJ_HEADER_BASE);
             qDebug() << "Proper object header token. Read Size: " << readSize;
-            fileData = inFile->read(readSize);
-            junk = inFile->read(readSize % 4); //file is padded so sizes must always end up on even multiple of 4
+            fileData = inFile.read(readSize);
+            junk = inFile.read(readSize % 4); //file is padded so sizes must always end up on even multiple of 4
             //qDebug() << "Fudge bytes in readSize: " << (readSize % 4);
 
             switch (objHeader.base.objType)
@@ -91,8 +86,6 @@ bool BLFHandler::loadBLF(QString filename, QVector<CANFrame>* frames)
                 if (fileData.size() < (int)sizeof(BLF_OBJ_HEADER_CONTAINER))
                 {
                     qDebug() << "Truncated container object, aborting";
-                    inFile->close();
-                    delete inFile;
                     return frames->count() > 0;
                 }
                 memcpy(&objHeader.containerObj, fileData.constData(), sizeof(BLF_OBJ_HEADER_CONTAINER));

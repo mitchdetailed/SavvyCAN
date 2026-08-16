@@ -120,7 +120,9 @@ private:
     int mDirtyRowLow = -1;
     int mDirtyRowHigh = -1;
 
-    //keep mViewRowCount in step after telling the view about a change
+    /* Bring mViewRowCount up to the container size. Must run inside the begin/end bracket of
+     * whatever notification announces the change, because views re-query rowCount() while
+     * handling the end call and rowCount() reports mViewRowCount. */
     void syncViewRowCount() { mViewRowCount = filteredFrames.count(); }
     //remember that a row's contents changed, for the next refresh to report
     void markRowDirty(int row);

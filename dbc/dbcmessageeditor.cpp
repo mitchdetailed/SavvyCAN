@@ -82,7 +82,7 @@ DBCMessageEditor::DBCMessageEditor(QWidget *parent) :
                 {
                     DBC_NODE newNode;
                     newNode.name = QString(newText).replace(QRegularExpression("[^A-Za-z0-9_]"), "_");
-                    dbcFile->dbc_nodes.append(newNode);
+                    dbcFile->addNode(newNode);
                     node = dbcFile->findNodeByName(newNode.name);
                     ui->comboSender->addItem(newNode.name);
                 }

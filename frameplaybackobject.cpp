@@ -33,6 +33,9 @@ quint64 FramePlaybackObject::updatePosition(bool forward)
         return 0;
     }
 
+    //a sequence swap can leave the position past the new sequence's data, so pull it back in range
+    if (currentPosition < 0 || currentPosition >= currentSeqItem->data.size()) currentPosition = 0;
+
     //only send frame out if its ID is checked in the list. Otherwise discard it.
     CANFrame *thisFrame = &currentSeqItem->data[currentPosition];
     uint32_t originalBus = thisFrame->bus;
@@ -101,6 +104,8 @@ quint64 FramePlaybackObject::peekPosition(bool forward)
 {
     if (!currentSeqItem || currentSeqItem->data.isEmpty()) return 0xFFFFFFFFFFFFFFFFull;
     int peekCurrentPosition = currentPosition;
+    //same range guard as updatePosition - the position may belong to a longer, swapped-out sequence
+    if (peekCurrentPosition < 0 || peekCurrentPosition >= currentSeqItem->data.size()) peekCurrentPosition = 0;
     if (forward)
     {
         if (peekCurrentPosition < (currentSeqItem->data.size() - 1)) peekCurrentPosition++; //still in same file so keep going
@@ -202,6 +207,7 @@ void FramePlaybackObject::startPlaybackForward()
     {
         playbackTimer->setInterval(1);
         playbackElapsed.start();
+        if (currentPosition < 0 || currentPosition >= currentSeqItem->data.size()) currentPosition = 0;
         if (currentSeqItem->data[currentPosition].timeStamp().microSeconds() > 2000)
             playbackLastTimeStamp = currentSeqItem->data[currentPosition].timeStamp().microSeconds() - 2000;
         else playbackLastTimeStamp = 0;
@@ -224,6 +230,7 @@ void FramePlaybackObject::startPlaybackBackward()
     {
         playbackElapsed.start();
         playbackTimer->setInterval(1);
+        if (currentPosition < 0 || currentPosition >= currentSeqItem->data.size()) currentPosition = 0;
         playbackLastTimeStamp = currentSeqItem->data[currentPosition].timeStamp().microSeconds() + 2000;
     }
     playbackTimer->start();
@@ -340,6 +347,12 @@ void FramePlaybackObject::timerTriggered()
 
     if (useOrigTiming)
     {
+        if (!currentSeqItem || currentSeqItem->data.isEmpty())
+        {
+            playbackTimer->stop();
+            playbackActive = false;
+            return;
+        }
         //get elapsed microseconds since last tick (in case timer skips or is otherwise inaccurate, though there are no guarantees about elapsed timer either)
         quint64 elapsed = playbackElapsed.nsecsElapsed() / 1000;
         playbackElapsed.start();

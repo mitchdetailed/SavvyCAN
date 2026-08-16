@@ -403,8 +403,11 @@ void CanalystII::pollChannel(int busIdx)
     if (pending == 0) return;
     if (pending > CANALYST_MAX_PER_TICK) pending = CANALYST_MAX_PER_TICK;
 
+    //frames arrive in the same count prefixed 64 byte buffers we transmit with, up to 3 per buffer
+    const uint32_t numBuffers = (pending + 2) / 3;
+
     QByteArray raw;
-    raw.resize((int)(pending * sizeof(canalyst_message)));
+    raw.resize((int)(numBuffers * sizeof(canalyst_message_buffer)));
 
     int transferred = 0;
     int r = libusb_bulk_transfer(dev_handle, CANALYST_MESSAGE_EP[busIdx] | LIBUSB_ENDPOINT_IN,
@@ -416,12 +419,14 @@ void CanalystII::pollChannel(int busIdx)
         return;
     }
 
-    const int count = transferred / (int)sizeof(canalyst_message);
-    for (int i = 0; i < count; i++)
+    const int bufCount = transferred / (int)sizeof(canalyst_message_buffer);
+    for (int i = 0; i < bufCount; i++)
     {
-        canalyst_message msg;
-        memcpy(&msg, raw.constData() + (i * sizeof(canalyst_message)), sizeof(msg));
-        queueFrame(msg, busIdx);
+        canalyst_message_buffer buffer;
+        memcpy(&buffer, raw.constData() + (i * sizeof(canalyst_message_buffer)), sizeof(buffer));
+        int count = buffer.count;
+        if (count > 3) count = 3;
+        for (int j = 0; j < count; j++) queueFrame(buffer.messages[j], busIdx);
     }
 }
 

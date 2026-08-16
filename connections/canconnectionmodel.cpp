@@ -150,6 +150,15 @@ void CANConnectionModel::replace(int idx , CANConnection* pConn_p)
     endResetModel();
 }
 
+void CANConnectionModel::swap(int idx1, int idx2)
+{
+    CANConManager* manager = CANConManager::getInstance();
+
+    beginResetModel();
+    manager->swap(idx1, idx2);
+    endResetModel();
+}
+
 CANConnection* CANConnectionModel::getAtIdx(int pIdx) const
 {
     if (pIdx < 0)

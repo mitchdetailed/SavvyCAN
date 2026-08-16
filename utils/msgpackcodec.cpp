@@ -84,9 +84,9 @@ void MsgPack::packMapHeader(QByteArray &out, int pairs)
 
 namespace {
 
-static bool mpHave(const QByteArray &data, int pos, int need)
+static bool mpHave(const QByteArray &data, int pos, qint64 need)
 {
-    return (pos + need) <= data.length();
+    return need >= 0 && pos >= 0 && (qint64)pos + need <= data.length();
 }
 
 template<typename T> static bool mpTake(const QByteArray &data, int &pos, T &out)
@@ -157,7 +157,7 @@ bool MsgPack::readValue(const QByteArray &data, int &pos, Value &val, int depth)
         if (tag == 0xC4) { quint8 l; if (!mpTake(data, pos, l)) return false; len = l; }
         else if (tag == 0xC5) { quint16 l; if (!mpTake(data, pos, l)) return false; len = l; }
         else { quint32 l; if (!mpTake(data, pos, l)) return false; len = l; }
-        if (!mpHave(data, pos, (int)len)) return false;
+        if (!mpHave(data, pos, (qint64)len)) return false;
         val.type = Value::Bin;
         val.bytes = data.mid(pos, len);
         pos += len;
@@ -170,7 +170,7 @@ bool MsgPack::readValue(const QByteArray &data, int &pos, Value &val, int depth)
         if (tag == 0xD9) { quint8 l; if (!mpTake(data, pos, l)) return false; len = l; }
         else if (tag == 0xDA) { quint16 l; if (!mpTake(data, pos, l)) return false; len = l; }
         else { quint32 l; if (!mpTake(data, pos, l)) return false; len = l; }
-        if (!mpHave(data, pos, (int)len)) return false;
+        if (!mpHave(data, pos, (qint64)len)) return false;
         val.type = Value::Str;
         val.bytes = data.mid(pos, len);
         pos += len;
