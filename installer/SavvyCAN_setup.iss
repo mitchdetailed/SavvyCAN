@@ -1,21 +1,27 @@
 ; SavvyCAN Windows installer
-; Built against Qt 6.7.2 / MinGW 64-bit.
 ;
-; Don't compile this by hand - run installer\build_installer.ps1 from the repo
-; root. That script builds the release binary, stages deploy\ with windeployqt,
-; compiles the translations and then invokes this script. Compiling on its own
-; will fail unless deploy\ has already been staged that way.
+; Locally: run installer\build_installer.ps1 from the repo root. It builds the
+; release binary, stages deploy\ with windeployqt, compiles the translations and
+; then invokes this script.
+;
+; In CI: the Windows job stages the same payload itself and points this script at
+; it with  ISCC /DDeployDir=..\package  - so the folder is an input, not a fixed
+; path, and the two paths share one script.
 
 #define MyAppName      "SavvyCAN"
 #define MyAppVersion   "222"
 #define MyAppPublisher "SavvyCAN Project"
 #define MyAppURL       "https://github.com/mitchdetailed/SavvyCAN"
 #define MyAppExeName   "SavvyCAN.exe"
-#define DeployDir      "..\deploy"
+
+; Overridable from the command line with /DDeployDir=...
+#ifndef DeployDir
+  #define DeployDir "..\deploy"
+#endif
 
 ; Fail early with a readable message rather than emitting a broken installer
 #if !FileExists(AddBackslash(SourcePath) + DeployDir + "\" + MyAppExeName)
-  #error deploy\SavvyCAN.exe not found - run installer\build_installer.ps1 first
+  #error SavvyCAN.exe not found under DeployDir - stage the payload first
 #endif
 
 [Setup]

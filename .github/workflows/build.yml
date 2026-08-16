@@ -252,7 +252,9 @@ jobs:
           Copy-Item release\SavvyCAN.exe package\
           # The MSVC build links the VS2022 import library, so ship the matching DLL.
           Copy-Item third_party\libusb\VS2022\MS64\dll\libusb-1.0.dll package\
-          windeployqt --release --no-translations package\SavvyCAN.exe
+          # --compiler-runtime brings the MSVC redistributable DLLs along, so the
+          # installer does not depend on the target machine already having them.
+          windeployqt --release --no-translations --compiler-runtime package\SavvyCAN.exe
           # PowerShell does not expand wildcards in arguments to native programs,
           # and lrelease does no globbing of its own, so feed it real paths.
           New-Item -ItemType Directory -Force -Path package\translations | Out-Null
@@ -264,10 +266,28 @@ jobs:
           Copy-Item -Recurse help package\help
           Copy-Item -Recurse examples package\examples
 
+      # Inno Setup 6 is already on the windows-2022 image, so there is nothing to
+      # install. This is the same .iss the local build_installer.ps1 drives, just
+      # pointed at the payload this job already staged.
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path -LiteralPath $iscc)) { throw "ISCC not found at $iscc" }
+          & $iscc /DDeployDir=..\package installer\SavvyCAN_setup.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
+          Get-ChildItem installer\SavvyCAN_Setup_*.exe |
+            ForEach-Object { '{0}  {1:N1} MB' -f $_.Name, ($_.Length / 1MB) }
+
       - uses: actions/upload-artifact@v7
         with:
           name: SavvyCAN-Windows_x64
           path: package
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: SavvyCAN-Windows_x64-Installer
+          path: installer/SavvyCAN_Setup_*.exe
 
   pre-release:
     name: "pre-release"
@@ -314,6 +334,7 @@ jobs:
           files: |
             SavvyCAN-Linux_x64.AppImage/SavvyCAN-*x86_64.AppImage
             SavvyCAN-Windows_x64_CIBuild.zip
+            SavvyCAN-Windows_x64-Installer/SavvyCAN_Setup_*.exe
             SavvyCAN-macOS_x64.dmg/SavvyCAN_x64.dmg
             SavvyCAN-macOS_ARM64.dmg/SavvyCAN_arm64.dmg
 
