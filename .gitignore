@@ -1,5 +1,13 @@
-#Build directory
+#Build directories and logs
 build/
+build-release/
+/debug/
+/release/
+build.log
+object_script.*
+
+#Archives
+*.zip
 
 #gitignore_files directory
 gitignore_files/
@@ -47,6 +55,12 @@ SavvyCAN.pro.user.*
 .qmake.stash
 Makefile
 Makefile.*
+
+# Vendored third-party libraries ship their prebuilt binaries; the compiled-library
+# ignore rules above must not strip them or a fresh clone cannot link
+!third_party/**/*.a
+!third_party/**/*.lib
+!third_party/**/*.dll
 
 # Editor files
 *.code-workspace

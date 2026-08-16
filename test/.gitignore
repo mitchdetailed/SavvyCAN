@@ -13,3 +13,7 @@ res*.txt
 out_*.txt
 full.txt
 testout.txt
+*_codecs.txt
+*_fileio.txt
+*_framemodel.txt
+*_lfqueue.txt
