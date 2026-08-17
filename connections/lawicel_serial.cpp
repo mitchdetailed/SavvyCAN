@@ -381,6 +381,8 @@ void LAWICELSerial::serialError(QSerialPort::SerialPortError err)
 {
     QString errMessage;
     bool killConnection = false;
+    /* piStop() below tears the port object down, so grab its description while it is still around */
+    const QString errDetail = serial ? serial->errorString() : QString("no serial port object");
     switch (err)
     {
     case QSerialPort::NoError:
@@ -400,6 +402,9 @@ void LAWICELSerial::serialError(QSerialPort::SerialPortError err)
         killConnection = true;
         piStop();
         break;
+/* Qt 6 removed these three enumerators outright rather than renaming them. There a line
+ * level fault arrives as UnknownError or as a value no case names, so those branches fall
+ * back to whatever detail Qt itself can still give about the port. */
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     case QSerialPort::ParityError:
         errMessage = "Parity error on serial port";
@@ -429,7 +434,7 @@ void LAWICELSerial::serialError(QSerialPort::SerialPortError err)
         killConnection = true;
         break;
     case QSerialPort::UnknownError:
-        errMessage = "Beats me what happened to the serial port.";
+        errMessage = "Beats me what happened to the serial port. Qt says: " % errDetail;
         killConnection = true;
         piStop();
         break;
@@ -441,6 +446,9 @@ void LAWICELSerial::serialError(QSerialPort::SerialPortError err)
         errMessage = "The serial port isn't open";
         killConnection = true;
         piStop();
+        break;
+    default:
+        errMessage = "Unnamed serial port error " % QString::number(static_cast<int>(err)) % ". Qt says: " % errDetail;
         break;
     }
     /*

@@ -98,6 +98,7 @@ MainWindow::MainWindow(QWidget *parent) :
     comparatorWindow = nullptr;
     settingsDialog = nullptr;
     firmwareUploaderWindow = nullptr;
+    udsFirmwareUploaderWindow = nullptr;
     discreteStateWindow = nullptr;
     connectionWindow = nullptr;
     scriptingWindow = nullptr;
@@ -144,6 +145,7 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->actionScripting_INterface, &QAction::triggered, this, &MainWindow::showScriptingWindow);
     connect(ui->actionPreferences, &QAction::triggered, this, &MainWindow::showSettingsDialog);
     connect(ui->actionFirmware_Update, &QAction::triggered, this, &MainWindow::showFirmwareUploaderWindow);
+    connect(ui->actionUDS_Firmware_Update, &QAction::triggered, this, &MainWindow::showUDSFirmwareUploaderWindow);
     connect(ui->actionDBC_File_Manager, &QAction::triggered, this, &MainWindow::showDBCFileWindow);
     connect(ui->actionFuzzing, &QAction::triggered, this, &MainWindow::showFuzzingWindow);
     connect(ui->actionUDS_Scanner, &QAction::triggered, this, &MainWindow::showUDSScanWindow);
@@ -326,6 +328,7 @@ void MainWindow::killEmAll()
     killWindow(snifferWindow);
     killWindow(bisectWindow);
     killWindow(firmwareUploaderWindow);
+    killWindow(udsFirmwareUploaderWindow);
     killWindow(motorctrlConfigWindow);
     killWindow(signalViewerWindow);
     killWindow(temporalGraphWindow);
@@ -1922,6 +1925,15 @@ void MainWindow::showFirmwareUploaderWindow()
         firmwareUploaderWindow = new FirmwareUploaderWindow(model->getListReference());
     }
     firmwareUploaderWindow->show();
+}
+
+void MainWindow::showUDSFirmwareUploaderWindow()
+{
+    if (!udsFirmwareUploaderWindow)
+    {
+        udsFirmwareUploaderWindow = new UDSFirmwareUploaderWindow(model->getListReference());
+    }
+    udsFirmwareUploaderWindow->show();
 }
 
 void MainWindow::showComparisonWindow()

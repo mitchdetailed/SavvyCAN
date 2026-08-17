@@ -5,6 +5,7 @@
 #include <QProgressDialog>
 #include <QDateTime>
 #include <QRegularExpression>
+#include <QSet>
 #include <QtEndian>
 #include <QSettings>
 #include <iostream>
@@ -335,220 +336,335 @@ bool FrameFileIO::loadFrameFile(QString &fileName, QVector<CANFrame>* frameCache
 }
 
 
+namespace {
+
+/* The loaders autoDetectLoadFile can try. Going through an id rather than calling the loaders
+ * directly lets the extension driven fast path and the exhaustive fallback share one list and
+ * makes sure no probe is run twice on the same file. */
+enum FileProbe
+{
+    ProbeCanalyzerBLF,
+    ProbeNativeCSV,
+    ProbeWiresharkSocketCAN,
+    ProbeWireshark,
+    ProbeTeslaAP,
+    ProbeCANServer,
+    ProbeCanalyzerASC,
+    ProbeCRTD,
+    ProbeTrace,
+    ProbeVehicleSpy,
+    ProbeCanDump,
+    ProbeCARBUSAnalyzer,
+    ProbeCANHacker,
+    ProbeCabana,
+    ProbeCANOpen,
+    ProbeBusMasterLog,
+    ProbePCAN,
+    ProbeIXXAT,
+    ProbeMicrochip,
+    ProbeCANDO,
+    ProbeKvaser,
+    ProbeCLX000,
+    ProbeLawicel,
+    ProbeGenericCSV,
+    ProbeMDF4
+};
+
+//Runs one probe unless it has already been tried for this file. Returns true only if the file was loaded.
+bool tryProbe(FileProbe probe, const QString &filename, QVector<CANFrame>* frames, QSet<int> &tried)
+{
+    if (tried.contains(static_cast<int>(probe))) return false;
+    tried.insert(static_cast<int>(probe));
+
+    switch (probe)
+    {
+    case ProbeCanalyzerBLF:
+        qDebug() << "Attempting Canalyzer BLF";
+        if (FrameFileIO::isCanalyzerBLF(filename) && FrameFileIO::loadCanalyzerBLF(filename, frames)) {
+            qDebug() << "Loaded as Canalyzer BLF successfully!"; return true;
+        }
+        break;
+    case ProbeNativeCSV:
+        qDebug() << "Attempting native GVRET CSV";
+        if (FrameFileIO::isNativeCSVFile(filename) && FrameFileIO::loadNativeCSVFile(filename, frames)) {
+            qDebug() << "Loaded as native GVRET CSV successfully!"; return true;
+        }
+        break;
+    case ProbeWiresharkSocketCAN:
+        qDebug() << "Attempting Wireshark SocketCAN";
+        if (FrameFileIO::isWiresharkSocketCANFile(filename) && FrameFileIO::loadWiresharkSocketCANFile(filename, frames)) {
+            qDebug() << "Loaded as Wireshark SocketCAN successfully!"; return true;
+        }
+        break;
+    case ProbeWireshark:
+        qDebug() << "Attempting Wireshark generic";
+        if (FrameFileIO::isWiresharkFile(filename) && FrameFileIO::loadWiresharkFile(filename, frames)) {
+            qDebug() << "Loaded as Wireshark Log successfully!"; return true;
+        }
+        break;
+    case ProbeTeslaAP:
+        qDebug() << "Attempting Tesla AP Snapshot";
+        if (FrameFileIO::isTeslaAPFile(filename) && FrameFileIO::loadTeslaAPFile(filename, frames)) {
+            qDebug() << "Loaded as Tesla AP Snapshot successfully!"; return true;
+        }
+        break;
+    case ProbeCANServer:
+        qDebug() << "Attempting CANServer Binary Log";
+        if (FrameFileIO::isCANServerFile(filename) && FrameFileIO::loadCANServerFile(filename, frames)) {
+            qDebug() << "Loaded as CANServer Binary Log successfully!"; return true;
+        }
+        break;
+    case ProbeCanalyzerASC:
+        qDebug() << "Attempting CANalyzer ASC";
+        if (FrameFileIO::isCanalyzerASC(filename) && FrameFileIO::loadCanalyzerASC(filename, frames)) {
+            qDebug() << "Loaded as CANalyzer ASC successfully!"; return true;
+        }
+        break;
+    case ProbeCRTD:
+        qDebug() << "Attempting CRTD";
+        if (FrameFileIO::isCRTDFile(filename) && FrameFileIO::loadCRTDFile(filename, frames)) {
+            qDebug() << "Loaded as CRTD successfully!"; return true;
+        }
+        break;
+    case ProbeTrace:
+        qDebug() << "Attempting Vector Trace file";
+        if (FrameFileIO::isTraceFile(filename) && FrameFileIO::loadTraceFile(filename, frames)) {
+            qDebug() << "Loaded as Trace successfully!"; return true;
+        }
+        break;
+    case ProbeVehicleSpy:
+        qDebug() << "Attempting Vehicle Spy CSV";
+        if (FrameFileIO::isVehicleSpyFile(filename) && FrameFileIO::loadVehicleSpyFile(filename, frames)) {
+            qDebug() << "Loaded as Vehicle Spy successfully!"; return true;
+        }
+        break;
+    case ProbeCanDump:
+        qDebug() << "Attempting Candump/Kayak";
+        if (FrameFileIO::isCanDumpFile(filename) && FrameFileIO::loadCanDumpFile(filename, frames)) {
+            qDebug() << "Loaded as Candump/Kayak successfully!"; return true;
+        }
+        break;
+    case ProbeCARBUSAnalyzer:
+        qDebug() << "Attempting CARBUS Analyzer";
+        if (FrameFileIO::isCARBUSAnalyzerFile(filename) && FrameFileIO::loadCARBUSAnalyzerFile(filename, frames)) {
+            qDebug() << "Loaded as CARBUS Analyzer successfully!"; return true;
+        }
+        break;
+    case ProbeCANHacker:
+        qDebug() << "Attempting CANHacker";
+        if (FrameFileIO::isCANHackerFile(filename) && FrameFileIO::loadCANHackerFile(filename, frames)) {
+            qDebug() << "Loaded as CANHacker successfully!"; return true;
+        }
+        break;
+    case ProbeCabana:
+        qDebug() << "Attempting Cabana CSV";
+        if (FrameFileIO::isCabanaFile(filename) && FrameFileIO::loadCabanaFile(filename, frames)) {
+            qDebug() << "Loaded as Cabana successfully!"; return true;
+        }
+        break;
+    case ProbeCANOpen:
+        qDebug() << "Attempting CANOpen Magic CSV";
+        if (FrameFileIO::isCANOpenFile(filename) && FrameFileIO::loadCANOpenFile(filename, frames)) {
+            qDebug() << "Loaded as CANOpen Magic successfully!"; return true;
+        }
+        break;
+    case ProbeBusMasterLog:
+        qDebug() << "Attempting BusMaster Log";
+        if (FrameFileIO::isLogFile(filename) && FrameFileIO::loadLogFile(filename, frames)) {
+            qDebug() << "Loaded as BusMaster Log successfully!"; return true;
+        }
+        break;
+    case ProbePCAN:
+        qDebug() << "Attempting PCAN Viewer";
+        if (FrameFileIO::isPCANFile(filename) && FrameFileIO::loadPCANFile(filename, frames)) {
+            qDebug() << "Loaded as PCAN successfully!"; return true;
+        }
+        break;
+    case ProbeIXXAT:
+        qDebug() << "Attempting IXXAT MiniLog CSV";
+        if (FrameFileIO::isIXXATFile(filename) && FrameFileIO::loadIXXATFile(filename, frames)) {
+            qDebug() << "Loaded as IXXAT successfully!"; return true;
+        }
+        break;
+    case ProbeMicrochip:
+        qDebug() << "Attempting Microchip Log";
+        if (FrameFileIO::isMicrochipFile(filename) && FrameFileIO::loadMicrochipFile(filename, frames)) {
+            qDebug() << "Loaded as Microchip successfully!"; return true;
+        }
+        break;
+    case ProbeCANDO:
+        qDebug() << "Attempting CAN-DO Log";
+        if (FrameFileIO::isCANDOFile(filename) && FrameFileIO::loadCANDOFile(filename, frames)) {
+            qDebug() << "Loaded as CAN-DO successfully!"; return true;
+        }
+        break;
+    case ProbeKvaser:
+        qDebug() << "Attempting Kvaser Log";
+        if (FrameFileIO::isKvaserFile(filename))
+        {
+            if (FrameFileIO::loadKvaserFile(filename, frames, true))  { qDebug() << "Loaded as Kvaser HEX!"; return true; }
+            if (FrameFileIO::loadKvaserFile(filename, frames, false)) { qDebug() << "Loaded as Kvaser Decimal!"; return true; }
+        }
+        break;
+    case ProbeCLX000:
+        qDebug() << "Attempting CLX000";
+        if (FrameFileIO::isCLX000File(filename) && FrameFileIO::loadCLX000File(filename, frames)) {
+            qDebug() << "Loaded as CLX000 successfully!"; return true;
+        }
+        break;
+    case ProbeLawicel:
+        qDebug() << "Attempting CANDump Lawicel";
+        if (FrameFileIO::isLawicelFile(filename) && FrameFileIO::loadLawicelFile(filename, frames)) {
+            qDebug() << "Loaded as Lawicel successfully!"; return true;
+        }
+        break;
+    case ProbeGenericCSV:
+        qDebug() << "Attempting generic ID/Data CSV";
+        if (FrameFileIO::isGenericCSVFile(filename) && FrameFileIO::loadGenericCSVFile(filename, frames)) {
+            qDebug() << "Loaded as generic CSV successfully!"; return true;
+        }
+        break;
+    case ProbeMDF4:
+#ifdef MDF4_SUPPORT
+        qDebug() << "Attempting ASAM MDF4";
+        {
+            /* MDF4 has no "is" check and reports success as "the vector is not empty", so an
+             * earlier probe that appended frames before failing would otherwise be reported
+             * here as a successful MDF4 load. Only new frames count. */
+            const qsizetype countBefore = frames->count();
+            if (FrameFileIO::loadMDF4File(filename, frames) && frames->count() > countBefore) {
+                qDebug() << "Loaded as ASAM MDF4 successfully!"; return true;
+            }
+        }
+#endif
+        break;
+    }
+
+    return false;
+}
+
+} //anonymous namespace
+
 //Try every format by first using the "is" functions which try to detect whether a given file is a good match to that
 //file format or not. Those functions are much less tolerant than the load functions and so should help to discriminate
 //whether a file could be loaded or not by a given loader. The loader return is still used in case the guess was wrong.
+//The extension only decides which probes get first crack at the file - a file is never rejected for its suffix. If the
+//likely candidates all say no, or the extension means nothing to us, every remaining probe is tried before giving up.
 bool FrameFileIO::autoDetectLoadFile(QString filename, QVector<CANFrame>* frames)
 {
-    // Step 1: Extension-based pre-filter
-    // Only attempt parsers whose file type is compatible with the extension.
-    // Any extension not in the known set is rejected immediately with a
-    // helpful message rather than blindly running every parser.
-
     QFileInfo fi(filename);
     QString ext = fi.suffix().toLower();
+    QSet<int> tried;
 
-    static const QSet<QString> knownExtensions = {
-        QLatin1String("csv"), QLatin1String("crt"), QLatin1String("crtd"),
-        QLatin1String("log"), QLatin1String("can"), QLatin1String("trace"),
-        QLatin1String("avc"), QLatin1String("evc"), QLatin1String("qcc"),
-        QLatin1String("trc"), QLatin1String("txt"), QLatin1String("asc"),
-        QLatin1String("blf"), QLatin1String("pcap"), QLatin1String("pcapng"),
-#ifdef MDF4_SUPPORT
-        QLatin1String("mf4"),
-#endif
-    };
-
-    if (!knownExtensions.contains(ext))
-    {
-        QMessageBox msgBox;
-        msgBox.setIcon(QMessageBox::Warning);
-        msgBox.setWindowTitle("Unknown File Type");
-        msgBox.setText(QString("The file extension '.%1' is not a recognised CAN log format.\n\n"
-                               "Please select the correct format manually from the file type list.").arg(ext));
-        msgBox.exec();
-        qDebug() << "autoDetect rejected unknown extension:" << ext;
-        return false;
-    }
-
-    // Step 2: Binary / magic-byte formats (extension-independent)
-    // These use file headers so they are safe to probe first.
+    // Step 1: Extension based fast path - try the parsers that claim this extension, most likely first.
 
 #ifdef MDF4_SUPPORT
     if (ext == QLatin1String("mf4"))
     {
-        qDebug() << "Attempting ASAM MDF4";
-        if (loadMDF4File(filename, frames)) {
-            qDebug() << "Loaded as ASAM MDF4 successfully!"; return true;
-        }
-        return false;
+        if (tryProbe(ProbeMDF4, filename, frames, tried)) return true;
     }
 #endif
 
     if (ext == QLatin1String("blf"))
     {
-        qDebug() << "Attempting Canalyzer BLF";
-        if (isCanalyzerBLF(filename) && loadCanalyzerBLF(filename, frames)) {
-            qDebug() << "Loaded as Canalyzer BLF successfully!"; return true;
-        }
+        if (tryProbe(ProbeCanalyzerBLF, filename, frames, tried)) return true;
     }
 
     if (ext == QLatin1String("pcap") || ext == QLatin1String("pcapng"))
     {
-        qDebug() << "Attempting Wireshark SocketCAN";
-        if (isWiresharkSocketCANFile(filename) && loadWiresharkSocketCANFile(filename, frames)) {
-            qDebug() << "Loaded as Wireshark SocketCAN successfully!"; return true;
-        }
-        qDebug() << "Attempting Wireshark generic";
-        if (isWiresharkFile(filename) && loadWiresharkFile(filename, frames)) {
-            qDebug() << "Loaded as Wireshark Log successfully!"; return true;
-        }
+        if (tryProbe(ProbeWiresharkSocketCAN, filename, frames, tried)) return true;
+        if (tryProbe(ProbeWireshark, filename, frames, tried)) return true;
     }
 
     if (ext == QLatin1String("can"))
     {
-        qDebug() << "Attempting Tesla AP Snapshot";
-        if (isTeslaAPFile(filename) && loadTeslaAPFile(filename, frames)) {
-            qDebug() << "Loaded as Tesla AP Snapshot successfully!"; return true;
-        }
-        qDebug() << "Attempting CANServer Binary Log";
-        if (isCANServerFile(filename) && loadCANServerFile(filename, frames)) {
-            qDebug() << "Loaded as CANServer Binary Log successfully!"; return true;
-        }
-        qDebug() << "Attempting Microchip Log";
-        if (isMicrochipFile(filename) && loadMicrochipFile(filename, frames)) {
-            qDebug() << "Loaded as Microchip successfully!"; return true;
-        }
-        qDebug() << "Attempting CAN-DO Log";
-        if (isCANDOFile(filename) && loadCANDOFile(filename, frames)) {
-            qDebug() << "Loaded as CAN-DO successfully!"; return true;
-        }
+        if (tryProbe(ProbeTeslaAP, filename, frames, tried)) return true;
+        if (tryProbe(ProbeCANServer, filename, frames, tried)) return true;
+        if (tryProbe(ProbeMicrochip, filename, frames, tried)) return true;
+        if (tryProbe(ProbeCANDO, filename, frames, tried)) return true;
     }
-
-    // Step 3: Text formats - only attempt parsers whose extensions match
 
     if (ext == QLatin1String("asc"))
     {
-        qDebug() << "Attempting CANalyzer ASC";
-        if (isCanalyzerASC(filename) && loadCanalyzerASC(filename, frames)) {
-            qDebug() << "Loaded as CANalyzer ASC successfully!"; return true;
-        }
+        if (tryProbe(ProbeCanalyzerASC, filename, frames, tried)) return true;
     }
 
     if (ext == QLatin1String("crt") || ext == QLatin1String("crtd"))
     {
-        qDebug() << "Attempting CRTD";
-        if (isCRTDFile(filename) && loadCRTDFile(filename, frames)) {
-            qDebug() << "Loaded as CRTD successfully!"; return true;
-        }
+        if (tryProbe(ProbeCRTD, filename, frames, tried)) return true;
     }
 
     if (ext == QLatin1String("trace"))
     {
-        qDebug() << "Attempting Vector Trace file";
-        if (isTraceFile(filename) && loadTraceFile(filename, frames)) {
-            qDebug() << "Loaded as Trace successfully!"; return true;
-        }
+        if (tryProbe(ProbeTrace, filename, frames, tried)) return true;
     }
 
     if (ext == QLatin1String("trc"))
     {
-        qDebug() << "Attempting PCAN Viewer";
-        if (isPCANFile(filename) && loadPCANFile(filename, frames)) {
-            qDebug() << "Loaded as PCAN successfully!"; return true;
-        }
-        qDebug() << "Attempting CARBUS Analyzer";
-        if (isCARBUSAnalyzerFile(filename) && loadCARBUSAnalyzerFile(filename, frames)) {
-            qDebug() << "Loaded as CARBUS Analyzer successfully!"; return true;
-        }
-        qDebug() << "Attempting CANHacker";
-        if (isCANHackerFile(filename) && loadCANHackerFile(filename, frames)) {
-            qDebug() << "Loaded as CANHacker successfully!"; return true;
-        }
+        if (tryProbe(ProbePCAN, filename, frames, tried)) return true;
+        if (tryProbe(ProbeCARBUSAnalyzer, filename, frames, tried)) return true;
+        if (tryProbe(ProbeCANHacker, filename, frames, tried)) return true;
     }
 
     if (ext == QLatin1String("log"))
     {
-        qDebug() << "Attempting BusMaster Log";
-        if (isLogFile(filename) && loadLogFile(filename, frames)) {
-            qDebug() << "Loaded as BusMaster Log successfully!"; return true;
-        }
-        qDebug() << "Attempting Candump/Kayak";
-        if (isCanDumpFile(filename) && loadCanDumpFile(filename, frames)) {
-            qDebug() << "Loaded as Candump/Kayak successfully!"; return true;
-        }
-        qDebug() << "Attempting Microchip Log";
-        if (isMicrochipFile(filename) && loadMicrochipFile(filename, frames)) {
-            qDebug() << "Loaded as Microchip successfully!"; return true;
-        }
-        qDebug() << "Attempting CANServer Binary Log";
-        if (isCANServerFile(filename) && loadCANServerFile(filename, frames)) {
-            qDebug() << "Loaded as CANServer Binary Log successfully!"; return true;
-        }
+        if (tryProbe(ProbeBusMasterLog, filename, frames, tried)) return true;
+        if (tryProbe(ProbeCanDump, filename, frames, tried)) return true;
+        if (tryProbe(ProbeMicrochip, filename, frames, tried)) return true;
+        if (tryProbe(ProbeCANServer, filename, frames, tried)) return true;
     }
 
     if (ext == QLatin1String("txt"))
     {
-        qDebug() << "Attempting Kvaser Log";
-        if (isKvaserFile(filename))
-        {
-            if (loadKvaserFile(filename, frames, true))  { qDebug() << "Loaded as Kvaser HEX!"; return true; }
-            if (loadKvaserFile(filename, frames, false)) { qDebug() << "Loaded as Kvaser Decimal!"; return true; }
-        }
-        qDebug() << "Attempting CLX000";
-        if (isCLX000File(filename) && loadCLX000File(filename, frames)) {
-            qDebug() << "Loaded as CLX000 successfully!"; return true;
-        }
-        qDebug() << "Attempting CANDump Lawicel";
-        if (isLawicelFile(filename) && loadLawicelFile(filename, frames)) {
-            qDebug() << "Loaded as Lawicel successfully!"; return true;
-        }
+        if (tryProbe(ProbeKvaser, filename, frames, tried)) return true;
+        if (tryProbe(ProbeCLX000, filename, frames, tried)) return true;
+        if (tryProbe(ProbeLawicel, filename, frames, tried)) return true;
     }
 
     if (ext == QLatin1String("avc") || ext == QLatin1String("evc") || ext == QLatin1String("qcc"))
     {
-        qDebug() << "Attempting CAN-DO Log";
-        if (isCANDOFile(filename) && loadCANDOFile(filename, frames)) {
-            qDebug() << "Loaded as CAN-DO successfully!"; return true;
-        }
+        if (tryProbe(ProbeCANDO, filename, frames, tried)) return true;
     }
 
     if (ext == QLatin1String("csv"))
     {
-        qDebug() << "Attempting native GVRET CSV";
-        if (isNativeCSVFile(filename) && loadNativeCSVFile(filename, frames)) {
-            qDebug() << "Loaded as native GVRET CSV successfully!"; return true;
-        }
-        qDebug() << "Attempting Vehicle Spy CSV";
-        if (isVehicleSpyFile(filename) && loadVehicleSpyFile(filename, frames)) {
-            qDebug() << "Loaded as Vehicle Spy successfully!"; return true;
-        }
-        qDebug() << "Attempting IXXAT MiniLog CSV";
-        if (isIXXATFile(filename) && loadIXXATFile(filename, frames)) {
-            qDebug() << "Loaded as IXXAT successfully!"; return true;
-        }
-        qDebug() << "Attempting Cabana CSV";
-        if (isCabanaFile(filename) && loadCabanaFile(filename, frames)) {
-            qDebug() << "Loaded as Cabana successfully!"; return true;
-        }
-        qDebug() << "Attempting CANOpen Magic CSV";
-        if (isCANOpenFile(filename) && loadCANOpenFile(filename, frames)) {
-            qDebug() << "Loaded as CANOpen Magic successfully!"; return true;
-        }
-        qDebug() << "Attempting generic ID/Data CSV";
-        if (isGenericCSVFile(filename) && loadGenericCSVFile(filename, frames)) {
-            qDebug() << "Loaded as generic CSV successfully!"; return true;
-        }
+        if (tryProbe(ProbeNativeCSV, filename, frames, tried)) return true;
+        if (tryProbe(ProbeVehicleSpy, filename, frames, tried)) return true;
+        if (tryProbe(ProbeIXXAT, filename, frames, tried)) return true;
+        if (tryProbe(ProbeCabana, filename, frames, tried)) return true;
+        if (tryProbe(ProbeCANOpen, filename, frames, tried)) return true;
+        if (tryProbe(ProbeGenericCSV, filename, frames, tried)) return true;
     }
 
-    // Step 4: Nothing matched
+    // Step 2: The extension was a dead end, so sweep everything that has not run yet. Formats that
+    // match on magic numbers go first so they can claim a file before a looser text parser does.
+    // MDF4 is last because it has no cheap "is" check and can only be tested by actually loading.
+
+    static const FileProbe remainingProbes[] = {
+        ProbeCanalyzerBLF, ProbeNativeCSV, ProbeWiresharkSocketCAN, ProbeWireshark,
+        ProbeTeslaAP, ProbeCANServer, ProbeCanalyzerASC, ProbeCRTD, ProbeTrace,
+        ProbeVehicleSpy, ProbeCanDump, ProbeCARBUSAnalyzer, ProbeCANHacker,
+        ProbeCabana, ProbeCANOpen, ProbeBusMasterLog, ProbePCAN, ProbeIXXAT,
+        ProbeMicrochip, ProbeCANDO, ProbeKvaser, ProbeCLX000, ProbeLawicel,
+        ProbeGenericCSV,
+#ifdef MDF4_SUPPORT
+        ProbeMDF4,
+#endif
+    };
+
+    for (FileProbe probe : remainingProbes)
+    {
+        if (tryProbe(probe, filename, frames, tried)) return true;
+    }
+
+    // Step 3: Nothing matched
     QMessageBox msgBox;
     msgBox.setIcon(QMessageBox::Warning);
     msgBox.setWindowTitle("Format Not Recognised");
     msgBox.setText(QString("Could not identify the log format for file:\n%1\n\n"
-                           "The extension '.%2' is known but no parser accepted this file.\n"
+                           "No parser accepted this file.\n"
                            "Please try selecting the format manually from the file type list.")
-                   .arg(fi.fileName()).arg(ext));
+                   .arg(fi.fileName()));
     msgBox.exec();
     qDebug() << "autoDetect: no parser matched for" << filename;
     return false;

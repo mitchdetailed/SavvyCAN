@@ -34,6 +34,7 @@
 #include "signalviewerwindow.h"
 #include "re/temporalgraphwindow.h"
 #include "re/dbccomparatorwindow.h"
+#include "re/udsfirmwareuploaderwindow.h"
 #include "canbridgewindow.h"
 
 class CANConnection;
@@ -91,6 +92,7 @@ private slots:
     void showComparisonWindow();
     void showSettingsDialog();
     void showFirmwareUploaderWindow();
+    void showUDSFirmwareUploaderWindow();
     void showConnectionSettingsWindow();
     void showScriptingWindow();
     void showDBCFileWindow();
@@ -193,6 +195,7 @@ private:
     MainSettingsDialog *settingsDialog;
     DiscreteStateWindow *discreteStateWindow;
     FirmwareUploaderWindow *firmwareUploaderWindow;
+    UDSFirmwareUploaderWindow *udsFirmwareUploaderWindow;
     ConnectionWindow *connectionWindow;
     ScriptingWindow *scriptingWindow;
     RangeStateWindow *rangeWindow;
