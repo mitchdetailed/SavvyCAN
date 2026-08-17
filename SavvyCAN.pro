@@ -56,7 +56,6 @@ SOURCES += main.cpp\
     framesenderwindow.cpp \
     framefileio.cpp \
     mainsettingsdialog.cpp \
-    firmwareuploaderwindow.cpp \
     scriptingwindow.cpp \
     scriptcontainer.cpp \
     canfilter.cpp \
@@ -165,7 +164,6 @@ HEADERS  += mainwindow.h \
     framefileio.h \
     config.h \
     mainsettingsdialog.h \
-    firmwareuploaderwindow.h \
     scriptingwindow.h \
     scriptcontainer.h \
     canfilter.h \
@@ -244,7 +242,6 @@ FORMS    += ui/candatagrid.ui \
     ui/dbcnodeeditor.ui \
     ui/discretestatewindow.ui \
     ui/filecomparatorwindow.ui \
-    ui/firmwareuploaderwindow.ui \
     ui/flowviewwindow.ui \
     ui/frameinfowindow.ui \
     ui/frameplaybackwindow.ui \
