@@ -651,6 +651,63 @@ CANConnection* ConnectionWindow::create(CANCon::type pTye, QString pPortName, QS
 }
 
 
+/* Connection settings are stored as plain string lists.
+ *
+ * They used to be written as QVector<int> / QVector<QString> wrapped in a QVariant. A list of
+ * strings is a type QSettings encodes natively, but a list of ints is not - it goes through
+ * QVariant's data stream instead, and on Qt 6.8 that comes out as "@Invalid()". Every integer
+ * array then read back empty, the length check below threw the whole set away, and the user got
+ * no connections restored with nothing in the log to say why. Decimal strings avoid the
+ * question entirely and are legible in the ini file. Settings written the old way are still
+ * read, so nobody loses a configuration on upgrade. */
+static void writeStringVec(QSettings &s, const QString &key, const QVector<QString> &vec)
+{
+    QStringList out;
+    out.reserve(vec.size());
+    for (const QString &entry : vec) out.append(entry);
+    s.setValue(key, out);
+}
+
+static void writeIntVec(QSettings &s, const QString &key, const QVector<int> &vec)
+{
+    QStringList out;
+    out.reserve(vec.size());
+    for (int entry : vec) out.append(QString::number(entry));
+    s.setValue(key, out);
+}
+
+static QVector<QString> readStringVec(QSettings &s, const QString &key)
+{
+    const QVariant val = s.value(key);
+    if (!val.isValid()) return QVector<QString>();
+
+    //a one entry list comes back from the ini as a bare string
+    if (val.typeId() == QMetaType::QStringList || val.typeId() == QMetaType::QString)
+    {
+        const QStringList in = val.toStringList();
+        return QVector<QString>(in.begin(), in.end());
+    }
+
+    return val.value<QVector<QString>>(); //written by an older build
+}
+
+static QVector<int> readIntVec(QSettings &s, const QString &key)
+{
+    const QVariant val = s.value(key);
+    if (!val.isValid()) return QVector<int>();
+
+    if (val.typeId() == QMetaType::QStringList || val.typeId() == QMetaType::QString)
+    {
+        QVector<int> out;
+        const QStringList in = val.toStringList();
+        out.reserve(in.size());
+        for (const QString &entry : in) out.append(entry.toInt());
+        return out;
+    }
+
+    return val.value<QVector<int>>(); //written by an older build
+}
+
 void ConnectionWindow::loadConnections()
 {
     loadConnectionsFromGroup("connections");
@@ -667,14 +724,14 @@ int ConnectionWindow::loadConnectionsFromGroup(const QString &group)
     QSettings settings;
 
     /* fill connection list */
-    QVector<QString> portNames = settings.value(group + "/portNames").value<QVector<QString>>();
-    QVector<QString> driverNames = settings.value(group + "/driverNames").value<QVector<QString>>();
-    QVector<int>    devTypes = settings.value(group + "/types").value<QVector<int>>();
+    QVector<QString> portNames = readStringVec(settings, group + "/portNames");
+    QVector<QString> driverNames = readStringVec(settings, group + "/driverNames");
+    QVector<int>    devTypes = readIntVec(settings, group + "/types");
 
-    QVector<int> busSpeeds = settings.value(group + "/busSpeeds_0").value<QVector<int>>();
-    QVector<int> DataRates = settings.value(group + "/DataRates_0").value<QVector<int>>();
-    QVector<int> isCanFds = settings.value(group + "/isCanFds_0").value<QVector<int>>();
-    QVector<int> serialSpeeds = settings.value(group + "/serialSpeeds").value<QVector<int>>();
+    QVector<int> busSpeeds = readIntVec(settings, group + "/busSpeeds_0");
+    QVector<int> DataRates = readIntVec(settings, group + "/DataRates_0");
+    QVector<int> isCanFds = readIntVec(settings, group + "/isCanFds_0");
+    QVector<int> serialSpeeds = readIntVec(settings, group + "/serialSpeeds");
     //don't load the connections if the three setting arrays above aren't all the same size.
     if (portNames.size() != driverNames.size() || devTypes.size() != driverNames.size() ||  busSpeeds.size() != driverNames.size() || isCanFds.size() != driverNames.size() ||
 	DataRates.size() != driverNames.size() || serialSpeeds.size() != driverNames.size() ) return 0;
@@ -690,11 +747,11 @@ int ConnectionWindow::loadConnectionsFromGroup(const QString &group)
 
     for (int busIdx = 0; busIdx < MAX_SAVED_BUSES; busIdx++)
     {
-        allSpeeds[busIdx] = settings.value(QString("%1/busSpeeds_%2").arg(group).arg(busIdx)).value<QVector<int>>();
-        allDataRates[busIdx] = settings.value(QString("%1/DataRates_%2").arg(group).arg(busIdx)).value<QVector<int>>();
-        allCanFds[busIdx] = settings.value(QString("%1/isCanFds_%2").arg(group).arg(busIdx)).value<QVector<int>>();
-        allListenOnly[busIdx] = settings.value(QString("%1/listenOnly_%2").arg(group).arg(busIdx)).value<QVector<int>>();
-        allActive[busIdx] = settings.value(QString("%1/isActive_%2").arg(group).arg(busIdx)).value<QVector<int>>();
+        allSpeeds[busIdx] = readIntVec(settings, QString("%1/busSpeeds_%2").arg(group).arg(busIdx));
+        allDataRates[busIdx] = readIntVec(settings, QString("%1/DataRates_%2").arg(group).arg(busIdx));
+        allCanFds[busIdx] = readIntVec(settings, QString("%1/isCanFds_%2").arg(group).arg(busIdx));
+        allListenOnly[busIdx] = readIntVec(settings, QString("%1/listenOnly_%2").arg(group).arg(busIdx));
+        allActive[busIdx] = readIntVec(settings, QString("%1/isActive_%2").arg(group).arg(busIdx));
     }
 
     for(int i = 0 ; i < portNames.size() ; i++)
@@ -786,19 +843,21 @@ void ConnectionWindow::saveConnectionsToGroup(const QString &group)
         }
     }
 
-    settings.setValue(group + "/portNames", QVariant::fromValue(portNames));
-    settings.setValue(group + "/types", QVariant::fromValue(devTypes));
-    settings.setValue(group + "/driverNames", QVariant::fromValue(driverNames));
-    settings.setValue(group + "/serialSpeeds", QVariant::fromValue(serialSpeeds));
+    writeStringVec(settings, group + "/portNames", portNames);
+    writeIntVec(settings, group + "/types", devTypes);
+    writeStringVec(settings, group + "/driverNames", driverNames);
+    writeIntVec(settings, group + "/serialSpeeds", serialSpeeds);
 
     for (int busIdx = 0; busIdx < MAX_SAVED_BUSES; busIdx++)
     {
-        settings.setValue(QString("%1/busSpeeds_%2").arg(group).arg(busIdx), QVariant::fromValue(busSpeeds[busIdx]));
-        settings.setValue(QString("%1/isCanFds_%2").arg(group).arg(busIdx), QVariant::fromValue(canFds[busIdx]));
-        settings.setValue(QString("%1/DataRates_%2").arg(group).arg(busIdx), QVariant::fromValue(dataRates[busIdx]));
-        settings.setValue(QString("%1/listenOnly_%2").arg(group).arg(busIdx), QVariant::fromValue(listenOnly[busIdx]));
-        settings.setValue(QString("%1/isActive_%2").arg(group).arg(busIdx), QVariant::fromValue(isActive[busIdx]));
+        writeIntVec(settings, QString("%1/busSpeeds_%2").arg(group).arg(busIdx), busSpeeds[busIdx]);
+        writeIntVec(settings, QString("%1/isCanFds_%2").arg(group).arg(busIdx), canFds[busIdx]);
+        writeIntVec(settings, QString("%1/DataRates_%2").arg(group).arg(busIdx), dataRates[busIdx]);
+        writeIntVec(settings, QString("%1/listenOnly_%2").arg(group).arg(busIdx), listenOnly[busIdx]);
+        writeIntVec(settings, QString("%1/isActive_%2").arg(group).arg(busIdx), isActive[busIdx]);
     }
+
+    settings.sync();
 }
 
 /* Named connection profiles. Everything lives under connProfiles/<name>/ in the same layout the
