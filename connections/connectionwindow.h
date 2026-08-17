@@ -57,6 +57,9 @@ private slots:
     void readPendingDatagrams();
     //refreshes the bus health readout for whichever bus is selected
     void updateBusHealth();
+    void saveProfile();
+    void loadProfile();
+    void deleteProfile();
 
 private:
     Ui::ConnectionWindow *ui;    
@@ -75,6 +78,12 @@ private:
     void populateBusDetails(int offset);
     void loadConnections();
     void saveConnections();
+    /* The same on-disk layout is used for the automatically restored set and for every named
+     * profile, so both go through these with a different settings group. */
+    void saveConnectionsToGroup(const QString &group);
+    int loadConnectionsFromGroup(const QString &group);
+    void removeAllConnections();
+    void refreshProfileList(const QString &selectName = QString());
     void showEvent(QShowEvent *);
     void closeEvent(QCloseEvent *event);
     bool eventFilter(QObject *obj, QEvent *event);

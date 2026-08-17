@@ -1,6 +1,9 @@
 #include <QCanBus>
 #include <QNetworkDatagram>
 #include <QThread>
+#include <QInputDialog>
+#include <QMessageBox>
+#include <QSignalBlocker>
 
 //how many buses per connection we keep settings for. Nothing SavvyCAN talks to has more than this.
 #define MAX_SAVED_BUSES 8
@@ -69,6 +72,10 @@ ConnectionWindow::ConnectionWindow(QWidget *parent) :
     connect(ui->btnSaveBus, &QPushButton::clicked, this, &ConnectionWindow::saveBusSettings);
     connect(ui->btnMoveUp, &QPushButton::clicked, this, &ConnectionWindow::moveConnUp);
     connect(ui->btnMoveDown, &QPushButton::clicked, this, &ConnectionWindow::moveConnDown);
+    connect(ui->btnProfileSave, &QPushButton::clicked, this, &ConnectionWindow::saveProfile);
+    connect(ui->btnProfileLoad, &QPushButton::clicked, this, &ConnectionWindow::loadProfile);
+    connect(ui->btnProfileDelete, &QPushButton::clicked, this, &ConnectionWindow::deleteProfile);
+    refreshProfileList();
 
     ui->cbBusSpeed->addItem("33333");
     ui->cbBusSpeed->addItem("50000");
@@ -646,6 +653,12 @@ CANConnection* ConnectionWindow::create(CANCon::type pTye, QString pPortName, QS
 
 void ConnectionWindow::loadConnections()
 {
+    loadConnectionsFromGroup("connections");
+}
+
+//returns how many connections were restored, so a profile load can report an empty or broken set
+int ConnectionWindow::loadConnectionsFromGroup(const QString &group)
+{
 #if QT_VERSION < QT_VERSION_CHECK( 6, 0, 0 )
     qRegisterMetaTypeStreamOperators<CANBus>();
     qRegisterMetaTypeStreamOperators<QList<CANBus>>();
@@ -654,17 +667,17 @@ void ConnectionWindow::loadConnections()
     QSettings settings;
 
     /* fill connection list */
-    QVector<QString> portNames = settings.value("connections/portNames").value<QVector<QString>>();
-    QVector<QString> driverNames = settings.value("connections/driverNames").value<QVector<QString>>();
-    QVector<int>    devTypes = settings.value("connections/types").value<QVector<int>>();
+    QVector<QString> portNames = settings.value(group + "/portNames").value<QVector<QString>>();
+    QVector<QString> driverNames = settings.value(group + "/driverNames").value<QVector<QString>>();
+    QVector<int>    devTypes = settings.value(group + "/types").value<QVector<int>>();
 
-    QVector<int> busSpeeds = settings.value("connections/busSpeeds_0").value<QVector<int>>();
-    QVector<int> DataRates = settings.value("connections/DataRates_0").value<QVector<int>>();
-    QVector<int> isCanFds = settings.value("connections/isCanFds_0").value<QVector<int>>();
-    QVector<int> serialSpeeds = settings.value("connections/serialSpeeds").value<QVector<int>>();
+    QVector<int> busSpeeds = settings.value(group + "/busSpeeds_0").value<QVector<int>>();
+    QVector<int> DataRates = settings.value(group + "/DataRates_0").value<QVector<int>>();
+    QVector<int> isCanFds = settings.value(group + "/isCanFds_0").value<QVector<int>>();
+    QVector<int> serialSpeeds = settings.value(group + "/serialSpeeds").value<QVector<int>>();
     //don't load the connections if the three setting arrays above aren't all the same size.
     if (portNames.size() != driverNames.size() || devTypes.size() != driverNames.size() ||  busSpeeds.size() != driverNames.size() || isCanFds.size() != driverNames.size() ||
-	DataRates.size() != driverNames.size() || serialSpeeds.size() != driverNames.size() ) return;
+	DataRates.size() != driverNames.size() || serialSpeeds.size() != driverNames.size() ) return 0;
 
     /* Bus 0 is handled through the constructor above for backwards compatibility, the rest of the
      * buses on a multi bus device get pushed in afterwards. Anything a settings file doesn't have
@@ -677,11 +690,11 @@ void ConnectionWindow::loadConnections()
 
     for (int busIdx = 0; busIdx < MAX_SAVED_BUSES; busIdx++)
     {
-        allSpeeds[busIdx] = settings.value(QString("connections/busSpeeds_%1").arg(busIdx)).value<QVector<int>>();
-        allDataRates[busIdx] = settings.value(QString("connections/DataRates_%1").arg(busIdx)).value<QVector<int>>();
-        allCanFds[busIdx] = settings.value(QString("connections/isCanFds_%1").arg(busIdx)).value<QVector<int>>();
-        allListenOnly[busIdx] = settings.value(QString("connections/listenOnly_%1").arg(busIdx)).value<QVector<int>>();
-        allActive[busIdx] = settings.value(QString("connections/isActive_%1").arg(busIdx)).value<QVector<int>>();
+        allSpeeds[busIdx] = settings.value(QString("%1/busSpeeds_%2").arg(group).arg(busIdx)).value<QVector<int>>();
+        allDataRates[busIdx] = settings.value(QString("%1/DataRates_%2").arg(group).arg(busIdx)).value<QVector<int>>();
+        allCanFds[busIdx] = settings.value(QString("%1/isCanFds_%2").arg(group).arg(busIdx)).value<QVector<int>>();
+        allListenOnly[busIdx] = settings.value(QString("%1/listenOnly_%2").arg(group).arg(busIdx)).value<QVector<int>>();
+        allActive[busIdx] = settings.value(QString("%1/isActive_%2").arg(group).arg(busIdx)).value<QVector<int>>();
     }
 
     for(int i = 0 ; i < portNames.size() ; i++)
@@ -715,9 +728,16 @@ void ConnectionWindow::loadConnections()
     if (connModel->rowCount() > 0) {
         ui->tableConnections->selectRow(0);
     }
+
+    return portNames.size();
 }
 
 void ConnectionWindow::saveConnections()
+{
+    saveConnectionsToGroup("connections");
+}
+
+void ConnectionWindow::saveConnectionsToGroup(const QString &group)
 {
     QList<CANConnection*>& conns = CANConManager::getInstance()->getConnections();
 
@@ -766,18 +786,135 @@ void ConnectionWindow::saveConnections()
         }
     }
 
-    settings.setValue("connections/portNames", QVariant::fromValue(portNames));
-    settings.setValue("connections/types", QVariant::fromValue(devTypes));
-    settings.setValue("connections/driverNames", QVariant::fromValue(driverNames));
-    settings.setValue("connections/serialSpeeds", QVariant::fromValue(serialSpeeds));
+    settings.setValue(group + "/portNames", QVariant::fromValue(portNames));
+    settings.setValue(group + "/types", QVariant::fromValue(devTypes));
+    settings.setValue(group + "/driverNames", QVariant::fromValue(driverNames));
+    settings.setValue(group + "/serialSpeeds", QVariant::fromValue(serialSpeeds));
 
     for (int busIdx = 0; busIdx < MAX_SAVED_BUSES; busIdx++)
     {
-        settings.setValue(QString("connections/busSpeeds_%1").arg(busIdx), QVariant::fromValue(busSpeeds[busIdx]));
-        settings.setValue(QString("connections/isCanFds_%1").arg(busIdx), QVariant::fromValue(canFds[busIdx]));
-        settings.setValue(QString("connections/DataRates_%1").arg(busIdx), QVariant::fromValue(dataRates[busIdx]));
-        settings.setValue(QString("connections/listenOnly_%1").arg(busIdx), QVariant::fromValue(listenOnly[busIdx]));
-        settings.setValue(QString("connections/isActive_%1").arg(busIdx), QVariant::fromValue(isActive[busIdx]));
+        settings.setValue(QString("%1/busSpeeds_%2").arg(group).arg(busIdx), QVariant::fromValue(busSpeeds[busIdx]));
+        settings.setValue(QString("%1/isCanFds_%2").arg(group).arg(busIdx), QVariant::fromValue(canFds[busIdx]));
+        settings.setValue(QString("%1/DataRates_%2").arg(group).arg(busIdx), QVariant::fromValue(dataRates[busIdx]));
+        settings.setValue(QString("%1/listenOnly_%2").arg(group).arg(busIdx), QVariant::fromValue(listenOnly[busIdx]));
+        settings.setValue(QString("%1/isActive_%2").arg(group).arg(busIdx), QVariant::fromValue(isActive[busIdx]));
+    }
+}
+
+/* Named connection profiles. Everything lives under connProfiles/<name>/ in the same layout the
+ * automatically restored set uses, so a profile is just another group passed to the two functions
+ * above. Profile names are used as a settings group, so '/' and '\' would silently nest a subgroup
+ * and are rejected. */
+static QString profileGroup(const QString &name)
+{
+    return QString("connProfiles/%1").arg(name);
+}
+
+void ConnectionWindow::refreshProfileList(const QString &selectName)
+{
+    QSettings settings;
+    settings.beginGroup("connProfiles");
+    const QStringList names = settings.childGroups();
+    settings.endGroup();
+
+    //repopulating fires currentIndexChanged, which must not be mistaken for the user picking one
+    const QSignalBlocker blocker(ui->cbConnProfiles);
+    ui->cbConnProfiles->clear();
+    ui->cbConnProfiles->addItems(names);
+
+    if (!selectName.isEmpty())
+    {
+        const int idx = ui->cbConnProfiles->findText(selectName);
+        if (idx >= 0) ui->cbConnProfiles->setCurrentIndex(idx);
+    }
+
+    const bool any = !names.isEmpty();
+    ui->btnProfileLoad->setEnabled(any);
+    ui->btnProfileDelete->setEnabled(any);
+}
+
+void ConnectionWindow::saveProfile()
+{
+    if (CANConManager::getInstance()->getConnections().isEmpty())
+    {
+        QMessageBox::information(this, tr("Save Profile"),
+                                 tr("There are no connections to save. Add a connection first."));
+        return;
+    }
+
+    bool ok = false;
+    const QString suggested = ui->cbConnProfiles->currentText();
+    QString name = QInputDialog::getText(this, tr("Save Profile"), tr("Profile name:"),
+                                         QLineEdit::Normal, suggested, &ok).trimmed();
+    if (!ok || name.isEmpty()) return;
+
+    if (name.contains('/') || name.contains('\\'))
+    {
+        QMessageBox::warning(this, tr("Save Profile"), tr("A profile name cannot contain / or \\."));
+        return;
+    }
+
+    QSettings settings;
+    if (settings.childGroups().contains("connProfiles"))
+    {
+        settings.beginGroup("connProfiles");
+        const bool exists = settings.childGroups().contains(name);
+        settings.endGroup();
+        if (exists && QMessageBox::question(this, tr("Save Profile"),
+                                            tr("Profile \"%1\" already exists. Overwrite it?").arg(name),
+                                            QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes) return;
+    }
+
+    saveConnectionsToGroup(profileGroup(name));
+    refreshProfileList(name);
+}
+
+void ConnectionWindow::loadProfile()
+{
+    const QString name = ui->cbConnProfiles->currentText().trimmed();
+    if (name.isEmpty()) return;
+
+    if (!CANConManager::getInstance()->getConnections().isEmpty() &&
+        QMessageBox::question(this, tr("Load Profile"),
+                              tr("This closes the current connections and replaces them with \"%1\". Continue?").arg(name),
+                              QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes) return;
+
+    removeAllConnections();
+
+    if (loadConnectionsFromGroup(profileGroup(name)) == 0)
+    {
+        QMessageBox::warning(this, tr("Load Profile"),
+                             tr("Profile \"%1\" restored no connections. It may have been saved by an "
+                                "incompatible version.").arg(name));
+    }
+}
+
+void ConnectionWindow::deleteProfile()
+{
+    const QString name = ui->cbConnProfiles->currentText().trimmed();
+    if (name.isEmpty()) return;
+
+    if (QMessageBox::question(this, tr("Delete Profile"), tr("Delete profile \"%1\"?").arg(name),
+                              QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes) return;
+
+    QSettings settings;
+    settings.beginGroup(profileGroup(name));
+    settings.remove(QString());
+    settings.endGroup();
+
+    refreshProfileList();
+}
+
+//teardown for every live connection, using the same safe path as removing one by hand
+void ConnectionWindow::removeAllConnections()
+{
+    QList<CANConnection*> conns = CANConManager::getInstance()->getConnections();
+    foreach (CANConnection *conn_p, conns)
+    {
+        if (!conn_p) continue;
+        connModel->remove(conn_p);
+        conn_p->stop();
+        conn_p->deleteLater();
     }
 }
 
