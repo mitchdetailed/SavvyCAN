@@ -303,6 +303,28 @@ win32-g++ {
    LIBS += -L$$PWD/third_party/libusb/MinGW64/static -lusb-1.0
 }
 
+#Both windows link paths above resolve -lusb-1.0 to the import library, so the DLL has to sit next
+#to the binary or it will not start at all - Windows reports the missing library before main() runs.
+#Nothing else copies it for a plain build, so do it here and every local build just works.
+win32 {
+   win32-msvc* {
+      contains(QMAKE_TARGET.arch, x86_64) {
+         LIBUSB_DLL = $$PWD/third_party/libusb/VS2022/MS64/dll/libusb-1.0.dll
+      } else {
+         LIBUSB_DLL = $$PWD/third_party/libusb/VS2022/MS32/dll/libusb-1.0.dll
+      }
+   } else {
+      LIBUSB_DLL = $$PWD/third_party/libusb/MinGW64/dll/libusb-1.0.dll
+   }
+
+   LIBUSB_DEST = $$OUT_PWD
+   !isEmpty(DESTDIR): LIBUSB_DEST = $$DESTDIR
+   else: CONFIG(release, debug|release): LIBUSB_DEST = $$OUT_PWD/release
+   else: LIBUSB_DEST = $$OUT_PWD/debug
+
+   QMAKE_POST_LINK += $$QMAKE_COPY $$shell_quote($$shell_path($$LIBUSB_DLL)) $$shell_quote($$shell_path($$LIBUSB_DEST))
+}
+
 unix {
    packagesExist(libusb-1.0) {
       CONFIG += link_pkgconfig
