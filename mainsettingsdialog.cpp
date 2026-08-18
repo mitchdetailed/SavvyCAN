@@ -157,7 +157,7 @@ MainSettingsDialog::MainSettingsDialog(QWidget *parent) :
 
     ui->spinMaximumFrames->setValue(settings.value("Main/MaximumFrames", maxFramesDefault).toInt());
     ui->spinBytesPerLine->setValue(settings.value("Main/BytesPerLine", 8).toInt());
-    ui->spinRefreshRate->setValue(settings.value("Main/RefreshRateHz", 4).toInt());
+    ui->spinRefreshRate->setValue(settings.value("Main/RefreshRateHz", 30).toInt());
 
     //just for simplicity they all call the same function and that function updates all settings at once
     connect(ui->comboLanguage, SIGNAL(currentIndexChanged(int)), this, SLOT(updateSettings()));

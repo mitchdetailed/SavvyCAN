@@ -217,7 +217,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
     connect(&updateTimer, &QTimer::timeout, this, &MainWindow::tickGUIUpdate);
     {
-        int hz = QSettings().value("Main/RefreshRateHz", 4).toInt();
+        int hz = QSettings().value("Main/RefreshRateHz", 30).toInt();
         updateTimer.setInterval(1000 / qBound(4, hz, 100));
     }
     updateTimer.start();
@@ -474,7 +474,7 @@ void MainWindow::readUpdateableSettings()
 
     CSVAbsTime = settings.value("Main/CSVAbsTime", false).toBool();
 
-    int refreshHz = settings.value("Main/RefreshRateHz", 4).toInt();
+    int refreshHz = settings.value("Main/RefreshRateHz", 30).toInt();
     refreshHz = qBound(4, refreshHz, 100);
     updateTimer.setInterval(1000 / refreshHz);
 
