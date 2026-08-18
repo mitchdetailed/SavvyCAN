@@ -51,17 +51,15 @@ NewConnectionDialog::NewConnectionDialog(QVector<QString>* gvretips, QVector<QSt
     connect(ui->cbDeviceType, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &NewConnectionDialog::handleDeviceTypeChanged);
     connect(ui->btnOK, &QPushButton::clicked, this, &NewConnectionDialog::handleCreateButton);
     connect(ui->btnScanDevices, &QPushButton::clicked, this, &NewConnectionDialog::handleScanDevices);
+    connect(ui->cbCanFd, &QCheckBox::toggled, this, &NewConnectionDialog::handleCanFdChanged);
 
     ui->lblDeviceType->setHidden(true);
     ui->cbDeviceType->setHidden(true);
-    ui->cbCANSpeed->setHidden(true);
     ui->cbSerialSpeed->setHidden(true);
-    ui->lblCANSpeed->setHidden(true);
     ui->lblSerialSpeed->setHidden(true);
-    ui->cbCanFd->setHidden(true);
-    ui->cbDataRate->setHidden(true);
-    ui->lblDataRate->setHidden(true);
 
+    //the speed / listen only / CAN FD controls are owned by updateBusOptionVisibility(), which
+    //selectSerial() reaches through handleConnTypeChanged's usual path
     selectSerial();
 
     qDebug() << "Was passed " << remoteDeviceIPGVRET->count() << " remote GVRET IPs";
@@ -197,57 +195,98 @@ void NewConnectionDialog::handleDeviceTypeChanged()
         ui->cbPort->addItem(canDevices[i].name());
 }
 
-void NewConnectionDialog::selectLawicel()
+/*
+ * Which of the bus options an adapter can actually make use of.
+ *
+ * This used to be decided by hand inside every select* function below, which meant twenty places
+ * to keep in step and no guarantee that a control the dialog put on screen was one the driver
+ * would go on to honour. The visibility of the controls and the values the getters hand back both
+ * come from this one table now, so an option is offered exactly when it is going to be used.
+ */
+struct BusOptionSupport
 {
-    ui->lPort->setText("Serial Port:");
+    bool speed;      //the adapter lets us choose the arbitration bit rate
+    bool listenOnly; //the driver has a silent / listen only mode
+    bool canFd;      //the adapter does CAN FD, which brings the data rate with it
+};
 
-    ui->lblDeviceType->setHidden(true);
-    ui->cbDeviceType->setHidden(true);
-
-    ui->cbCANSpeed->setHidden(false);
-    ui->cbSerialSpeed->setHidden(false);
-    ui->lblCANSpeed->setHidden(false);
-    ui->lblSerialSpeed->setHidden(false);
-    ui->cbCanFd->setHidden(false);
-    ui->cbDataRate->setHidden(false);
-    ui->lblDataRate->setHidden(false);
-
-    ui->cbPort->clear();
-    ports = QSerialPortInfo::availablePorts();
-
-    for (int i = 0; i < ports.size(); i++)
-        ui->cbPort->addItem(ports[i].portName());
-
-    if (ui->cbCANSpeed->count() == 0)
+static BusOptionSupport busOptionsFor(CANCon::type pType)
+{
+    switch (pType)
     {
-        ui->cbCANSpeed->addItem("10000");
-        ui->cbCANSpeed->addItem("20000");
-        ui->cbCANSpeed->addItem("50000");
-        ui->cbCANSpeed->addItem("83333");
-        ui->cbCANSpeed->addItem("100000");
-        ui->cbCANSpeed->addItem("125000");
-        ui->cbCANSpeed->addItem("250000");
-        ui->cbCANSpeed->addItem("500000");
-        ui->cbCANSpeed->addItem("1000000");
-    }
-    if (ui->cbDataRate->count() == 0)
-    {
-        ui->cbDataRate->addItem("1000000");
-        ui->cbDataRate->addItem("2000000");
-        ui->cbDataRate->addItem("4000000");
-        ui->cbDataRate->addItem("5000000");
-    }
-    if (ui->cbSerialSpeed->count() == 0)
-    {
-        ui->cbSerialSpeed->addItem("115200");
-        ui->cbSerialSpeed->addItem("150000");
-        ui->cbSerialSpeed->addItem("250000");
-        ui->cbSerialSpeed->addItem("500000");
-        ui->cbSerialSpeed->addItem("1000000");
-        ui->cbSerialSpeed->addItem("2000000");
-        ui->cbSerialSpeed->addItem("3000000");
-    }
+    //GVRET carries its own bus configuration, whether it is reached over serial or over the network
+    case CANCon::GVRET_SERIAL:
+    case CANCon::REMOTE:
+        return { true, true, false };
 
+    /* QT SerialBus covers PEAK, Vector, IXXAT's own plugin and socketcan. Whether the bit rate is
+     * ours to set depends on the plugin - socketcan takes it from the OS - but the value is still
+     * what the bus load figures get worked out against, so it is worth asking for either way. */
+    case CANCon::SERIALBUS:
+        return { true, true, true };
+
+    case CANCon::LAWICEL:
+    case CANCon::KVASER:
+        return { true, true, true };
+
+    case CANCon::GSUSB:
+    case CANCon::SEEEDSTUDIO:
+    case CANCon::CANALYSTII:
+    case CANCon::IXXAT:
+        return { true, true, false };
+
+    //these take a speed, but their drivers have no listen only mode to offer
+    case CANCon::ROBOTELL:
+    case CANCon::USB2CAN:
+    case CANCon::ISCAN:
+    case CANCon::NICAN:
+    case CANCon::NEOUSYS:
+        return { true, false, false };
+
+    /* Whatever sits at the far end of these owns the bus - a socketcand host, an MQTT broker, a
+     * CANserver, another python-can instance. There is nothing here for us to configure. */
+    case CANCon::KAYAK:
+    case CANCon::MQTT:
+    case CANCon::CANSERVER:
+    case CANCon::CANLOGSERVER:
+    case CANCon::PYCAN_SERIAL:
+    case CANCon::UDP_MULTICAST:
+    default:
+        return { false, false, false };
+    }
+}
+
+//put the bus options this connection type can use on screen, and no others
+void NewConnectionDialog::updateBusOptionVisibility()
+{
+    const BusOptionSupport opts = busOptionsFor(getConnectionType());
+
+    if (opts.speed) populateCANSpeeds();
+    if (opts.canFd) populateDataRates();
+
+    ui->lblCANSpeed->setHidden(!opts.speed);
+    ui->cbCANSpeed->setHidden(!opts.speed);
+    ui->ckListenOnly->setHidden(!opts.listenOnly);
+    ui->cbCanFd->setHidden(!opts.canFd);
+    ui->lblDataRate->setHidden(!opts.canFd);
+    ui->cbDataRate->setHidden(!opts.canFd);
+
+    handleCanFdChanged();
+}
+
+//the data rate has no meaning until CAN FD is actually asked for
+void NewConnectionDialog::handleCanFdChanged()
+{
+    const bool fd = ui->cbCanFd->isChecked();
+    ui->lblDataRate->setEnabled(fd);
+    ui->cbDataRate->setEnabled(fd);
+}
+
+//true when this connection type has any bus setting worth pushing into the new connection
+bool NewConnectionDialog::hasBusOptions()
+{
+    const BusOptionSupport opts = busOptionsFor(getConnectionType());
+    return opts.speed || opts.listenOnly || opts.canFd;
 }
 
 void NewConnectionDialog::populateCANSpeeds()
@@ -263,6 +302,24 @@ void NewConnectionDialog::populateCANSpeeds()
     ui->cbCANSpeed->addItem("250000");
     ui->cbCANSpeed->addItem("500000");
     ui->cbCANSpeed->addItem("1000000");
+
+    /* Start on the speed a bus most often runs at rather than on the slowest entry in the list.
+     * This dialog decides what a new connection opens with now, so whatever sits at the top has
+     * to be a sane answer for somebody who never touches it. It matches CANBus's own default. */
+    ui->cbCANSpeed->setCurrentIndex(ui->cbCANSpeed->findText("500000"));
+}
+
+void NewConnectionDialog::populateDataRates()
+{
+    if (ui->cbDataRate->count() > 0) return;
+
+    ui->cbDataRate->addItem("1000000");
+    ui->cbDataRate->addItem("2000000");
+    ui->cbDataRate->addItem("4000000");
+    ui->cbDataRate->addItem("5000000");
+
+    //again, matching the default a CANBus is built with
+    ui->cbDataRate->setCurrentIndex(ui->cbDataRate->findText("2000000"));
 }
 
 void NewConnectionDialog::populateSerialSpeeds()
@@ -278,31 +335,45 @@ void NewConnectionDialog::populateSerialSpeeds()
     ui->cbSerialSpeed->addItem("3000000");
 }
 
-/*
- * Most of the adapters added for python-can parity are just "pick a serial port, pick a CAN speed",
- * so they all share this. defaultSerialSpeed picks the entry the device actually ships with.
- */
-void NewConnectionDialog::selectSerialAdapter(bool showBusSpeed, bool showSerialSpeed, int defaultSerialSpeed)
+//fill the port list with whatever serial ports the machine currently has
+void NewConnectionDialog::populateSerialPorts()
+{
+    ui->cbPort->clear();
+    ports = QSerialPortInfo::availablePorts();
+
+    for (int i = 0; i < ports.size(); i++)
+        ui->cbPort->addItem(ports[i].portName());
+}
+
+void NewConnectionDialog::selectLawicel()
 {
     ui->lPort->setText("Serial Port:");
 
     ui->lblDeviceType->setHidden(true);
     ui->cbDeviceType->setHidden(true);
-    ui->cbCANSpeed->setHidden(!showBusSpeed);
-    ui->lblCANSpeed->setHidden(!showBusSpeed);
+    ui->cbSerialSpeed->setHidden(false);
+    ui->lblSerialSpeed->setHidden(false);
+    updateBusOptionVisibility();
+
+    populateSerialPorts();
+    populateSerialSpeeds();
+}
+
+/*
+ * Most of the adapters added for python-can parity are just "pick a serial port, pick a CAN speed",
+ * so they all share this. defaultSerialSpeed picks the entry the device actually ships with.
+ */
+void NewConnectionDialog::selectSerialAdapter(bool showSerialSpeed, int defaultSerialSpeed)
+{
+    ui->lPort->setText("Serial Port:");
+
+    ui->lblDeviceType->setHidden(true);
+    ui->cbDeviceType->setHidden(true);
     ui->cbSerialSpeed->setHidden(!showSerialSpeed);
     ui->lblSerialSpeed->setHidden(!showSerialSpeed);
-    //none of these adapters do CAN-FD
-    ui->cbCanFd->setHidden(true);
-    ui->cbDataRate->setHidden(true);
-    ui->lblDataRate->setHidden(true);
+    updateBusOptionVisibility();
 
-    ui->cbPort->clear();
-    ports = QSerialPortInfo::availablePorts();
-    for (int i = 0; i < ports.size(); i++)
-        ui->cbPort->addItem(ports[i].portName());
-
-    if (showBusSpeed) populateCANSpeeds();
+    populateSerialPorts();
 
     if (showSerialSpeed)
     {
@@ -317,30 +388,27 @@ void NewConnectionDialog::selectSerialAdapter(bool showBusSpeed, bool showSerial
 void NewConnectionDialog::selectSeeed()
 {
     //the analyzer ships running at 2Mbps on the USB side
-    selectSerialAdapter(true, true, 2000000);
+    selectSerialAdapter(true, 2000000);
 }
 
 void NewConnectionDialog::selectRobotell()
 {
-    selectSerialAdapter(true, true, 115200);
+    selectSerialAdapter(true, 115200);
 }
 
 void NewConnectionDialog::selectPythonCan()
 {
-    //no CAN speed here, whatever is on the other end of the port owns the bus
-    selectSerialAdapter(false, true, 115200);
+    //whatever is on the other end of the port owns the bus, so there is no CAN speed to pick here
+    selectSerialAdapter(true, 115200);
 }
 
-//these three take an index or address rather than a serial port
+//these take an index or an address rather than a serial port
 static void hideSerialBits(Ui::NewConnectionDialog *ui)
 {
     ui->lblDeviceType->setHidden(true);
     ui->cbDeviceType->setHidden(true);
     ui->cbSerialSpeed->setHidden(true);
     ui->lblSerialSpeed->setHidden(true);
-    ui->cbCanFd->setHidden(true);
-    ui->cbDataRate->setHidden(true);
-    ui->lblDataRate->setHidden(true);
 }
 
 void NewConnectionDialog::selectCanalystII()
@@ -348,9 +416,7 @@ void NewConnectionDialog::selectCanalystII()
     ui->lPort->setText("CANalyst-II Device:");
 
     hideSerialBits(ui);
-    ui->cbCANSpeed->setHidden(false);
-    ui->lblCANSpeed->setHidden(false);
-    populateCANSpeeds();
+    updateBusOptionVisibility();
 
     ui->cbPort->clear();
     //scanning USB is cheap and needs no vendor driver, so just show what's plugged in
@@ -362,21 +428,7 @@ void NewConnectionDialog::selectKvaser()
     ui->lPort->setText("CANlib Channel:");
 
     hideSerialBits(ui);
-    ui->cbCANSpeed->setHidden(false);
-    ui->lblCANSpeed->setHidden(false);
-    populateCANSpeeds();
-
-    //Kvaser FD adapters can run CAN FD, so offer the FD controls for this one
-    ui->cbCanFd->setHidden(false);
-    ui->cbDataRate->setHidden(false);
-    ui->lblDataRate->setHidden(false);
-    if (ui->cbDataRate->count() == 0)
-    {
-        ui->cbDataRate->addItem("1000000");
-        ui->cbDataRate->addItem("2000000");
-        ui->cbDataRate->addItem("4000000");
-        ui->cbDataRate->addItem("5000000");
-    }
+    updateBusOptionVisibility();
 
     //channel numbers, the driver decides what is actually behind them
     ui->cbPort->clear();
@@ -388,9 +440,7 @@ void NewConnectionDialog::selectIxxat()
     ui->lPort->setText("VCI Device:Channel:");
 
     hideSerialBits(ui);
-    ui->cbCANSpeed->setHidden(false);
-    ui->lblCANSpeed->setHidden(false);
-    populateCANSpeeds();
+    updateBusOptionVisibility();
 
     ui->cbPort->clear();
     ui->cbPort->addItem("0:0");
@@ -403,8 +453,7 @@ void NewConnectionDialog::selectUdpMulticast()
 
     hideSerialBits(ui);
     //there's no hardware to configure, the group members just agree on a bus
-    ui->cbCANSpeed->setHidden(true);
-    ui->lblCANSpeed->setHidden(true);
+    updateBusOptionVisibility();
 
     ui->cbPort->clear();
     //python-can's IPv4 group, and its IPv6 default for anyone who needs to match that
@@ -418,9 +467,7 @@ void NewConnectionDialog::selectUsb2Can()
     ui->lPort->setText("Adapter Serial Number:");
 
     hideSerialBits(ui);
-    ui->cbCANSpeed->setHidden(false);
-    ui->lblCANSpeed->setHidden(false);
-    populateCANSpeeds();
+    updateBusOptionVisibility();
 
     ui->cbPort->clear();
 }
@@ -430,9 +477,7 @@ void NewConnectionDialog::selectIscan()
     ui->lPort->setText("isCAN Channel:");
 
     hideSerialBits(ui);
-    ui->cbCANSpeed->setHidden(false);
-    ui->lblCANSpeed->setHidden(false);
-    populateCANSpeeds();
+    updateBusOptionVisibility();
 
     ui->cbPort->clear();
     for (int i = 0; i < 4; i++) ui->cbPort->addItem(QString::number(i));
@@ -443,9 +488,7 @@ void NewConnectionDialog::selectNican()
     ui->lPort->setText("NI-CAN Interface:");
 
     hideSerialBits(ui);
-    ui->cbCANSpeed->setHidden(false);
-    ui->lblCANSpeed->setHidden(false);
-    populateCANSpeeds();
+    updateBusOptionVisibility();
 
     //NI-CAN addresses its interfaces by name rather than by number
     ui->cbPort->clear();
@@ -457,9 +500,7 @@ void NewConnectionDialog::selectNeousys()
     ui->lPort->setText("CAN Port:");
 
     hideSerialBits(ui);
-    ui->cbCANSpeed->setHidden(false);
-    ui->lblCANSpeed->setHidden(false);
-    populateCANSpeeds();
+    updateBusOptionVisibility();
 
     ui->cbPort->clear();
     for (int i = 0; i < 2; i++) ui->cbPort->addItem(QString::number(i));
@@ -469,21 +510,10 @@ void NewConnectionDialog::selectSerial()
 {
     ui->lPort->setText("Serial Port:");
 
-    ui->lblDeviceType->setHidden(true);
-    ui->cbDeviceType->setHidden(true);
-    ui->cbCANSpeed->setHidden(true);
-    ui->cbSerialSpeed->setHidden(true);
-    ui->lblCANSpeed->setHidden(true);
-    ui->lblSerialSpeed->setHidden(true);
-    ui->cbCanFd->setHidden(true);
-    ui->cbDataRate->setHidden(true);
-    ui->lblDataRate->setHidden(true);
+    hideSerialBits(ui);
+    updateBusOptionVisibility();
 
-    ui->cbPort->clear();
-    ports = QSerialPortInfo::availablePorts();
-
-    for (int i = 0; i < ports.size(); i++)
-        ui->cbPort->addItem(ports[i].portName());
+    populateSerialPorts();
 }
 
 void NewConnectionDialog::selectSocketCan()
@@ -491,13 +521,9 @@ void NewConnectionDialog::selectSocketCan()
     ui->lPort->setText("Port:");
     ui->lblDeviceType->setHidden(false);
     ui->cbDeviceType->setHidden(false);
-    ui->cbCANSpeed->setHidden(true);
     ui->cbSerialSpeed->setHidden(true);
-    ui->lblCANSpeed->setHidden(true);
     ui->lblSerialSpeed->setHidden(true);
-    ui->cbCanFd->setHidden(true);
-    ui->cbDataRate->setHidden(true);
-    ui->lblDataRate->setHidden(true);
+    updateBusOptionVisibility();
 
     ui->cbDeviceType->clear();
     QStringList plugins;
@@ -511,15 +537,8 @@ void NewConnectionDialog::selectRemote()
 {
     ui->lPort->setText("IP Address:");
 
-    ui->lblDeviceType->setHidden(true);
-    ui->cbDeviceType->setHidden(true);
-    ui->cbCANSpeed->setHidden(true);
-    ui->cbSerialSpeed->setHidden(true);
-    ui->lblCANSpeed->setHidden(true);
-    ui->lblSerialSpeed->setHidden(true);
-    ui->cbCanFd->setHidden(true);
-    ui->cbDataRate->setHidden(true);
-    ui->lblDataRate->setHidden(true);
+    hideSerialBits(ui);
+    updateBusOptionVisibility();
 
     ui->cbPort->clear();
     foreach(QString pName, *remoteDeviceIPGVRET)
@@ -532,15 +551,8 @@ void NewConnectionDialog::selectKayak()
 {
     ui->lPort->setText("Available Bus(ses):");
 
-    ui->lblDeviceType->setHidden(true);
-    ui->cbDeviceType->setHidden(true);
-    ui->cbCANSpeed->setHidden(true);
-    ui->cbSerialSpeed->setHidden(true);
-    ui->lblCANSpeed->setHidden(true);
-    ui->lblSerialSpeed->setHidden(true);
-    ui->cbCanFd->setHidden(true);
-    ui->cbDataRate->setHidden(true);
-    ui->lblDataRate->setHidden(true);
+    hideSerialBits(ui);
+    updateBusOptionVisibility();
 
     ui->cbPort->clear();
     foreach(QString pName, *remoteBusKayak)
@@ -553,15 +565,8 @@ void NewConnectionDialog::selectMQTT()
 {
     ui->lPort->setText("Topic Name:");
 
-    ui->lblDeviceType->setHidden(true);
-    ui->cbDeviceType->setHidden(true);
-    ui->cbCANSpeed->setHidden(true);
-    ui->cbSerialSpeed->setHidden(true);
-    ui->lblCANSpeed->setHidden(true);
-    ui->lblSerialSpeed->setHidden(true);
-    ui->cbCanFd->setHidden(true);
-    ui->cbDataRate->setHidden(true);
-    ui->lblDataRate->setHidden(true);
+    hideSerialBits(ui);
+    updateBusOptionVisibility();
 
     ui->cbPort->clear();
 }
@@ -570,15 +575,8 @@ void NewConnectionDialog::selectCANserver()
 {
     ui->lPort->setText("CANserver IP Address:");
 
-    ui->lblDeviceType->setHidden(true);
-    ui->cbDeviceType->setHidden(true);
-    ui->cbCANSpeed->setHidden(true);
-    ui->cbSerialSpeed->setHidden(true);
-    ui->lblCANSpeed->setHidden(true);
-    ui->lblSerialSpeed->setHidden(true);
-    ui->cbCanFd->setHidden(true);
-    ui->cbDataRate->setHidden(true);
-    ui->lblDataRate->setHidden(true);
+    hideSerialBits(ui);
+    updateBusOptionVisibility();
 
     ui->cbPort->clear();
 }
@@ -587,15 +585,8 @@ void NewConnectionDialog::selectCANlogserver()
 {
     ui->lPort->setText("CANlogserver IP Address:");
 
-    ui->lblDeviceType->setHidden(true);
-    ui->cbDeviceType->setHidden(true);
-    ui->cbCANSpeed->setHidden(true);
-    ui->cbSerialSpeed->setHidden(true);
-    ui->lblCANSpeed->setHidden(true);
-    ui->lblSerialSpeed->setHidden(true);
-    ui->cbCanFd->setHidden(true);
-    ui->cbDataRate->setHidden(true);
-    ui->lblDataRate->setHidden(true);
+    hideSerialBits(ui);
+    updateBusOptionVisibility();
 
     ui->cbPort->clear();
 }
@@ -604,33 +595,14 @@ void NewConnectionDialog::selectGSUSB()
 {
     ui->lPort->setText("GSUSB Port:");
 
-    ui->lblDeviceType->setHidden(true);
-    ui->cbDeviceType->setHidden(true);
-    ui->cbCANSpeed->setHidden(false);
-    ui->cbSerialSpeed->setHidden(true);
-    ui->lblCANSpeed->setHidden(false);
-    ui->lblSerialSpeed->setHidden(true);
-    ui->cbCanFd->setHidden(true);
-    ui->cbDataRate->setHidden(true);
-    ui->lblDataRate->setHidden(true);
+    hideSerialBits(ui);
+    updateBusOptionVisibility();
 
     ui->cbPort->clear();
     //scanning USB is cheap and needs no vendor driver, so just show what's plugged in
     populateScannedDevices(CANCon::GSUSB, true);
-
-    if (ui->cbCANSpeed->count() == 0)
-    {
-        ui->cbCANSpeed->addItem("10000");
-        ui->cbCANSpeed->addItem("20000");
-        ui->cbCANSpeed->addItem("50000");
-        ui->cbCANSpeed->addItem("83333");
-        ui->cbCANSpeed->addItem("100000");
-        ui->cbCANSpeed->addItem("125000");
-        ui->cbCANSpeed->addItem("250000");
-        ui->cbCANSpeed->addItem("500000");
-        ui->cbCANSpeed->addItem("1000000");
-    }
 }
+
 
 void NewConnectionDialog::setPortName(CANCon::type pType, QString pPortName, QString pDriver)
 {
@@ -836,25 +808,18 @@ int NewConnectionDialog::getSerialSpeed()
     }
 }
 
+/* The four getters below all key off the same table the controls are shown from, so a value can
+ * only come back for an option the user was actually offered. */
 int NewConnectionDialog::getBusSpeed()
 {
-    switch (getConnectionType())
-    {
-    case CANCon::LAWICEL:
-    case CANCon::GSUSB:
-    case CANCon::SEEEDSTUDIO:
-    case CANCon::ROBOTELL:
-    case CANCon::CANALYSTII:
-    case CANCon::KVASER:
-    case CANCon::IXXAT:
-    case CANCon::USB2CAN:
-    case CANCon::ISCAN:
-    case CANCon::NICAN:
-    case CANCon::NEOUSYS:
-        return ui->cbCANSpeed->currentText().toInt();
-    default:
-        return 0;
-    }
+    if (!busOptionsFor(getConnectionType()).speed) return 0;
+    return ui->cbCANSpeed->currentText().toInt();
+}
+
+bool NewConnectionDialog::isListenOnly()
+{
+    if (!busOptionsFor(getConnectionType()).listenOnly) return false;
+    return ui->ckListenOnly->isChecked();
 }
 
 CANCon::type NewConnectionDialog::getConnectionType()
@@ -892,26 +857,14 @@ bool NewConnectionDialog::isSerialBusAvailable()
 
 int NewConnectionDialog::getDataRate()
 {
-    switch (getConnectionType())
-    {
-    case CANCon::LAWICEL:
-    case CANCon::KVASER:
-        return ui->cbDataRate->currentText().toInt();
-    default:
-        return 0;
-    }
+    if (!busOptionsFor(getConnectionType()).canFd) return 0;
+    return ui->cbDataRate->currentText().toInt();
 }
 
 bool NewConnectionDialog::isCanFd()
 {
-    switch (getConnectionType())
-    {
-    case CANCon::LAWICEL:
-    case CANCon::KVASER:
-        /* NB: this used to return the checkbox pointer itself, which is never null, so CAN FD was
-         * reported as enabled no matter what the user had ticked. */
-        return ui->cbCanFd->isChecked();
-    default:
-        return false;
-    }
+    if (!busOptionsFor(getConnectionType()).canFd) return false;
+    /* NB: this used to return the checkbox pointer itself, which is never null, so CAN FD was
+     * reported as enabled no matter what the user had ticked. */
+    return ui->cbCanFd->isChecked();
 }

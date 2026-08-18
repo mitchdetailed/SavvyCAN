@@ -249,6 +249,16 @@
     <widget class="QComboBox" name="cbCANSpeed"/>
    </item>
    <item>
+    <widget class="QCheckBox" name="ckListenOnly">
+     <property name="text">
+      <string>Listen Only</string>
+     </property>
+     <property name="toolTip">
+      <string>Watch the bus without ever transmitting on it, and without acknowledging frames</string>
+     </property>
+    </widget>
+   </item>
+   <item>
     <widget class="QCheckBox" name="cbCanFd">
      <property name="text">
       <string>CAN-FD</string>
