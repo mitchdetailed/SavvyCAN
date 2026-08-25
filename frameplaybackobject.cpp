@@ -361,16 +361,20 @@ void FramePlaybackObject::timerTriggered()
             playbackLastTimeStamp += elapsed;
             //qDebug() << playbackLastTimeStamp;
             //qDebug() << "El: " << elapsed;
-            while (peekPosition(true) <= playbackLastTimeStamp)
+            if (currentPosition < 0 || currentPosition >= currentSeqItem->data.size()) currentPosition = 0;
+            //send every frame whose own timestamp has come due. updatePosition transmits data[currentPosition]
+            //so that is the timestamp to gate on, not the successor's.
+            while ((quint64)currentSeqItem->data[currentPosition].timeStamp().microSeconds() <= playbackLastTimeStamp)
             {
+                bool hitEnd = (peekPosition(true) == 0xFFFFFFFFFFFFFFFFull);
                 updatePosition(true);
-            }
-            if (peekPosition(true) == 0xFFFFFFFFFFFFFFFFull)
-            {
-                updatePosition(true); //this'll go to the next log (if there is one)
-                if (currentSeqItem->data[currentPosition].timeStamp().microSeconds() > 1000)
-                    playbackLastTimeStamp = currentSeqItem->data[currentPosition].timeStamp().microSeconds() - 1000;
-                else playbackLastTimeStamp = 0;
+                if (hitEnd) //wrapped around to the next loop (or log) so resync the clock to its first frame
+                {
+                    if (currentSeqItem->data[currentPosition].timeStamp().microSeconds() > 1000)
+                        playbackLastTimeStamp = currentSeqItem->data[currentPosition].timeStamp().microSeconds() - 1000;
+                    else playbackLastTimeStamp = 0;
+                    break;
+                }
             }
         }
         else
@@ -378,14 +382,16 @@ void FramePlaybackObject::timerTriggered()
             if (playbackLastTimeStamp > elapsed)
                 playbackLastTimeStamp -= elapsed;
             else playbackLastTimeStamp = 0;
-            while (peekPosition(false) >= playbackLastTimeStamp && peekPosition(false) != 0xFFFFFFFFFFFFFFFFull)
+            if (currentPosition < 0 || currentPosition >= currentSeqItem->data.size()) currentPosition = 0;
+            while ((quint64)currentSeqItem->data[currentPosition].timeStamp().microSeconds() >= playbackLastTimeStamp)
             {
+                bool hitEnd = (peekPosition(false) == 0xFFFFFFFFFFFFFFFFull);
                 updatePosition(false);
-            }
-            if (peekPosition(false) == 0xFFFFFFFFFFFFFFFFull)
-            {
-                updatePosition(false); //this'll go to the next log (if there is one)
-                playbackLastTimeStamp = currentSeqItem->data[currentPosition].timeStamp().microSeconds() + 1000;
+                if (hitEnd) //wrapped around to the previous loop (or log) so resync the clock to its last frame
+                {
+                    playbackLastTimeStamp = currentSeqItem->data[currentPosition].timeStamp().microSeconds() + 1000;
+                    break;
+                }
             }
         }
         statusCounter++;

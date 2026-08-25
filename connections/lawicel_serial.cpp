@@ -121,7 +121,7 @@ void LAWICELSerial::piSetBusSettings(int pBusIdx, CANBus bus)
 */
     if (pBusIdx < 2) {
         /* update baud rates */
-        QByteArray buffer;
+        QByteArray buffer(1, 0); //Qt 6: operator[] no longer grows the array, so size it up front
         //sendDebug("Got signal to update bauds. 1: " + QString::number((can0Baud & 0xFFFFFFF)));
         buffer[0] = (char)0xF1; //start of a command over serial
         //sendToSerial(buffer);
@@ -181,6 +181,7 @@ bool LAWICELSerial::piSendFrame(const CANFrame& frame)
             buildStr = QString::asprintf("t%03X%u", ID, (unsigned int)frame.payload().length());
         }
     }
+    buffer.resize(buildStr.length() + frame.payload().length() * 2 + 1); //Qt 6: operator[] no longer grows the array
     foreach (QChar chr, buildStr)
     {
         buffer[idx] = chr.toLatin1();
@@ -543,7 +544,7 @@ void LAWICELSerial::readSerialData()
                         break;
                 }
 
-                int dlc = mBuildLine.mid(len_index, 1).toInt();
+                int dlc = mBuildLine.mid(len_index, 1).toInt(nullptr, isFD ? 16 : 10);
                 int byteCount = isFD ? (int)dlc_code_to_bytes(dlc) : dlc;
                 int frameStringLen = offset + byteCount * 2;
                 if (mBuildLine.length() > frameStringLen + 1)
@@ -648,10 +649,9 @@ void LAWICELSerial::readSerialData()
             case 'B':
                 buildFrame.setBitrateSwitch(true); //BRS enabled
                 [[fallthrough]];
-            case 'D': //extended fd frame
+            case 'D': //extended fd frame, BRS disabled
                 //TIIIIIIIILDD.
                 buildFrame.setFlexibleDataRateFormat(true);
-                buildFrame.setBitrateSwitch(true);
                 buildFrame.setFrameId(mBuildLine.mid(1, 8).toInt(nullptr, 16));
                 buildFrame.isReceived = true;
                 buildFrame.setFrameType(QCanBusFrame::FrameType::DataFrame);

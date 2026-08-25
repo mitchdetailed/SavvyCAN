@@ -36,7 +36,7 @@ signals:
     void newISOMessage(ISOTP_MESSAGE msg);
 
 private:
-    QHash<uint32_t, ISOTP_MESSAGE> messageBuffer;
+    QHash<uint64_t, ISOTP_MESSAGE> messageBuffer;
     QList<CANFrame> sendingFrames;
     QList<CANFilter> filters;
     const QVector<CANFrame> *modelFrames;

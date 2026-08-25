@@ -18,6 +18,7 @@
 
 static unsigned char pcap_buffer[MAX_CAN_PACKET_SIZE];
 static pcap_t p;
+static double timestamp_multiplier = 0.000001; //microseconds resolution
 
 pcap *pcap_open_offline(const char *filename, char *error_text, int expected_link_type) {
 	FILE *file;
@@ -48,23 +49,6 @@ pcap *pcap_open_offline(const char *filename, char *error_text, int expected_lin
 		return (NULL);
     }
 
-    unsigned int link_type;
-    fseek(file, PCAP_FILE_HEADER_LENGTH - 4, SEEK_SET);
-    bytes_read = fread(&link_type, 1, sizeof(link_type), file);
-    if (bytes_read != sizeof(link_type)) {
-        snprintf(error_text, PCAP_ERRBUF_SIZE, "Cannot read linktype word");
-        fclose(file);
-        return (NULL);
-    }
-    if (expected_link_type >= 0) {
-        // Check the link type
-        if ((int) link_type != expected_link_type) {
-            snprintf(error_text, PCAP_ERRBUF_SIZE, "This link type is not supported by this decoder");
-            fclose(file);
-            return (NULL);
-        }
-    }
-
     // set the format
     // and seek past file header
     if (MAGIC_NG == magic) {
@@ -78,10 +62,58 @@ pcap *pcap_open_offline(const char *filename, char *error_text, int expected_lin
 		    return (NULL);
 	    }
         fseek(file, section_length, SEEK_SET);
+
+        if (expected_link_type >= 0) {
+            /* pcapng has no link type in the file header - it lives in each
+               Interface Description Block, so scan for the first IDB and check there */
+            long data_start = ftell(file);
+            unsigned int block_header[2]; //block type and block size
+            int link_type_matches = 0;
+            while (fread(block_header, 1, sizeof(block_header), file) == sizeof(block_header)) {
+                //reject undersized blocks and lengths that would go negative when cast to the
+                //32-bit long fseek takes on Windows - a crafted length could otherwise seek
+                //backwards and spin this loop forever
+                if (block_header[1] < sizeof(block_header) || block_header[1] > 0x7FFFFFFF) break;
+                if (INTERFACE_DESCRITION_BLOCK == block_header[0]) {
+                    unsigned short idb_link_type;
+                    bytes_read = fread(&idb_link_type, 1, sizeof(idb_link_type), file);
+                    if (bytes_read == sizeof(idb_link_type) && (int)idb_link_type == expected_link_type) {
+                        link_type_matches = 1;
+                    }
+                    break;
+                }
+                if (fseek(file, (long)block_header[1] - (long)sizeof(block_header), SEEK_CUR)) break;
+            }
+            if (!link_type_matches) {
+                snprintf(error_text, PCAP_ERRBUF_SIZE, "This link type is not supported by this decoder");
+                fclose(file);
+                return (NULL);
+            }
+            fseek(file, data_start, SEEK_SET);
+        }
     } else {
         p.is_ng = 0;
+        unsigned int link_type;
+        fseek(file, PCAP_FILE_HEADER_LENGTH - 4, SEEK_SET);
+        bytes_read = fread(&link_type, 1, sizeof(link_type), file);
+        if (bytes_read != sizeof(link_type)) {
+            snprintf(error_text, PCAP_ERRBUF_SIZE, "Cannot read linktype word");
+            fclose(file);
+            return (NULL);
+        }
+        if (expected_link_type >= 0) {
+            // Check the link type
+            if ((int) link_type != expected_link_type) {
+                snprintf(error_text, PCAP_ERRBUF_SIZE, "This link type is not supported by this decoder");
+                fclose(file);
+                return (NULL);
+            }
+        }
         fseek(file, PCAP_FILE_HEADER_LENGTH, SEEK_SET);
     }
+
+    //reset to the pcapng default so a tsresol option from a previously opened file cannot leak into this one
+    timestamp_multiplier = 0.000001;
 
     p.file = file;
 	return(&p);
@@ -105,8 +137,6 @@ const unsigned char *pcap_next_ng(pcap_t *p, struct pcap_pkthdr *h) {
     } oh;
 
     size_t bytes_read;
-
-    static double timestamp_multiplier = 0.000001; //microseconds resolution
 
     long fpos = ftell(p->file);
     

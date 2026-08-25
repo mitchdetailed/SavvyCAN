@@ -93,7 +93,7 @@ bool BLFHandler::loadBLF(QString filename, QVector<CANFrame>* frames)
                 if (objHeader.containerObj.compressionMethod == BLF_CONT_NO_COMPRESSION)
                 {
                     qDebug() << "Container is not compressed";
-                    uncompressedData = fileData;
+                    uncompressedData += fileData;
                 }
                 else if (objHeader.containerObj.compressionMethod == BLF_CONT_ZLIB_COMPRESSION)
                 {
@@ -133,7 +133,7 @@ bool BLFHandler::loadBLF(QString filename, QVector<CANFrame>* frames)
                     }
                     //if (obj.header.base.objType != 1)
                         //qDebug() << "Pos: " << pos << " Type: " << obj.header.base.objType << "Obj Size: " << obj.header.base.objSize;
-                    if (qFromLittleEndian(objHeader.base.sig) == 0x4A424F4C)
+                    if (qFromLittleEndian(obj.header.base.sig) == 0x4A424F4C)
                     {
                         fileData = uncompressedData.mid(pos + sizeof(BLF_OBJ_HEADER_BASE) + sizeof(BLF_OBJ_HEADER_V1), obj.header.base.objSize - sizeof(BLF_OBJ_HEADER_BASE) - sizeof(BLF_OBJ_HEADER_V1));
                         if (obj.header.base.objType == BLF_CAN_MSG)

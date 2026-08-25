@@ -17,6 +17,7 @@ MQTT_BUS::MQTT_BUS(QString topicName) :
 
     crypto = new SimpleCrypt(Q_UINT64_C(0xdeadbeefface6285));
 
+    mqttClient = nullptr;
     isAutoRestart = false;
     this->topicName = topicName;
 
@@ -240,6 +241,8 @@ bool MQTT_BUS::piSendFrame(const CANFrame& frame)
 
     framesRapid++;
 
+    if (mqttClient == nullptr || !mqttClient->isConnectedToHost()) return false;
+
     // Doesn't make sense to send an error frame
     // to an adapter
     if (frame.frameId() & 0x20000000) {
@@ -340,6 +343,15 @@ void MQTT_BUS::clientConnected()
 }
 
 void MQTT_BUS::disconnectDevice() {
+
+    /* piStarted() created the client parentless in this thread, so tear it down here
+     * as well - otherwise every stop leaks the client and its open broker socket. */
+    if (mqttClient)
+    {
+        mqttClient->disconnectFromHost();
+        delete mqttClient;
+        mqttClient = nullptr;
+    }
 
     setStatus(CANCon::NOT_CONNECTED);
     CANConStatus stats;

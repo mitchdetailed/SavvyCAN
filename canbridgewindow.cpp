@@ -98,6 +98,7 @@ void CANBridgeWindow::updatedFrames(int numFrames)
         for (int x = modelFrames->count() - numFrames; x < modelFrames->count(); x++)
         {
             CANFrame thisFrame = modelFrames->at(x);
+            if (!thisFrame.isReceived) continue; //ignore frames we sent ourselves - otherwise our own forwarded frames get bridged again forever
             int32_t id = static_cast<int32_t>(thisFrame.frameId());
 
             if (thisFrame.bus == side1BusNum)

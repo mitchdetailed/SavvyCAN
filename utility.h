@@ -204,8 +204,9 @@ public:
         input = input.toUpper();
         if (input.startsWith("0X") || input.startsWith("X")) //hex number
         {
-            if (input.length() < 3) temp = 0;
-            else temp = input.right(input.size() - 2).toLongLong(nullptr, 16);
+            int prefixLen = input.startsWith("0X") ? 2 : 1;
+            if (input.length() <= prefixLen) temp = 0;
+            else temp = input.right(input.size() - prefixLen).toLongLong(nullptr, 16);
         }
         else if (input.startsWith("0B") || input.startsWith("B")) //binary number
         {
@@ -469,7 +470,7 @@ public:
                  * actual signal. This extends the sign bits out so that the integer result reads as the proper negative
                  * value. We dont need to do any of this if the sign bit wasn't set.
                 */
-                uint64_t signedMask = ~((1ULL << sigSize) - 1);
+                uint64_t signedMask = (sigSize < 64) ? ~((1ULL << sigSize) - 1) : 0; //for a full 64 bit signal there are no bits above it to set (and 1ULL << 64 is undefined)
                 result = (-1LL & signedMask) | result;
                 return (int64_t)(result);
             }

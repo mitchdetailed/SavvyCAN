@@ -227,10 +227,12 @@ bool DBCMessageHandler::addMessage(DBC_MESSAGE &msg)
 bool DBCMessageHandler::removeMessage(DBC_MESSAGE *msg)
 {
     qDebug() << "Total # of messages: " << getCount();
+    //compare by address, not by name - several messages may legally share a name
     for (int i = 0; i < getCount(); i++)
     {
-        if (messages[i].name == msg->name)
+        if (&messages[i] == msg)
         {
+            delete messages[i].sigHandler; //heap allocated in the DBC_MESSAGE constructor, freed nowhere else
             messages.removeAt(i);
             qDebug() << "Removed message at idx " << i;
             break;
@@ -280,6 +282,7 @@ bool DBCMessageHandler::removeMessage(QString name)
 
 void DBCMessageHandler::removeAllMessages()
 {
+    for (int i = 0; i < messages.size(); i++) delete messages[i].sigHandler; //heap allocated in the DBC_MESSAGE constructor, freed nowhere else
     messages.clear();
 }
 
@@ -444,8 +447,19 @@ void DBCFile::remapInternalPointers()
             sig->parentMessage = msg;
             if (sig->receiver)
                 sig->receiver = findNodeByName(sig->receiver->name);
+            // Re-resolve by the STORED parent name so extended multiplexing hierarchies
+            // (intermediate multiplexors) are not flattened to the root. The pointer itself
+            // may dangle after the signal list reallocated or shifted, so never dereference it here.
             if (sig->multiplexParent != nullptr)
-                sig->multiplexParent = msg->multiplexorSignal;
+            {
+                DBC_SIGNAL *resolved = nullptr;
+                if (!sig->multiplexParentName.isEmpty())
+                    resolved = msg->sigHandler->findSignalByName(sig->multiplexParentName);
+                if (!resolved || resolved == sig)
+                    resolved = (msg->multiplexorSignal != sig) ? msg->multiplexorSignal : nullptr; //parent renamed/removed - fall back to the root multiplexor
+                sig->multiplexParent = resolved;
+                sig->multiplexParentName = resolved ? resolved->name : QString();
+            }
         }
 
         // multiplexedChildren stores raw signal pointers too, so rebuild it from the
@@ -903,6 +917,7 @@ bool DBCFile::parseSignalMultiplexValueLine(QString line)
                         int rangeMin = rangeSides.at(0).toInt();
                         int rangeMax = rangeSides.at(1).toInt();
                         thisSignal->multiplexParent = parentSignal;
+                        thisSignal->multiplexParentName = parentSignal->name;
                         thisSignal->addMultiplexRange(rangeMin, rangeMax);
                     }
                     parentSignal->multiplexedChildren.append(thisSignal);
@@ -1069,12 +1084,12 @@ bool DBCFile::parseAttributeLine(QString line)
                 if (foundSig)
                 {
                     DBC_ATTRIBUTE_VALUE *foundAttrVal = foundSig->findAttrValByName(match.captured(1));
-                    if (foundAttrVal) foundAttrVal->value = processAttributeVal(match.captured(3), foundAttr->valType);
+                    if (foundAttrVal) foundAttrVal->value = processAttributeVal(match.captured(4), foundAttr->valType);
                     else
                     {
                         DBC_ATTRIBUTE_VALUE val;
                         val.attrName = match.captured(1);
-                        val.value = processAttributeVal(match.captured(3), foundAttr->valType);
+                        val.value = processAttributeVal(match.captured(4), foundAttr->valType);
                         foundSig->attributes.append(val);
                     }
                 }
@@ -1501,15 +1516,20 @@ bool DBCFile::loadFile(QString fileName)
             DBC_SIGNAL *sig = msg->sigHandler->findSignalByIdx(y);
             // Fix parentMessage — may be dangling after list reallocation in Qt6
             sig->parentMessage = msg;
-            // Fix multiplexParent for already-set entries
+            // Fix multiplexParent for already-set entries — re-resolve by name so that
+            // extended multiplexing hierarchies (intermediate multiplexors) are preserved
             if (sig->multiplexParent != nullptr)
-                sig->multiplexParent = msg->multiplexorSignal;
+            {
+                sig->multiplexParent = msg->sigHandler->findSignalByName(sig->multiplexParent->name);
+                sig->multiplexParentName = sig->multiplexParent ? sig->multiplexParent->name : QString();
+            }
             //if this doesn't have a multiplex parent set but is multiplexed then it must have used
             //simple multiplexing instead of any extended specification. So, fill in the multiplexor signal here
             //and also write the extended entry for it too.
             if (sig->isMultiplexed && (sig->multiplexParent == nullptr) && (msg->multiplexorSignal) )
             {
                 sig->multiplexParent = msg->multiplexorSignal;
+                sig->multiplexParentName = msg->multiplexorSignal->name;
                 msg->multiplexorSignal->multiplexedChildren.append(sig);
             }
             if ( sig->isMultiplexed && (!msg->multiplexorSignal) ) //marked multiplexed but there is no multiplexor.
@@ -2567,6 +2587,7 @@ DBCFile* DBCHandler::loadJSONFile(QString filename)
                  if (sig->isMultiplexed && (sig->multiplexParent == nullptr) && (msg->multiplexorSignal) )
                  {
                      sig->multiplexParent = msg->multiplexorSignal;
+                     sig->multiplexParentName = msg->multiplexorSignal->name;
                      msg->multiplexorSignal->multiplexedChildren.append(sig);
                  }
                  if ( sig->isMultiplexed && (!msg->multiplexorSignal) ) //marked multiplexed but there is no multiplexor.
@@ -2591,6 +2612,8 @@ void DBCHandler::removeDBCFile(int idx)
     /* Tell everyone holding pointers into this file to let go before anything is destroyed. Once
      * this returns nobody should be referring to it, so it can actually be freed. */
     emit dbcFileAboutToBeRemoved(doomed);
+    doomed->messageHandler->removeAllMessages(); //frees each message's heap allocated signal handler
+    delete doomed->messageHandler;
     delete doomed;
 }
 
@@ -2600,6 +2623,8 @@ void DBCHandler::removeAllFiles()
     {
         DBCFile *doomed = loadedFiles.takeFirst();
         emit dbcFileAboutToBeRemoved(doomed);
+        doomed->messageHandler->removeAllMessages(); //frees each message's heap allocated signal handler
+        delete doomed->messageHandler;
         delete doomed;
     }
 }

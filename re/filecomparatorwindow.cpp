@@ -159,6 +159,7 @@ void FileComparatorWindow::calculateDetails()
         DBC_MESSAGE *msg = dbcHandler->findMessage(frame);
         data = reinterpret_cast<const unsigned char *>(frame.payload().constData());
         dataLen = frame.payload().size();
+        if (dataLen > 8) dataLen = 8; //only 8 data bytes are tracked so clamp FD frames
 
         if (interestedIDs.contains(frame.frameId())) //if we saw this ID before then add to the QList in there
         {
@@ -251,6 +252,7 @@ void FileComparatorWindow::calculateDetails()
         DBC_MESSAGE *msg = dbcHandler->findMessage(frame);
         data = reinterpret_cast<const unsigned char *>(frame.payload().constData());
         dataLen = frame.payload().size();
+        if (dataLen > 8) dataLen = 8; //only 8 data bytes are tracked so clamp FD frames
 
         if (referenceIDs.contains(frame.frameId())) //if we saw this ID before then add to the QList in there
         {

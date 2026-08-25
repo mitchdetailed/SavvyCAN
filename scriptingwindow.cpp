@@ -305,6 +305,8 @@ void ScriptingWindow::refreshSourceWindow()
 
 void ScriptingWindow::saveScript()
 {
+    if (!currentScript) return;
+
     QFile *outFile = new QFile(currentScript->filePath);
 
     if (!outFile->open(QIODevice::WriteOnly | QIODevice::Text))
@@ -356,6 +358,8 @@ void ScriptingWindow::saveAsScript()
 
 void ScriptingWindow::revertScript()
 {
+    if (!currentScript) return;
+
     QMessageBox msgBox;
     msgBox.setText("Are you sure you'd like to revert?");
     msgBox.setInformativeText("Really do it?");
@@ -378,6 +382,8 @@ void ScriptingWindow::revertScript()
 
 void ScriptingWindow::reloadScript()
 {
+    if (!currentScript) return;
+
     QMessageBox msgBox;
     msgBox.setText("Are you sure you'd like to reload from disk?");
     msgBox.setInformativeText("Really do it?");

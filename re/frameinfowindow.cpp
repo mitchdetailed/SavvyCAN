@@ -376,22 +376,23 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
     int64_t minInterval;
     int64_t maxInterval;
     int64_t thisInterval;
-    int minData[8];
-    int maxData[8];
-    int dataHistogram[256][8];
-    int bitfieldHistogram[64];
+    //all of these are sized for CAN-FD frames, which carry up to 64 data bytes
+    int minData[64];
+    int maxData[64];
+    int dataHistogram[256][64];
+    int bitfieldHistogram[512];
     QVector<double> histGraphX, histGraphY;
     QVector<double> byteGraphX, byteGraphY[8];
     QVector<double> timeGraphX, timeGraphY;
     QHash<QString, QHash<QString, int>> signalInstances;
     double maxY = -1000.0;
-    uint8_t changedBits[8];
-    uint8_t referenceBits[8];
+    uint8_t changedBits[64];
+    uint8_t referenceBits[64];
     uint8_t heatVals[512];
 
     //these two used by bitflip heatmap functionality
-    uint8_t refByte[8];
-    double bitFlipHeat[64];
+    uint8_t refByte[64];
+    double bitFlipHeat[512];
 
     QTreeWidgetItem *baseNode, *dataBase, *histBase, *tempItem;
 
@@ -511,17 +512,17 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
         baseNode->addChild(tempItem);
 
         //clear out all the counters and accumulators
-        minLen = 8;
+        minLen = 64;
         maxLen = 0;
         minInterval = 0x7FFFFFFF;
         maxInterval = 0;
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < 64; i++)
         {
             minData[i] = 256;
             maxData[i] = -1;
             for (int k = 0; k < 256; k++) dataHistogram[k][i] = 0;
         }
-        for (int j = 0; j < 64; j++)
+        for (int j = 0; j < 512; j++)
         {
             bitfieldHistogram[j] = 0;
             bitFlipHeat[j] = 0;
@@ -530,6 +531,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
 
         data = reinterpret_cast<const unsigned char *>(frameCache.at(0).payload().constData());
         dataLen = frameCache.at(0).payload().length();
+        if (dataLen > 64) dataLen = 64; //guard against malformed captures claiming more than a CAN-FD frame can hold
 
         for (int c = 0; c < dataLen; c++)
         {
@@ -549,9 +551,10 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
         {
             data = reinterpret_cast<const unsigned char *>(frameCache.at(j).payload().constData());
             dataLen = frameCache.at(j).payload().length();
+            if (dataLen > 64) dataLen = 64; //guard against malformed captures claiming more than a CAN-FD frame can hold
 
             byteGraphX.append(j);
-            for (int bytcnt = 0; bytcnt < dataLen; bytcnt++)
+            for (int bytcnt = 0; bytcnt < dataLen && bytcnt < 8; bytcnt++) //the byte-value graph widgets are fixed at 8
             {
                 byteGraphY[bytcnt].append(data[bytcnt]);
             }
@@ -625,7 +628,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
         }
 
         //Divide all the bit flip heat values by the number of frames to get a ratio
-        for (int j = 0; j < 64; j++) bitFlipHeat[j] /= (double)frameCache.size();
+        for (int j = 0; j < 512; j++) bitFlipHeat[j] /= (double)frameCache.size();
 
         std::sort(sortedIntervals.begin(), sortedIntervals.end());
         int64_t intervalStdDiv = 0, intervalPctl5 = 0, intervalPctl95 = 0, intervalMean = 0, intervalVariance = 0;

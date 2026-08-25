@@ -1,6 +1,8 @@
 #Build directories and logs
 build/
 build-release/
+build_win64/
+build_tests/
 /debug/
 /release/
 build.log

@@ -291,7 +291,7 @@ void FuzzingWindow::calcNextBitPattern()
         break;
     case BitSequenceType::Sequential:
         bitAccum++;
-        bitAccum &= ((1 << numBits) - 1);
+        if (numBits < 64) bitAccum &= ((1ULL << numBits) - 1); //at 64 bits the mask would be all ones anyway and the shift would be undefined
         accum = bitAccum;
         for (int byt = 0; byt < ui->spinBytes->value(); byt++)
         {

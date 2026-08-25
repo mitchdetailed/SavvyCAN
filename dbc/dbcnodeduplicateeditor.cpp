@@ -82,10 +82,22 @@ DBCNodeDuplicateEditor::DBCNodeDuplicateEditor(QWidget *parent) :
                 }
             }
 
-            for (int i = 0; i < messagesForNode.size(); i++)
+            //each cloneMessageToNode below appends to the message list, which can reallocate it
+            //and invalidate the raw pointers in messagesForNode. Remember the source messages by
+            //index (appending never shifts existing entries) and look each one up again fresh.
+            QList<int> msgIndexesForNode;
+            for (int i = 0; i < dbcFile->messageHandler->getCount(); i++)
             {
-                int32_t newMsgId = messagesForNode[i]->ID + rebaseDiff;
-                emit cloneMessageToNode(nodePtr, messagesForNode[i], newMsgId);
+                if (messagesForNode.contains(dbcFile->messageHandler->findMsgByIdx(i)))
+                    msgIndexesForNode.append(i);
+            }
+
+            for (int i = 0; i < msgIndexesForNode.size(); i++)
+            {
+                DBC_MESSAGE *source = dbcFile->messageHandler->findMsgByIdx(msgIndexesForNode[i]);
+                if (!source) continue;
+                int32_t newMsgId = source->ID + rebaseDiff;
+                emit cloneMessageToNode(nodePtr, source, newMsgId);
             }
 
             dbcFile->setDirtyFlag();

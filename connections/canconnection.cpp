@@ -22,7 +22,8 @@ CANConnection::CANConnection(QString pPort,
     mIsCapSuspended(false),
     mStatus(CANCon::NOT_CONNECTED),
     mStarted(false),
-    mThread_p(nullptr)
+    mThread_p(nullptr),
+    mBusBase(0)
 {
     /* register types */
     qRegisterMetaType<CANBus>("CANBus");
@@ -228,6 +229,10 @@ int CANConnection::getNumBuses() const{
     return mNumBuses;
 }
 
+void CANConnection::setBusBase(int pBusBase) {
+    mBusBase.storeRelaxed(pBusBase);
+}
+
 int CANConnection::getSerialSpeed() const{
   return mSerialSpeed;
 }
@@ -402,13 +407,19 @@ void CANConnection::checkTargettedFrame(CANFrame &frame)
     mTargettedFramesMutex.unlock();
 
     if (targettedFrames.length() == 0) return;
+
+    /* observers registered their filters with system global bus numbers but frame.bus
+     * still holds the connection local number here, so forward a fixed up copy */
+    CANFrame globalFrame = frame;
+    int busBase = mBusBase.loadRelaxed();
+    if (busBase > 0) globalFrame.bus += busBase;
     foreach (const CANFltObserver filt, targettedFrames)
     {
         //qDebug() << "Checking filter with id " << filt.id << " mask " << filt.mask;
         maskedID = frame.frameId() & filt.mask;
         if (maskedID == filt.id) {
             qDebug() << "In connection object I got a targetted frame. Forwarding it.";
-            QMetaObject::invokeMethod(filt.observer, "gotTargettedFrame",Qt::QueuedConnection, Q_ARG(CANFrame, frame));
+            QMetaObject::invokeMethod(filt.observer, "gotTargettedFrame",Qt::QueuedConnection, Q_ARG(CANFrame, globalFrame));
         }
     }
 }

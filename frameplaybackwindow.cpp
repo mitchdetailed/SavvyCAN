@@ -709,7 +709,7 @@ void FramePlaybackWindow::btnSelectAllClick()
     {
         QListWidgetItem *item = ui->listID->item(i);
         item->setCheckState(Qt::Checked);
-        currentSeqItem->idFilters[Utility::ParseStringToNum(item->text())] = true;
+        currentSeqItem->idFilters[FilterUtility::getIdAsInt(item)] = true;
     }
 }
 
@@ -720,6 +720,6 @@ void FramePlaybackWindow::btnSelectNoneClick()
     {
         QListWidgetItem *item = ui->listID->item(i);
         item->setCheckState(Qt::Unchecked);
-        currentSeqItem->idFilters[Utility::ParseStringToNum(item->text())] = false;
+        currentSeqItem->idFilters[FilterUtility::getIdAsInt(item)] = false;
     }
 }

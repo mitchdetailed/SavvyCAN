@@ -303,7 +303,7 @@ bool RangeStateWindow::processSignal(int startBit, int bitLength, int sensitivit
 
     int64_t range = highestValue - lowestValue;
 
-    int64_t maxRange = isSigned?(1<<(bitLength - 1)):(1 << bitLength);
+    int64_t maxRange = isSigned?(1LL<<(bitLength - 1)):(1LL << bitLength);
     //at highest sensitivity require signal to at least range 20% of max range
     //at lowest  sensitivity require signal to at least range 1%  of max range
     int64_t requiredRange = Utility::Lerp(maxRange * 0.01, maxRange * 0.2, lerpPoint);

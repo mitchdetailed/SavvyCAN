@@ -67,6 +67,12 @@ void SerialBusConnection::piStop() {
     qDebug() << "piStop()";
     mTimer.stop();
     disconnectDevice();
+    /* createDevice() gave us ownership of the device and nothing else frees it.
+     * piStop() runs in the thread the device lives in, so a direct delete is safe. */
+    if (mDev_p) {
+        delete mDev_p;
+        mDev_p = nullptr;
+    }
 }
 
 
@@ -113,6 +119,8 @@ void SerialBusConnection::piSetBusSettings(int pBusIdx, CANBus bus)
     //But, you can probabaly set the speed of many of the other serialbus devices so go ahead and try
     mDev_p->setConfigurationParameter(QCanBusDevice::BitRateKey, bus.getSpeed());
     mDev_p->setConfigurationParameter(QCanBusDevice::CanFdKey, bus.isCanFD());
+    if (bus.isCanFD())
+        mDev_p->setConfigurationParameter(QCanBusDevice::DataBitRateKey, bus.getDataRate());
 
     if(bus.isListenOnly())
         sbusconfig |= EN_SILENT_MODE;

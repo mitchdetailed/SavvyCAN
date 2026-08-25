@@ -94,8 +94,10 @@ DBCMessageEditor::DBCMessageEditor(QWidget *parent) :
     connect(ui->btnTextColor, &QAbstractButton::clicked,
         [=]()
         {
+            if (dbcMessage == nullptr) return;
             if (suppressEditCallbacks) return;
             QColor newColor = QColorDialog::getColor(dbcMessage->fgColor);
+            if (!newColor.isValid()) return; //user cancelled the dialog
             if (dbcMessage->fgColor != newColor) dbcFile->setDirtyFlag();
             dbcMessage->fgColor = newColor;
             DBC_ATTRIBUTE_VALUE *val = dbcMessage->findAttrValByName("GenMsgForegroundColor");
@@ -116,8 +118,10 @@ DBCMessageEditor::DBCMessageEditor(QWidget *parent) :
     connect(ui->btnBackgroundColor, &QAbstractButton::clicked,
         [=]()
         {
+            if (dbcMessage == nullptr) return;
             if (suppressEditCallbacks) return;
             QColor newColor = QColorDialog::getColor(dbcMessage->bgColor);
+            if (!newColor.isValid()) return; //user cancelled the dialog
             if (dbcMessage->bgColor != newColor) dbcFile->setDirtyFlag();
             dbcMessage->bgColor = newColor;
             DBC_ATTRIBUTE_VALUE *val = dbcMessage->findAttrValByName("GenMsgBackgroundColor");

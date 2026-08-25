@@ -486,6 +486,7 @@ void FlowViewWindow::updatedFrames(int numFrames)
             thisFrame = &modelFrames->at(i);
             data = reinterpret_cast<const unsigned char *>(thisFrame->payload().constData());
             dataLen = thisFrame->payload().length();
+            if (dataLen > 8) dataLen = 8; //only 8 bytes worth of graphs so clamp FD frames
 
             if (!foundID.contains(thisFrame->frameId()))
             {

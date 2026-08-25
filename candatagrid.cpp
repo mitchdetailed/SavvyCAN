@@ -585,6 +585,7 @@ void CANDataGrid::paintCommonEnding()
     //and we don't need these anymore after we're done drawing
     delete painter;
     delete smallMetric;
+    delete largeMetric;
 }
 
 //figure out which bit a point within the widget lands on. Returns false if the point isn't over

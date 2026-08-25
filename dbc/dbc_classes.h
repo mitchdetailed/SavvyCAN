@@ -113,6 +113,7 @@ public: //TODO: Clean up this class so that not everything is public. There is o
     bool hasExtendedMultiplexing = false;
     QList<DBC_SIGNAL *> multiplexedChildren;
     DBC_SIGNAL *multiplexParent = nullptr;
+    QString multiplexParentName; //kept alongside the pointer so remapInternalPointers can re-resolve it without dereferencing a stale pointer
     QString multiplexDbcString(DbcMuxStringFormat fmt = MuxStringFormat_DbcFile) const;
     void copyMultiplexValuesFromSignal(const DBC_SIGNAL &signal);
     bool parseDbcMultiplexUiString(const QString &multiplexes, QString &errorString);

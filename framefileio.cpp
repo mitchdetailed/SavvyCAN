@@ -792,7 +792,7 @@ bool FrameFileIO::saveVehicleSpyFile(QString filename, const QVector<CANFrame> *
 {
     Q_UNUSED(filename);
     Q_UNUSED(frames);
-    return true;
+    return false; //not implemented - return false so the save is reported as failed instead of silently writing nothing
 }
 
 bool FrameFileIO::isCRTDFile(QString filename)
@@ -1031,7 +1031,7 @@ bool FrameFileIO::loadCARBUSAnalyzerFile(QString filename, QVector<CANFrame>* fr
             if (tokens.length() >= 5)
             {
                 QString time = tok(tokens, 0).replace(",", "");
-                int64_t timeStamp = time.toInt();
+                int64_t timeStamp = time.toLongLong();
                 if (version == 2) {
                     timeStamp *= 1000; // ms -> us
                 }
@@ -1154,7 +1154,7 @@ bool FrameFileIO::saveCARBUSAnalzyer(QString filename, const QVector<CANFrame>* 
         finalCanData = finalCanData.trimmed().leftJustified(23, ' ');
         ascii = ascii.leftJustified(8, ' ');
         auto seconds = QString::number(timeStamp / 1000000);
-        auto uSeconds = QString::number(timeStamp % 1000000);
+        auto uSeconds = QString::number(timeStamp % 1000000).rightJustified(6, '0'); //loader concatenates the two fields so this must be exactly 6 digits
         QString localArg = "";
         localArg.append(seconds).append(",").append(uSeconds).append("\t")
                 .append(QString::number(frame.bus)).append("\t") // bus channel
@@ -1435,6 +1435,8 @@ bool FrameFileIO::loadCANOpenFile(QString filename, QVector<CANFrame>* frames)
 
 bool FrameFileIO::saveCRTDFile(QString filename, const QVector<CANFrame>* frames)
 {
+    if (frames->isEmpty()) return false;
+
     QFile *outFile = new QFile(filename);
     int lineCounter = 0;
 
@@ -1778,7 +1780,7 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
                 {
                     thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, (uint64_t)(tok(tokens, 1).toDouble() * 1000.0)));
                     thisFrame.setFrameId(tok(tokens, 3).toUInt(nullptr, 16));
-                    if (thisFrame.frameId() < 0x1FFFFFFF)
+                    if (thisFrame.frameId() <= 0x1FFFFFFF)
                     {
                         int numBytes = tok(tokens, 4).toInt();
                         if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
@@ -1831,7 +1833,7 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
                 {
                     thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tok(tokens, 1).toDouble() * 1000.0)));
                     thisFrame.setFrameId(tok(tokens, 4).toUInt(nullptr, 16));
-                    if (thisFrame.frameId() < 0x1FFFFFFF)
+                    if (thisFrame.frameId() <= 0x1FFFFFFF)
                     {
                         int numBytes = tok(tokens, 6).toInt();
                         if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
@@ -1839,7 +1841,8 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
                         QByteArray bytes(numBytes, 0);
                         //qDebug() << thisFrame.payload().length();
                         thisFrame.isReceived = true;
-                        thisFrame.bus = tok(tokens, 2).toInt();
+                        thisFrame.bus = tok(tokens, 2).toInt() - 1; // PCAN uses 1-based bus numbers
+                        if (thisFrame.bus < 0) thisFrame.bus = 0;
                         if ((thisFrame.frameId() > 0x10000000) || (tok(tokens, 4).length() >= 8))
                         {
                             thisFrame.setExtendedFrameFormat(true);
@@ -1875,7 +1878,7 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
                 {
                     thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tok(tokens, 1).toDouble() * 1000.0)));
                     thisFrame.setFrameId(tok(tokens, 3).toUInt(nullptr, 16));
-                    if (thisFrame.frameId() < 0x1FFFFFFF)
+                    if (thisFrame.frameId() <= 0x1FFFFFFF)
                     {
                         int numBytes = tok(tokens, 5).toInt();
                         if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
@@ -1929,7 +1932,7 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
                 {
                     thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(tok(tokens, 1).toDouble() * 1000.0)));
                     thisFrame.setFrameId(tok(tokens, 4).toUInt(nullptr, 16));
-                    if (thisFrame.frameId() < 0x1FFFFFFF)
+                    if (thisFrame.frameId() <= 0x1FFFFFFF)
                     {
                         int numBytes = tok(tokens, 7).toInt();
                         if (numBytes < 0) numBytes = 0; //truncated line - parse fields as empty
@@ -1937,7 +1940,8 @@ bool FrameFileIO::loadPCANFile(QString filename, QVector<CANFrame>* frames)
                         QByteArray bytes(numBytes, 0);
                         //qDebug() << thisFrame.payload().length();
                         thisFrame.isReceived = true;
-                        thisFrame.bus = tok(tokens, 3).toInt();
+                        thisFrame.bus = tok(tokens, 3).toInt() - 1; // PCAN uses 1-based bus numbers
+                        if (thisFrame.bus < 0) thisFrame.bus = 0;
                         if ((thisFrame.frameId() > 0x10000000) || (tok(tokens, 4).length() >= 8))
                         {
                             thisFrame.setExtendedFrameFormat(true);
@@ -2136,7 +2140,8 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
                         }
                         QByteArray bytes(payloadLen, 0);
                         thisFrame.isReceived = tok(tokens, 3).toUpper().contains("RX");
-                        thisFrame.bus = tok(tokens, 2).toInt();
+                        thisFrame.bus = tok(tokens, 2).toInt() - 1; // CANalyzer channels are 1-based
+                        if (thisFrame.bus < 0) thisFrame.bus = 0;
 
                         if (tokAt(tokens, 5, 0) >= '0' && tokAt(tokens, 5, 0) <= '9')
                         {
@@ -2205,7 +2210,8 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
                         }
                         QByteArray bytes(payloadLen, 0);
                         thisFrame.isReceived = tok(tokens, 3).toUpper().contains("RX");
-                        thisFrame.bus = tok(tokens, 1).toInt();
+                        thisFrame.bus = tok(tokens, 1).toInt() - 1; // CANalyzer channels are 1-based
+                        if (thisFrame.bus < 0) thisFrame.bus = 0;
                         if (tok(tokens, 4) == "r") thisFrame.setFrameType(QCanBusFrame::RemoteRequestFrame);
                         for (int d = 6; d < (6 + payloadLen); d++)
                         {
@@ -2236,6 +2242,8 @@ bool FrameFileIO::loadCanalyzerASC(QString filename, QVector<CANFrame>* frames)
 
 bool FrameFileIO::saveCanalyzerASC(QString filename, const QVector<CANFrame>* frames)
 {
+    if (frames->isEmpty()) return false;
+
     QFile *outFile = new QFile(filename);
     int lineCounter = 0;
     int64_t offsetTime = frames->at(0).timeStamp().microSeconds();
@@ -2973,8 +2981,8 @@ bool FrameFileIO::loadLogFile(QString filename, QVector<CANFrame>* frames)
                 QList<QByteArray> timeToks = tok(tokens, 0).split(':');
                 if (timeToks.length() >= 4)
                 {
-                    uint64_t timeStamp = (tok(timeToks, 0).toUInt() * (1000ul * 1000ul * 60ul * 60ul)) + (tok(timeToks, 1).toUInt() * (1000ul * 1000ul * 60ul))
-                          + (tok(timeToks, 2).toUInt() * (1000ul * 1000ul)) + (tok(timeToks, 3).toUInt() * 100ul);
+                    uint64_t timeStamp = (tok(timeToks, 0).toUInt() * (1000ull * 1000ull * 60ull * 60ull)) + (tok(timeToks, 1).toUInt() * (1000ull * 1000ull * 60ull))
+                          + (tok(timeToks, 2).toUInt() * (1000ull * 1000ull)) + (tok(timeToks, 3).toUInt() * 100ull);
                     thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, timeStamp));
                     if (tokAt(tokens, 1, 0) == 'R') thisFrame.isReceived = true;
                         else thisFrame.isReceived = false;
@@ -2992,7 +3000,8 @@ bool FrameFileIO::loadLogFile(QString filename, QVector<CANFrame>* frames)
                         thisFrame.setExtendedFrameFormat(true);
                         thisFrame.setFrameType(QCanBusFrame::RemoteRequestFrame);
                     }
-                    thisFrame.bus = tok(tokens, 2).toInt();
+                    thisFrame.bus = tok(tokens, 2).toInt() - 1; // busmaster channel start at 1
+                    if (thisFrame.bus < 0) thisFrame.bus = 0;
 
                     int lng = tok(tokens, 5).toInt();
                     if (lng > 8) lng = 8;
@@ -3175,7 +3184,7 @@ bool FrameFileIO::loadIXXATFile(QString filename, QVector<CANFrame>* frames)
                 QStringList timeToks = timePortion.split(':');
                 if (timeToks.length() >= 3)
                 {
-                    timeStamp = (tok(timeToks, 0).toUInt() * (1000ul * 1000ul * 60ul * 60ul)) + (tok(timeToks, 1).toUInt() * (1000ul * 1000ul * 60ul))
+                    timeStamp = (tok(timeToks, 0).toUInt() * (1000ull * 1000ull * 60ull * 60ull)) + (tok(timeToks, 1).toUInt() * (1000ull * 1000ull * 60ull))
                       + static_cast<uint64_t>(tok(timeToks, 2).toDouble() * (1000.0 * 1000.0));
                 }
                 else
@@ -3225,6 +3234,8 @@ bool FrameFileIO::loadIXXATFile(QString filename, QVector<CANFrame>* frames)
 
 bool FrameFileIO::saveIXXATFile(QString filename, const QVector<CANFrame>* frames)
 {
+    if (frames->isEmpty()) return false;
+
     QFile *outFile = new QFile(filename);
     QDateTime timestamp, tempStamp;
     int lineCounter = 0;
@@ -3322,14 +3333,15 @@ bool FrameFileIO::isCANDOFile(QString filename)
                 break;
             }
 
-            int ID = ((data[3] & 0x0F) * 256 + data[2]);
-            int len = data[3] >> 4;
+            const unsigned char *uData = reinterpret_cast<const unsigned char *>(data.constData());
+            int ID = ((uData[3] & 0x0F) * 256 + uData[2]);
+            int len = uData[3] >> 4;
 
             if (len <= 8 && ID <= 0x7FF)
             {
                 if (len < 8)
                 {
-                    if (data[4 + len] != static_cast<char>(0xFF)) isMatch = false;
+                    if (uData[4 + len] != 0xFF) isMatch = false;
                 }
                 recordsSeen++;
             }
@@ -3396,6 +3408,7 @@ bool FrameFileIO::loadCANDOFile(QString filename, QVector<CANFrame>* frames)
         if (tempStamp < lastTimeStamp)
         {
             timeOffset += 60000000ul;
+            tempStamp += 60000000ul;
         }
         lastTimeStamp = tempStamp;
         thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, tempStamp));
@@ -3440,7 +3453,7 @@ bool FrameFileIO::saveCANDOFile(QString filename, const QVector<CANFrame>* frame
         return false;
     }
 
-    data.reserve(13);
+    data.resize(12); //each record is exactly 12 bytes. reserve() doesn't change size() so operator[] writes would be out of bounds in Qt 6
 
     //The initial frame in official files sets the global time but I don't care so it is set all zeros here.
     thisFrame = frames->at(0);
@@ -3593,7 +3606,7 @@ bool FrameFileIO::loadMicrochipFile(QString filename, QVector<CANFrame>* frames)
                     QList<QByteArray> tokens = line.split(';');
                     if (tokens.length() >= 4)
                     {
-                        timeStamp = tok(tokens, 0).toInt() * 1000;
+                        timeStamp = tok(tokens, 0).toLongLong() * 1000;
                         thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, timeStamp));
                         if (tokAt(tokens, 1, 0) == 'R') thisFrame.isReceived = true;
                             else thisFrame.isReceived = false;
@@ -3824,9 +3837,9 @@ bool FrameFileIO::loadTraceFile(QString filename, QVector<CANFrame>* frames)
                     QList<QByteArray> timestampToks = tok(tokens, 1).split(':');
                     
                     if (timestampToks.length() >= 4) {
-                        timeStamp = tok(timestampToks, 0).toInt() * 1000000l * 60 * 60;
-                        timeStamp += tok(timestampToks, 1).toInt() * 1000000l * 60;
-                        timeStamp += tok(timestampToks, 2).toInt() * 1000000l;
+                        timeStamp = tok(timestampToks, 0).toInt() * 1000000ll * 60 * 60;
+                        timeStamp += tok(timestampToks, 1).toInt() * 1000000ll * 60;
+                        timeStamp += tok(timestampToks, 2).toInt() * 1000000ll;
                         timeStamp += tok(timestampToks, 3).toInt() * 100;
                     } else {
                         timeStamp = 0; // Or whatever fallback
@@ -3834,7 +3847,7 @@ bool FrameFileIO::loadTraceFile(QString filename, QVector<CANFrame>* frames)
                         continue;
                     }
 
-                    thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint32_t>(timeStamp)));
+                    thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>(timeStamp)));
 
                     thisFrame.setFrameId(static_cast<uint32_t>(tok(tokens, 2).toLong(nullptr, 16)));
                     if (thisFrame.frameId() <= 0x7FF) thisFrame.setExtendedFrameFormat(false);
@@ -3921,12 +3934,12 @@ bool FrameFileIO::saveTraceFile(QString filename, const QVector<CANFrame> * fram
 
         tempTime = frame->timeStamp().microSeconds();
         tempTimePiece = static_cast<int>(tempTime / 1000000l / 60 / 60);
-        tempTime -= tempTimePiece * 1000000l * 60 * 60;
+        tempTime -= tempTimePiece * 1000000ll * 60 * 60;
         outFile->write(QString::number(tempTimePiece).rightJustified(2, '0').toUtf8());
         outFile->write(":");
 
         tempTimePiece = static_cast<int>(tempTime / 1000000l / 60);
-        tempTime -= tempTimePiece * 1000000l * 60;
+        tempTime -= tempTimePiece * 1000000ll * 60;
         outFile->write(QString::number(tempTimePiece).rightJustified(2, '0').toUtf8());
         outFile->write(":");
 
@@ -4108,7 +4121,7 @@ bool FrameFileIO::isCanDumpFile(QString filename)
                     QString val= IdValExpMatched.captured(2);
 
                     int len = 0;
-                    if (val.startsWith("R") && val.at(1).isDigit()) {
+                    if (val.startsWith("R") && val.length() > 1 && val.at(1).isDigit()) {
                         len = val.at(1).toLatin1() - '0';
                         if (len < 0 || len > 8)
                         {
@@ -4263,8 +4276,8 @@ bool FrameFileIO::loadCanDumpFile(QString filename, QVector<CANFrame>* frames)
                 QString val = IdValExpMatched.captured(2);
 
                 QByteArray bytes;
-                if (val.startsWith("R") && val.at(1).isDigit()) {
-                    thisFrame.payload().resize( val.at(1).toLatin1() - '0' );
+                if (val.startsWith("R")) {
+                    if (val.length() > 1 && val.at(1).isDigit()) bytes = QByteArray(val.at(1).toLatin1() - '0', 0);
                     thisFrame.setFrameType(QCanBusFrame::RemoteRequestFrame);
                 } else {
                     thisFrame.setFrameType(QCanBusFrame::DataFrame);
@@ -4283,8 +4296,8 @@ bool FrameFileIO::loadCanDumpFile(QString filename, QVector<CANFrame>* frames)
 
             /*NB: should we make sure len <= 8? */
             thisFrame.isReceived = true;
+            frames->append(thisFrame);
        }
-       frames->append(thisFrame);
     }
     inFile->close();
     delete inFile;
@@ -4592,7 +4605,10 @@ bool FrameFileIO::loadCabanaFile(QString filename, QVector<CANFrame>* frames)
             {
                 if (tok(tokens, 0).length() > 1)
                 {
-                    double temp = tok(tokens, 0).toDouble();
+                    QByteArray timeTok = tok(tokens, 0);
+                    //older SavvyCAN versions appended a bogus extra ".0" to the timestamp. Strip it so those files still load.
+                    if (timeTok.count('.') > 1) timeTok = timeTok.left(timeTok.lastIndexOf('.'));
+                    double temp = timeTok.toDouble();
                     temp = temp * 1000000;
 
                     if(!timeStampBaseSet)
@@ -4692,7 +4708,6 @@ bool FrameFileIO::saveCabanaFile(QString filename, const QVector<CANFrame>* fram
         tempTimeStamp /= 1000000;
 
         outFile->write(QString::number(tempTimeStamp, 'f').toUtf8());
-        outFile->write(".0");
         outFile->putChar(44);
 
         outFile->write(QString::number(frame->frameId(), 10).toUpper().toUtf8());
@@ -5209,11 +5224,11 @@ bool FrameFileIO::loadCLX000File(QString filename, QVector<CANFrame>* frames) {
 
             if (res.captured("day").length() > 0)
             {
-                currentTime = currentTime.addMonths(res.captured("day").toUInt() - startDate.date().day());
+                currentTime = currentTime.addDays(res.captured("day").toInt() - startDate.date().day());
             }
 
-            unsigned int seconds = res.captured("hours").toUInt() * 60 * 60 + res.captured("minutes").toUInt() * 60 +
-                    res.captured("seconds").toUInt() - (startDate.time().msecsSinceStartOfDay() / 1000);
+            int seconds = res.captured("hours").toInt() * 60 * 60 + res.captured("minutes").toInt() * 60 +
+                    res.captured("seconds").toInt() - (startDate.time().msecsSinceStartOfDay() / 1000);
 
             currentTime = currentTime.addSecs(seconds);
             currentTime = currentTime.addMSecs(res.captured("ms").toUInt() - (startDate.time().msecsSinceStartOfDay() % 1000));

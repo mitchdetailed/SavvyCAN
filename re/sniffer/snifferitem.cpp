@@ -8,6 +8,7 @@ SnifferItem::SnifferItem(const CANFrame& pFrame, quint32 seq):
 {
     const unsigned char *data = reinterpret_cast<const unsigned char *>(pFrame.payload().constData());
     int dataLen = pFrame.payload().length();
+    if (dataLen > 8) dataLen = 8; //storage and the sniffer view are fixed at 8 bytes; CAN-FD frames carry up to 64
 
     for (int i = 0; i < dataLen; i++) {
         mNotch[i] = 0;
@@ -119,6 +120,7 @@ void SnifferItem::update(const CANFrame& pFrame, quint32 timeSeq, bool mute)
 
     const unsigned char *data = reinterpret_cast<const unsigned char *>(pFrame.payload().constData());
     int dataLen = pFrame.payload().length();
+    if (dataLen > 8) dataLen = 8; //storage and the sniffer view are fixed at 8 bytes; CAN-FD frames carry up to 64
 
     /* copy new value */
     for (int i = 0; i < dataLen; i++)

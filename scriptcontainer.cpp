@@ -21,8 +21,13 @@ ScriptContainer::~ScriptContainer()
     disconnect(&timer, SIGNAL(timeout()), this, SLOT(tick()));
     if (scriptEngine)
     {
-        scriptText = "";
-        compileScript();
+        //clear any filters the script registered so the helpers are deregistered
+        //from the connections before they get destroyed. Don't call compileScript()
+        //here - the old script's setup() would run again and re-register filters
+        //on helpers that are about to be deleted (use-after-free).
+        if (canHelper) canHelper->clearFilters();
+        if (isoHelper) isoHelper->clearFilters();
+        if (udsHelper) udsHelper->clearFilters();
         scriptEngine->deleteLater();
         scriptEngine = nullptr;
     }

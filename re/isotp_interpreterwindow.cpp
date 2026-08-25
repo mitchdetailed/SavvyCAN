@@ -283,7 +283,14 @@ void ISOTP_InterpreterWindow::showDetailView()
     ui->txtFrameDetails->clear();
     if (rowNum == -1) return;
 
-    msg = &messages[rowNum];
+    //sorting rearranges the table rows but not the messages list so use the
+    //index stored with the row instead of the visual row number
+    QTableWidgetItem *rowItem = ui->tableIsoFrames->item(rowNum, 0);
+    if (!rowItem) return;
+    int msgIdx = rowItem->data(Qt::UserRole).toInt();
+    if (msgIdx < 0 || msgIdx >= messages.count()) return;
+
+    msg = &messages[msgIdx];
 
     const unsigned char *data = reinterpret_cast<const unsigned char *>(msg->payload().constData());
     int dataLen = msg->payload().length();
@@ -307,7 +314,7 @@ void ISOTP_InterpreterWindow::showDetailView()
     ui->txtFrameDetails->setPlainText(buildString);
 
     //pass this frame to the UDS decoder to see if it feels it could be a UDS related message
-    udsDecoder->gotISOTPFrame(messages[rowNum]);
+    udsDecoder->gotISOTPFrame(messages[msgIdx]);
 }
 
 void ISOTP_InterpreterWindow::newUDSMessage(UDS_MESSAGE msg)
@@ -347,6 +354,7 @@ void ISOTP_InterpreterWindow::newISOMessage(ISOTP_MESSAGE msg)
 
     QTableWidgetItem *item = new QTableWidgetItem;
     item->setData(Qt::EditRole, Utility::formatTimestamp(msg.timeStamp().microSeconds()));
+    item->setData(Qt::UserRole, messages.count() - 1); //track which messages entry this row belongs to even if the table gets sorted
     //ui->tableIsoFrames->setItem(rowNum, 0, (double)msg.timestamp, Utility::formatTimestamp(msg.timestamp)));
     ui->tableIsoFrames->setItem(rowNum, 0, item);
     ui->tableIsoFrames->setItem(rowNum, 1, new QTableWidgetItem(QString::number(msg.frameId(), 16)));

@@ -188,7 +188,7 @@ void GVRetSerial::piSetBusSettings(int pBusIdx, CANBus bus)
 
     if (pBusIdx < 2) {
         /* update baud rates */
-        QByteArray buffer;
+        QByteArray buffer(11, 0); //Qt 6: operator[] no longer grows the array, so size it up front
         sendDebug("Got signal to update bauds. 1: " + QString::number((can0Baud & 0xFFFFFFF)) + " 2: " + QString::number((can1Baud & 0xFFFFFFF)));
         buffer[0] = (char)0xF1; //start of a command over serial
         buffer[1] = 5; //setup canbus
@@ -206,7 +206,7 @@ void GVRetSerial::piSetBusSettings(int pBusIdx, CANBus bus)
     else
     {
         /* update baud rates */
-        QByteArray buffer;
+        QByteArray buffer(15, 0); //Qt 6: operator[] no longer grows the array, so size it up front
         sendDebug("Got signal to update extended bus speeds SWCAN: " + QString::number(swcanBaud) + " LIN1: " + QString::number(lin1Baud) + " LIN2: " + QString::number(lin2Baud));
         buffer[0] = (char)0xF1; //start of a command over serial
         buffer[1] = 14; //setup extended buses
@@ -252,6 +252,7 @@ bool GVRetSerial::piSendFrame(const CANFrame& frame)
     ID = frame.frameId();
     if (frame.hasExtendedFrameFormat()) ID |= 1u << 31;
 
+    buffer.resize(9 + frame.payload().length()); //Qt 6: operator[] no longer grows the array
     buffer[0] = (char)0xF1; //start of a command over serial
     buffer[1] = 0; //command ID for sending a CANBUS frame
     buffer[2] = (char)(ID & 0xFF); //four bytes of ID LSB first
@@ -298,6 +299,10 @@ void GVRetSerial::connectDevice()
         disconnectDevice();
     if (udpClient)
         disconnectDevice();
+
+    //reset the comm parser in case a previous connection left it mid-frame or in a stuck state
+    rx_state = IDLE;
+    rx_step = 0;
 
     /* open new device */
 
@@ -628,6 +633,7 @@ void GVRetSerial::procRXChar(unsigned char c)
             break;
         case 3: //process a return reply for analog inputs
             rx_state = GET_ANALOG_INPUTS;
+            rx_step = 0;
             break;
         case 4: //we set digital outputs we don't accept replies so nothing here.
             rx_state = IDLE;
@@ -714,6 +720,28 @@ void GVRetSerial::procRXChar(unsigned char c)
         case 8:
             buildData.resize(c & 0xF);
             buildFrame.bus = (c & 0xF0) >> 4;
+            if (buildData.length() == 0) //DLC 0 frame - no data bytes will follow so immediately process the frame
+            {
+                rx_state = IDLE;
+                rx_step = 0;
+                buildFrame.isReceived = true;
+                buildFrame.setPayload(buildData);
+                buildFrame.setFrameType(QCanBusFrame::FrameType::DataFrame);
+                if (!isCapSuspended())
+                {
+                    /* get frame from queue */
+                    CANFrame* frame_p = getQueue().get();
+                    if(frame_p) {
+                        /* copy frame */
+                        *frame_p = buildFrame;
+                        checkTargettedFrame(buildFrame);
+                        /* enqueue frame */
+                        getQueue().queue();
+                    }
+                    else
+                        qDebug() << "can't get a frame, ERROR";
+                }
+            }
             break;
         default:
             if (rx_step < buildData.length() + 9)
@@ -802,6 +830,28 @@ void GVRetSerial::procRXChar(unsigned char c)
             break;
         case 9:
             buildFrame.bus = c;
+            if (buildData.length() == 0) //DLC 0 frame - no data bytes will follow so immediately process the frame
+            {
+                rx_state = IDLE;
+                rx_step = 0;
+                buildFrame.isReceived = true;
+                buildFrame.setPayload(buildData);
+                buildFrame.setFrameType(QCanBusFrame::FrameType::DataFrame);
+                if (!isCapSuspended())
+                {
+                    /* get frame from queue */
+                    CANFrame* frame_p = getQueue().get();
+                    if(frame_p) {
+                        /* copy frame */
+                        *frame_p = buildFrame;
+                        checkTargettedFrame(buildFrame);
+                        /* enqueue frame */
+                        getQueue().queue();
+                    }
+                    else
+                        qDebug() << "can't get a frame, ERROR";
+                }
+            }
             break;
         default:
             if (rx_step < buildData.length() + 10)
@@ -869,7 +919,8 @@ void GVRetSerial::procRXChar(unsigned char c)
     case GET_ANALOG_INPUTS: //get 9 bytes - 2 per analog input plus checksum
         switch (rx_step)
         {
-        case 0:
+        case 8: //that was the last of the 9 bytes so go back to IDLE
+            rx_state = IDLE;
             break;
         }
         rx_step++;
@@ -997,6 +1048,9 @@ void GVRetSerial::procRXChar(unsigned char c)
     case GET_NUM_BUSES:
         oldBuses = mNumBuses;
         mNumBuses = c;
+        //a reply of 0 (buggy firmware or desynced stream) would empty mBusData and later
+        //replies such as GET_CANBUS_PARAMS index mBusData[0] unconditionally, so clamp it
+        if (mNumBuses < 1) mNumBuses = 1;
         rx_state = IDLE;
         qDebug() << "Get number of buses = " << mNumBuses;
         stats.conStatus = getStatus();
@@ -1018,6 +1072,8 @@ void GVRetSerial::procRXChar(unsigned char c)
         emit status(stats);
         break;
     case GET_FD_SETTINGS:
+        //we don't parse this reply so go back to IDLE instead of eating every subsequent byte
+        rx_state = IDLE;
         break;
     case GET_EXT_BUSES:
         switch (rx_step)

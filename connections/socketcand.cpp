@@ -228,18 +228,20 @@ void SocketCANd::deviceConnected(int busNum)
 
 void SocketCANd::checkConnection()
 {
-    int bufSize = 0;
+    //only reconnect if one of the sockets actually dropped - a quiet bus is not an error
+    bool connectionLost = false;
     for (int i = 0; i < tcpClient.length(); i++)
     {
-        bufSize += tcpClient[i]->readBufferSize();
-        //sendDebug("Buffer size: " + QString::number(bufSize));
+        if (!tcpClient[i] || tcpClient[i]->state() != QAbstractSocket::ConnectedState)
+            connectionLost = true;
     }
 
-    if (bufSize == 0)
+    if (connectionLost)
     {
         reconnecting = true;
         connectDevice();
         sendDebug("Reconnecting to TCP Host " + hostIP.toString());
+        reconnecting = false;
     }
 }
 

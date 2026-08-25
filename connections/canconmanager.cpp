@@ -183,11 +183,6 @@ void CANConManager::refreshConnection(CANConnection* pConn_p)
         emit connectionStatusUpdated(buses);
     }
 
-    if (pConn_p->getQueue().peek() == nullptr) return;
-
-    CANFrame* frame_p = nullptr;
-    QVector<CANFrame> frames;
-
     //Each connection only knows about its own bus numbers
     //so this variable is used to fix that up to turn local bus numbers
     //into system global bus numbers for display.
@@ -200,6 +195,15 @@ void CANConManager::refreshConnection(CANConnection* pConn_p)
     }
 
     //qDebug() << "Bus fixup number: " << busBase;
+
+    //keep the connection's copy of its global bus offset current so its worker thread
+    //can translate local bus numbers to global ones (checkTargettedFrame)
+    pConn_p->setBusBase(busBase);
+
+    if (pConn_p->getQueue().peek() == nullptr) return;
+
+    CANFrame* frame_p = nullptr;
+    QVector<CANFrame> frames;
 
     while( (frame_p = pConn_p->getQueue().peek() ) ) {
         frame_p->bus += busBase;
@@ -402,7 +406,7 @@ bool CANConManager::addTargettedFrame(int pBusId, uint32_t ID, uint32_t mask, QO
         {
             qDebug() << "Forwarding targetted frame setting to a connection object";
             conn->addTargettedFrame(pBusId - busBase, ID, mask, receiver);
-
+            return true; //only one connection owns this bus so we're done
         }
         busBase += conn->getNumBuses();
     }
@@ -421,7 +425,7 @@ bool CANConManager::removeTargettedFrame(int pBusId, uint32_t ID, uint32_t mask,
         {
             qDebug() << "Forwarding targetted frame setting to a connection object";
             conn->removeTargettedFrame(pBusId - busBase, ID, mask, receiver);
-
+            return true; //only one connection owns this bus so we're done
         }
         busBase += conn->getNumBuses();
     }

@@ -67,6 +67,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
     settingsDialog = new MainSettingsDialog(); //instantiate the settings dialog so it can initialize settings if this is the first run or the config file was deleted.
     settingsDialog->updateSettings(); //write out all the settings. If this is the first run it'll write defaults out.
+    delete settingsDialog; //only needed it to seed the settings - showSettingsDialog creates the real one on demand
 
     readSettings();
 
@@ -580,7 +581,7 @@ void MainWindow::processSenderCellChange(int line, int col)
         if (tempData->frameId() > 0x7FF) {
             tempData->setExtendedFrameFormat(true);
             ui->tableSimpleSender->blockSignals(true);
-            ui->tableSimpleSender->item(line, ST_COLS::SENDTAB_COL_EXT)->setCheckState(Qt::Checked);
+            ui->tableSimpleSender->item(line, SIMP_COL::SC_COL_EXT)->setCheckState(Qt::Checked);
             ui->tableSimpleSender->blockSignals(false);
         }
         qDebug() << "setting ID to " << tempVal;

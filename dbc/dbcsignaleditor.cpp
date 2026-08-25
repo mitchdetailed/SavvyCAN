@@ -160,6 +160,7 @@ DBCSignalEditor::DBCSignalEditor(QWidget *parent) :
                         if (dbcMessage)
                         {
                             int maxBit = ((dbcMessage->len * 8) - 64 + 7);
+                            if (maxBit < 0) maxBit = 0;
                             if (currentSignal->startBit > maxBit) currentSignal->startBit = maxBit;
                         }
                         else currentSignal->startBit = 7; //has to be!
@@ -473,6 +474,7 @@ DBCSignalEditor::DBCSignalEditor(QWidget *parent) :
                     dbcFile->setDirtyFlag();
                     oldParent->multiplexedChildren.removeOne(currentSignal);
                     currentSignal->multiplexParent = newSig;
+                    currentSignal->multiplexParentName = newSig->name;
                     newSig->multiplexedChildren.append(currentSignal);
                     refreshBitGrid();
                     emit updatedTreeInfo(currentSignal);
@@ -523,10 +525,17 @@ void DBCSignalEditor::setFileIdx(int idx)
     if (idx < 0 || idx > dbcHandler->getFileCount() - 1) return;
     dbcFile = dbcHandler->getFileByIdx(idx);
 
+    //undo entries reference signal storage from whatever was edited before, which may be gone by now
+    undoBuffer.clear();
+
+    //rebuilding the combo fires currentTextChanged so keep the handler from touching the signal
+    inhibitMsgProc = true;
+    ui->comboReceiver->clear();
     for (int x = 0; x < dbcFile->dbc_nodes.size(); x++)
     {
         ui->comboReceiver->addItem(dbcFile->dbc_nodes[x].name);
     }
+    inhibitMsgProc = false;
 }
 
 void DBCSignalEditor::readSettings()
@@ -620,7 +629,8 @@ void DBCSignalEditor::onCustomMenuValues(QPoint point)
 void DBCSignalEditor::deleteCurrentValue()
 {
     int currIdx = ui->valuesTable->currentRow();
-    if (currIdx > -1)
+    //the table always has one trailing blank row past the end of valList so bounds check against the list
+    if (currIdx > -1 && currIdx < currentSignal->valList.count())
     {
         ui->valuesTable->removeRow(currIdx);
         currentSignal->valList.removeAt(currIdx);
@@ -1113,12 +1123,16 @@ void DBCSignalEditor::generateUsedBits()
             if (!sig->multiplexesIdenticalToSignal(currentSignal)) continue; //buzz off
         }
         startBit = sig->startBit;
+        //the DBC parser doesn't bound the start bit so clamp it to the 64 byte grid before indexing usedBits
+        if (startBit < 0) startBit = 0;
+        if (startBit > 511) startBit = 511;
 
         if (sig->intelByteOrder)
         {
             endBit = startBit + sig->signalSize - 1;
-            if (startBit < 0) startBit = 0;
             int maxBit = (dbcMessage->len * 8) - 1;
+            //the message length isn't bounded by the parser either so keep the end inside the grid
+            if (maxBit > 511) maxBit = 511;
             if (endBit > maxBit) endBit = maxBit;
             for (int y = startBit; y <= endBit; y++)
             {
@@ -1140,6 +1154,9 @@ void DBCSignalEditor::generateUsedBits()
                 if ((startBit % 8) == 0) startBit += 15;
                 else startBit--;
                 int maxBit = (dbcMessage->len * 8) - 1;
+                //the message length isn't bounded by the parser either so keep the walk inside the grid
+                if (maxBit < 0) maxBit = 0;
+                if (maxBit > 511) maxBit = 511;
                 if (startBit > maxBit) startBit = maxBit;
             }
         }
@@ -1173,6 +1190,26 @@ void DBCSignalEditor::popFromUndoBuffer()
     qDebug() << "Popping undo buffer";
     DBC_SIGNAL sig = undoBuffer.back();
     undoBuffer.pop_back();
+    //the stored pointer aims into the message's signal list which can have been reallocated
+    //(adding a signal) or freed since the push, so only write through it if it still refers
+    //to a live signal of this message
+    bool stillLive = false;
+    if (dbcMessage && dbcMessage->sigHandler)
+    {
+        for (int i = 0; i < dbcMessage->sigHandler->getCount(); i++)
+        {
+            if (dbcMessage->sigHandler->findSignalByIdx(i) == sig.self)
+            {
+                stillLive = true;
+                break;
+            }
+        }
+    }
+    if (!stillLive)
+    {
+        qDebug() << "Undo entry references a signal that no longer exists. Discarding it.";
+        return;
+    }
     currentSignal = sig.self; //restore the pointer
     *currentSignal = sig; //write the contents into the memory pointed to
 

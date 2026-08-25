@@ -25,6 +25,9 @@ TriggerDialog::TriggerDialog(QList<Trigger> trigs, QWidget *parent) :
         trig.sigValueDbl = 0.0;
         trig.sigValueInt = 0;
         trig.triggerMask = TriggerMask::TRG_MS;
+        trig.currCount = 0;
+        trig.msCounter = 0;
+        trig.readyCount = true;
         triggers.append(trig);
     }
     lastMsgID = 0xFFFFFFFF;
@@ -170,7 +173,11 @@ void TriggerDialog::regenerateCurrentListItem()
     trig.milliseconds = 0;
     trig.sigName = "";
     trig.sigValueDbl = 0.0;
+    trig.sigValueInt = 0;
     trig.triggerMask = 0;
+    trig.currCount = 0;
+    trig.msCounter = 0;
+    trig.readyCount = true;
 
     if (ui->cbMsgID->isChecked() && ui->cmMsgID->currentText().length() > 0)
     {
@@ -179,6 +186,7 @@ void TriggerDialog::regenerateCurrentListItem()
             .replace("0x", "")
             .split("(")[0]
             .toInt(nullptr, 16);
+        trig.readyCount = false; //won't try counting until trigger hits - matches processTriggerText
         if (trig.ID != lastMsgID)
         {
             lastMsgID = trig.ID;
@@ -341,6 +349,9 @@ void TriggerDialog::addNewTrigger()
     newTrig.sigValueDbl = 0.0;
     newTrig.sigValueInt = 0;
     newTrig.triggerMask = TriggerMask::TRG_MS;
+    newTrig.currCount = 0;
+    newTrig.msCounter = 0;
+    newTrig.readyCount = true;
     triggers.append(newTrig);
     ui->listTriggers->addItem(buildEntry(newTrig));
 }

@@ -54,6 +54,14 @@ public:
     int getNumBuses() const;
 
     /**
+     * @brief setBusBase
+     * @param pBusBase: the system global bus number of this connection's first bus
+     * @note kept current by CANConManager so that worker side code can translate
+     * connection local bus numbers into system global ones
+     */
+    void setBusBase(int pBusBase);
+
+    /**
      * @brief getserialSpeed
      * @return returns the serial speed of the device
      */
@@ -330,6 +338,10 @@ private:
     QAtomicInt          mStatus;
     bool                mStarted;
     QThread*            mThread_p;
+    /* system global bus number of this connection's first bus, kept current by CANConManager.
+     * Atomic because the GUI thread updates it while the worker thread reads it in
+     * checkTargettedFrame for every received frame */
+    QAtomicInt          mBusBase;
     /* guards mTargettedFrames in mBusData: the GUI thread registers/removes filters while
      * the worker thread walks the list in checkTargettedFrame for every received frame */
     QMutex              mTargettedFramesMutex;

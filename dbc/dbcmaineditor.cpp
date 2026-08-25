@@ -308,6 +308,7 @@ void DBCMainEditor::onTreeDoubleClicked(const QModelIndex &index)
 void DBCMainEditor::onTreeContextMenu(const QPoint & pos)
 {
     QTreeWidgetItem* firstCol = ui->treeDBC->currentItem();
+    if (!firstCol) return; //nothing selected!
     QString idString;
 
     qDebug() << firstCol->data(0, Qt::UserRole) << " - " << firstCol->text(0);
@@ -676,10 +677,12 @@ void DBCMainEditor::copyMessageToNode(DBC_NODE *parentNode, DBC_MESSAGE *source,
         sig.max = sigSource->max;
         sig.min = sigSource->min;
         sig.copyMultiplexValuesFromSignal(*sigSource);
+        sig.isMultiplexed = false; //copyMultiplexValuesFromSignal restores the source's flag so force it back off
         sig.factor = sigSource->factor;
         sig.intelByteOrder = sigSource->intelByteOrder;
         sig.parentMessage = &msg;
         sig.multiplexParent = nullptr;  //need to learn about multiplexed signals and track them when copying
+        sig.multiplexParentName.clear();
         sig.receiver = node;
         sig.signalSize = sigSource->signalSize;
         sig.startBit = sigSource->startBit;
@@ -707,8 +710,8 @@ void DBCMainEditor::newMessage()
     QTreeWidgetItem *nodeItem = nullptr;
     QTreeWidgetItem *msgItem = nullptr;
     nodeItem = ui->treeDBC->currentItem();
-    int typ = nodeItem->data(0, Qt::UserRole).toInt();
     if (!nodeItem) return; //nothing selected!
+    int typ = nodeItem->data(0, Qt::UserRole).toInt();
     if (typ == DBCItemTypes::MESG)
     {
         msgItem = nodeItem;
@@ -837,6 +840,7 @@ void DBCMainEditor::newSignal()
 void DBCMainEditor::deleteCurrentTreeItem()
 {
     QTreeWidgetItem *currItem = ui->treeDBC->currentItem();
+    if (!currItem) return; //nothing selected!
     int typ = currItem->data(0, Qt::UserRole).toInt();
     QString idString, columnText;
     int msgID;

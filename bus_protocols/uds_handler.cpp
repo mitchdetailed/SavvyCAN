@@ -219,13 +219,17 @@ UDS_MESSAGE UDS_HANDLER::tryISOtoUDS(ISOTP_MESSAGE msg, bool *result)
                 *result = false;
                 return udsMsg;
             };
-            udsMsg.payload().remove(0, 2);
+            QByteArray strippedPayload = udsMsg.payload();
+            strippedPayload.remove(0, 2);
+            udsMsg.setPayload(strippedPayload);
         }
         else
         {
             udsMsg.isErrorReply = false;
             if (dataLen > 1) udsMsg.subFunc = data[1];
-            udsMsg.payload().remove(0, 1);
+            QByteArray strippedPayload = udsMsg.payload();
+            strippedPayload.remove(0, 1);
+            udsMsg.setPayload(strippedPayload);
         }
     }
     else
@@ -315,7 +319,7 @@ QString UDS_HANDLER::getServiceShortDesc(int service)
     QString ret;
     ret = getShortDesc(UDS_SERVICE_DESC, service);
     if (ret.length() == 0)
-        ret = getShortDesc(UDS_SERVICE_DESC, service + 0x40);
+        ret = getShortDesc(UDS_SERVICE_DESC, service - 0x40);
     return ret;
 }
 
@@ -324,7 +328,7 @@ QString UDS_HANDLER::getServiceLongDesc(int service)
     QString ret;
     ret = getLongDesc(UDS_SERVICE_DESC, service);
     if (ret.length() == 0)
-        ret = getLongDesc(UDS_SERVICE_DESC, service + 0x40);
+        ret = getLongDesc(UDS_SERVICE_DESC, service - 0x40);
     return ret;
 }
 

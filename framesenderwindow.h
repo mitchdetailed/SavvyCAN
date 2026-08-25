@@ -71,7 +71,7 @@ private:
     void parseOperandString(QStringList tokens, ModifierOperand&);
     ModifierOperationType parseOperation(QString);
     void saveSenderFile(QString filename);
-    void loadSenderFile(QString filename);
+    bool loadSenderFile(QString filename);
     void updateGridRow(int idx);
     void processCellChange(int line, int col);
     void buildFrameCache();

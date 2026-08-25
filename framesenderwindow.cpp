@@ -354,14 +354,14 @@ void FrameSenderWindow::loadGrid()
 
         if (dialog.selectedNameFilter() == filters[0])
         {
-            loadSenderFile(filename);
+            if (loadSenderFile(filename))
+            {
+                createBlankRow();
+                setupGrid();
+            }
             settings.setValue("FrameSender/LoadSaveDirectory", dialog.directory().path());
         }
     }
-
-    createBlankRow();
-
-    setupGrid();
 }
 
 void FrameSenderWindow::saveSenderFile(QString filename)
@@ -405,7 +405,7 @@ void FrameSenderWindow::saveSenderFile(QString filename)
     delete outFile;
 }
 
-void FrameSenderWindow::loadSenderFile(QString filename)
+bool FrameSenderWindow::loadSenderFile(QString filename)
 {
     QFile *inFile = new QFile(filename);
     QByteArray line;
@@ -413,7 +413,7 @@ void FrameSenderWindow::loadSenderFile(QString filename)
     if (!inFile->open(QIODevice::ReadOnly | QIODevice::Text))
     {
         delete inFile;
-        return;
+        return false;
     }
 
     ui->tableSender->clear();
@@ -474,6 +474,7 @@ void FrameSenderWindow::loadSenderFile(QString filename)
     }
     inFile->close();
     delete inFile;
+    return true;
 }
 
 void FrameSenderWindow::onCellDoubleTap(int row, int column)

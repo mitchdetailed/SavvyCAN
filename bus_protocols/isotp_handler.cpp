@@ -195,7 +195,8 @@ void ISOTP_HANDLER::processFrame(const CANFrame &frame)
         msg.bus = frame.bus;
         msg.setFrameType(QCanBusFrame::FrameType::DataFrame);
         msg.setExtendedFrameFormat( frame.hasExtendedFrameFormat() );
-        msg.setFrameId(ID);
+        if (ID <= 0x1FFFFFFF) msg.setFrameId(ID);
+        else msg.setFrameId(frame.frameId()); //composed extended addressing ID won't fit in a frame ID so keep the original
         msg.isReceived = frame.isReceived;
         dataBytes.reserve(frameLen);
         msg.reportedLength = frameLen;
@@ -226,7 +227,8 @@ void ISOTP_HANDLER::processFrame(const CANFrame &frame)
         msg.bus = frame.bus;
         if (frame.payload().size() < 8) return; //MUST have all 8 data bytes in this first frame.
         msg.setExtendedFrameFormat( frame.hasExtendedFrameFormat() );
-        msg.setFrameId(ID);
+        if (ID <= 0x1FFFFFFF) msg.setFrameId(ID);
+        else msg.setFrameId(frame.frameId()); //composed extended addressing ID won't fit in a frame ID so keep the original
         msg.setTimeStamp(frame.timeStamp());
         msg.isReceived = frame.isReceived;
         msg.isMultiframe = true;
@@ -249,7 +251,7 @@ void ISOTP_HANDLER::processFrame(const CANFrame &frame)
         }
         msg.lastSequence = -1;
         msg.setPayload(dataBytes);
-        messageBuffer.insert(msg.frameId(), msg);
+        messageBuffer.insert(ID, msg);
         //The sending ID is set to the last ID we used to send from this class which is
         //very likely to be correct. But, caution, there is a chance that it isn't. Beware.
         if (issueFlowMsgs && lastSenderID > 0 && lastSenderBus==static_cast<uint32_t>(frame.bus))
@@ -296,7 +298,7 @@ void ISOTP_HANDLER::processFrame(const CANFrame &frame)
         if (pMsg->reportedLength <= pMsg->payload().size())
         {
             qDebug() << "Emitting multiframe ISOTP message";
-            checkNeedFlush(pMsg->frameId());
+            checkNeedFlush(ID);
         }
         break;
     case 3: //flow control messages

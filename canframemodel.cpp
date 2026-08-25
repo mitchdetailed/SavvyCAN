@@ -288,7 +288,7 @@ uint64_t CANFrameModel::getCANFrameVal(const QVector<CANFrame> *frames, int row,
         return static_cast<uint64_t>(frame.payload().length());
     case Column::ASCII: //sort both the same for now
     case Column::Data:
-        for (int i = 0; i < std::min(static_cast<int>(frame.payload().length()), 8); i++) temp += (static_cast<uint64_t>(frame.payload()[i]) << (56 - (8 * i)));
+        for (int i = 0; i < std::min(static_cast<int>(frame.payload().length()), 8); i++) temp += (static_cast<uint64_t>(static_cast<unsigned char>(frame.payload()[i])) << (56 - (8 * i)));
         //qDebug() << temp;
         return temp;
     case Column::NUM_COLUMN:
@@ -1001,7 +1001,8 @@ void CANFrameModel::loadFilterFile(QString filename)
         return;
 
     filters.clear();
-    busFilters.clear();
+    //do not touch busFilters here - the filter file only stores ID filters, so
+    //clearing the bus filters would leave every bus disabled after the refresh
 
     while (!inFile.atEnd()) {
         line = inFile.readLine().simplified();
