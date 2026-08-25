@@ -9,7 +9,7 @@
 ; path, and the two paths share one script.
 
 #define MyAppName      "SavvyCAN"
-#define MyAppVersion   "222"
+#define MyAppVersion   "223.1"
 #define MyAppPublisher "SavvyCAN Project"
 #define MyAppURL       "https://github.com/mitchdetailed/SavvyCAN"
 #define MyAppExeName   "SavvyCAN.exe"
@@ -33,7 +33,8 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
-VersionInfoVersion=1.0.{#MyAppVersion}.0
+; Windows version resources need four numeric parts, so "223.1" becomes 223.1.0.0
+VersionInfoVersion=223.1.0.0
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes

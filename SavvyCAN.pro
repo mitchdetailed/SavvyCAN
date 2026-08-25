@@ -20,6 +20,11 @@ DEFINES += QCUSTOMPLOT_USE_OPENGL
 TARGET = SavvyCAN
 TEMPLATE = app
 
+#Keep in sync with VERSION in config.h and MyAppVersion in installer/SavvyCAN_setup.iss.
+#On Windows qmake writes this into the generated resource file, so the exe's
+#file-properties version metadata comes from here.
+VERSION = 223.1
+
 QMAKE_INFO_PLIST = Info.plist.template
 ICON = icons/SavvyIcon.icns
 
