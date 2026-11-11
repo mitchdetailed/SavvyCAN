@@ -65,7 +65,9 @@ if (-not $SkipBuild) {
         & $QMake (Join-Path $RepoRoot 'SavvyCAN.pro') -spec win32-g++ 'CONFIG+=release'
         if ($LASTEXITCODE -ne 0) { throw "qmake failed ($LASTEXITCODE)" }
 
-        & $MakeExe -j$env:NUMBER_OF_PROCESSORS release
+        # Quoted on purpose: Windows PowerShell 5.1 passes an unquoted argument
+        # that starts with '-' through literally, without expanding the variable.
+        & $MakeExe "-j$env:NUMBER_OF_PROCESSORS" release
         if ($LASTEXITCODE -ne 0) { throw "make failed ($LASTEXITCODE)" }
     }
     finally { Pop-Location }
