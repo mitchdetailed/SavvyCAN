@@ -103,6 +103,7 @@ QVariant CANConnectionModel::data(const QModelIndex &index, int role) const
                         case CANCon::ISCAN: return "isCAN";
                         case CANCon::NICAN: return "NI-CAN";
                         case CANCon::NEOUSYS: return "Neousys";
+                        case CANCon::CANTRIPLE: return "CAN Triple";
                         default: {}
                     }
                 else qDebug() << "Tried to show connection type but connection was nullptr";

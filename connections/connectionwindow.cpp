@@ -18,6 +18,13 @@
 #include "ui_connectionwindow.h"
 #include "connections/canconfactory.h"
 #include "connections/canconmanager.h"
+
+/* Devices whose buses can be switched on one at a time and carry their own terminator, which gets
+ * Bus Details its Bus Enabled and Termination boxes. Only the CAN Triple so far. */
+static bool hasBusExtras(CANConnection *conn_p)
+{
+    return conn_p && conn_p->getType() == CANCon::CANTRIPLE;
+}
 #include "canbus.h"
 #include <QSettings>
 #include <connections/newconnectiondialog.h>
@@ -348,6 +355,7 @@ void ConnectionWindow::handleNewConn()
                 if (newDataRate > 0) bus.setDataRate(newDataRate);
                 bus.setCanFD(newCanFd);
                 bus.setListenOnly(thisDialog->isListenOnly());
+                bus.setTermination(thisDialog->isTermination());
                 //a device the user has just asked for should come up running
                 bus.setActive(true);
                 conn->setBusSettings(0, bus);
@@ -536,6 +544,13 @@ void ConnectionWindow::saveBusSettings()
         bus.setListenOnly(ui->ckListenOnly->isChecked());
         bus.setCanFD(ui->canFDEnable->isChecked());
         bus.setDataRate(ui->cbDataRate->currentText().toInt());
+        if (hasBusExtras(conn_p))
+        {
+            bus.setTermination(ui->ckTermination->isChecked());
+            /* Only while the device as a whole is switched on - the box is greyed out otherwise -
+             * so the row's Activate button and the buses underneath it can't disagree. */
+            if (connModel->isConnActive(selIdx)) bus.setActive(ui->ckBusEnabled->isChecked());
+        }
         conn_p->setBusSettings(offset, bus);
     }
 }
@@ -558,6 +573,8 @@ void ConnectionWindow::updateBusHealth()
         ui->lblHealthCounts->setText("-");
         ui->lblHealthErrors->setText("-");
         ui->lblHealthErrors->setStyleSheet("");
+        ui->lblHealthController->setText("-");
+        ui->lblHealthController->setStyleSheet("");
         return;
     }
 
@@ -583,6 +600,26 @@ void ConnectionWindow::updateBusHealth()
     ui->lblHealthErrors->setText(QString::number(stats.errorFrames));
     //make error frames stand out, they are the thing worth noticing here
     ui->lblHealthErrors->setStyleSheet(stats.errorFrames > 0 ? "color: red; font-weight: bold;" : "");
+
+    /* What the controller itself says, for the drivers whose hardware reports it. Everything above
+     * is worked out from traffic; this is the only place error counters and dropped frames show. */
+    CANControllerState ctl;
+    if (conn_p->getControllerState(localBus, ctl))
+    {
+        QString text = QString("%1, TEC %2 / REC %3").arg(ctl.state).arg(ctl.txErrorCount).arg(ctl.rxErrorCount);
+        if (ctl.busErrors) text += QString(", %1 bus errors").arg(ctl.busErrors);
+        const uint64_t lost = ctl.rxOverruns + ctl.txRefused + ctl.linkDrops;
+        if (lost) text += QString(", lost %1 rx / %2 tx / %3 link").arg(ctl.rxOverruns).arg(ctl.txRefused).arg(ctl.linkDrops);
+        if (!ctl.note.isEmpty()) text += " - " + ctl.note;
+        ui->lblHealthController->setText(text);
+        const bool bad = ctl.state != "Error Active" && ctl.state != "Off";
+        ui->lblHealthController->setStyleSheet((bad || lost) ? "color: red; font-weight: bold;" : "");
+    }
+    else
+    {
+        ui->lblHealthController->setText("-");
+        ui->lblHealthController->setStyleSheet("");
+    }
 }
 
 void ConnectionWindow::populateBusDetails(int offset)
@@ -605,6 +642,12 @@ void ConnectionWindow::populateBusDetails(int offset)
         CANBus bus;
         if(!conn_p) return;
 
+        const bool extras = hasBusExtras(conn_p);
+        ui->lblBusEnabled->setVisible(extras);
+        ui->ckBusEnabled->setVisible(extras);
+        ui->lblTermination->setVisible(extras);
+        ui->ckTermination->setVisible(extras);
+
         if (!conn_p->getBusSettings(offset, bus))
         {
             qDebug() << "Could not retrieve bus settings!";
@@ -614,13 +657,29 @@ void ConnectionWindow::populateBusDetails(int offset)
         //int busBase = CANConManager::getInstance()->getBusBase(conn_p);
         //ui->lblBusNum->setText(QString::number(busBase + offset));
         ui->ckListenOnly->setChecked(bus.isListenOnly());
-        if (conn_p->getType() == CANCon::type::SERIALBUS || conn_p->getType() == CANCon::type::LAWICEL)
+        if (extras)
+        {
+            ui->ckTermination->setChecked(bus.isTermination());
+            ui->ckBusEnabled->setChecked(bus.isActive());
+            ui->ckBusEnabled->setEnabled(connModel->isConnActive(selIdx));
+        }
+        if (conn_p->getType() == CANCon::type::SERIALBUS || conn_p->getType() == CANCon::type::LAWICEL ||
+            conn_p->getType() == CANCon::type::CANTRIPLE)
         {
             ui->canFDEnable->setVisible(true);
             ui->canFDEnable_label->setVisible(true);
             ui->canFDEnable->setChecked(bus.isCanFD());
             ui->cbDataRate->setVisible(true);
             ui->dataRate_label->setVisible(true);
+        }
+        //the data rate list may never have been filled for a type that didn't show it before
+        if (ui->cbDataRate->count() == 0)
+        {
+            ui->cbDataRate->addItem("1000000");
+            ui->cbDataRate->addItem("2000000");
+            ui->cbDataRate->addItem("4000000");
+            ui->cbDataRate->addItem("5000000");
+            ui->cbDataRate->addItem("8000000");
         }
 
         bool found = false;
@@ -838,9 +897,11 @@ int ConnectionWindow::loadConnectionsFromGroup(const QString &group)
     QVector<int> allCanFds[MAX_SAVED_BUSES];
     QVector<int> allListenOnly[MAX_SAVED_BUSES];
     QVector<int> allActive[MAX_SAVED_BUSES];
+    QVector<int> allTermination[MAX_SAVED_BUSES];
 
     for (int busIdx = 0; busIdx < MAX_SAVED_BUSES; busIdx++)
     {
+        allTermination[busIdx] = readIntVec(settings, QString("%1/termination_%2").arg(group).arg(busIdx));
         allSpeeds[busIdx] = readIntVec(settings, QString("%1/busSpeeds_%2").arg(group).arg(busIdx));
         allDataRates[busIdx] = readIntVec(settings, QString("%1/DataRates_%2").arg(group).arg(busIdx));
         allCanFds[busIdx] = readIntVec(settings, QString("%1/isCanFds_%2").arg(group).arg(busIdx));
@@ -866,6 +927,8 @@ int ConnectionWindow::loadConnectionsFromGroup(const QString &group)
             if (allDataRates[busIdx].size() == portNames.size()) bus.setDataRate(allDataRates[busIdx][i]);
             if (allCanFds[busIdx].size() == portNames.size()) bus.setCanFD(allCanFds[busIdx][i] ? true : false);
             if (allListenOnly[busIdx].size() == portNames.size()) bus.setListenOnly(allListenOnly[busIdx][i] ? true : false);
+            //older settings have no termination entry, and off is the safe answer for those
+            if (allTermination[busIdx].size() == portNames.size()) bus.setTermination(allTermination[busIdx][i] ? true : false);
             //settings written before buses had an enabled flag should come back enabled
             if (allActive[busIdx].size() == portNames.size()) bus.setActive(allActive[busIdx][i] ? true : false);
             else bus.setActive(true);
@@ -925,6 +988,7 @@ void ConnectionWindow::saveConnectionsToGroup(const QString &group)
     QVector<int> canFds[MAX_SAVED_BUSES];
     QVector<int> listenOnly[MAX_SAVED_BUSES];
     QVector<int> isActive[MAX_SAVED_BUSES];
+    QVector<int> termination[MAX_SAVED_BUSES];
 
     /* save connections */
     foreach(CANConnection* conn_p, conns)
@@ -964,6 +1028,7 @@ void ConnectionWindow::saveConnectionsToGroup(const QString &group)
                 dataRates[busIdx].append(bus.getDataRate());
                 listenOnly[busIdx].append(bus.isListenOnly() ? 1 : 0);
                 isActive[busIdx].append(bus.isActive() ? 1 : 0);
+                termination[busIdx].append(bus.isTermination() ? 1 : 0);
             }
             else
             {
@@ -972,6 +1037,7 @@ void ConnectionWindow::saveConnectionsToGroup(const QString &group)
                 dataRates[busIdx].append(0);
                 listenOnly[busIdx].append(0);
                 isActive[busIdx].append(0);
+                termination[busIdx].append(0);
             }
         }
     }
@@ -989,6 +1055,7 @@ void ConnectionWindow::saveConnectionsToGroup(const QString &group)
         writeIntVec(settings, QString("%1/DataRates_%2").arg(group).arg(busIdx), dataRates[busIdx]);
         writeIntVec(settings, QString("%1/listenOnly_%2").arg(group).arg(busIdx), listenOnly[busIdx]);
         writeIntVec(settings, QString("%1/isActive_%2").arg(group).arg(busIdx), isActive[busIdx]);
+        writeIntVec(settings, QString("%1/termination_%2").arg(group).arg(busIdx), termination[busIdx]);
     }
 
     settings.sync();

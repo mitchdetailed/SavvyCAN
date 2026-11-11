@@ -15,6 +15,7 @@ SOURCES += \
     tst_codecs.cpp \
     tst_fileio.cpp \
     tst_framemodel.cpp \
+    tst_cantriple.cpp \
     ../utils/msgpackcodec.cpp \
     ../framefileio.cpp \
     ../canframemodel.cpp \
@@ -29,13 +30,15 @@ SOURCES += \
     ../connections/seeedcan.cpp \
     ../connections/canalystii.cpp \
     ../connections/ixxatvci.cpp \
-    ../connections/kvasercanlib.cpp
+    ../connections/kvasercanlib.cpp \
+    ../connections/cantriple.cpp
 
 HEADERS += \
     tst_lfqueue.h \
     tst_codecs.h \
     tst_fileio.h \
     tst_framemodel.h \
+    tst_cantriple.h \
     ../canframemodel.h \
     ../dbc/dbchandler.h \
     ../utils/lfqueue.h \
@@ -49,7 +52,9 @@ HEADERS += \
     ../connections/seeedcan.h \
     ../connections/canalystii.h \
     ../connections/ixxatvci.h \
-    ../connections/kvasercanlib.h
+    ../connections/kvasercanlib.h \
+    ../connections/cantriple.h \
+    ../connections/cantriple_protocol.h
 
 # CANalyst-II talks to libusb directly, so the tests need it too even though they never open a device
 win32-g++ {

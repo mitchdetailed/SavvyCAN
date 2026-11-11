@@ -96,6 +96,13 @@ public:
      */
     void setConsoleOutput(bool state);
 
+    /**
+     * @brief what the bus's own controller last reported about its health
+     * @return false if this driver doesn't report it, or hasn't heard yet
+     * @note safe to call from any thread
+     */
+    bool getControllerState(int pBusIdx, CANControllerState &pState);
+
 
 signals:
     /*not implemented yet */
@@ -256,6 +263,11 @@ protected:
     void setBusConfig(int pBusId, CANBus& pBus);
 
     /**
+     * @brief record what the bus's controller reported, for getControllerState
+     */
+    void setControllerState(int pBusIdx, const CANControllerState &pState);
+
+    /**
      * @brief isCapSuspended
      * @return true if the capture is suspended
      */
@@ -333,6 +345,9 @@ private:
     /* guards mTargettedFrames in mBusData: the GUI thread registers/removes filters while
      * the worker thread walks the list in checkTargettedFrame for every received frame */
     QMutex              mTargettedFramesMutex;
+    /* written by the worker thread as status arrives, read by the GUI's health panel */
+    QMutex              mControllerStateMutex;
+    QVector<CANControllerState> mControllerState;
 };
 
 #endif // CANCONNECTION_H

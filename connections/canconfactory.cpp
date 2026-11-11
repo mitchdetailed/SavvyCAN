@@ -19,6 +19,7 @@
 #include "iscanlib.h"
 #include "nicanlib.h"
 #include "neousyscan.h"
+#include "cantriple.h"
 
 using namespace CANCon;
 
@@ -68,6 +69,8 @@ CANConnection* CanConFactory::create(type pType, QString pPortName, QString pDri
         return new NicanLib(pPortName, pBusSpeed);
     case NEOUSYS:
         return new NeousysCan(pPortName, pBusSpeed);
+    case CANTRIPLE:
+        return new CANTriple(pPortName, pBusSpeed, pCanFd, pDataRate);
     default: {}
     }
 

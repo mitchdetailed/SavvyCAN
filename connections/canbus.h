@@ -11,6 +11,7 @@ class CANBus
     bool active; //is this bus turned on?
     bool canFD;
     int dataRate;
+    bool termination; //switch the adapter's own 120 ohm terminator in, for adapters that have one
 
     friend QDataStream& operator<<(QDataStream & pStream, const CANBus& pCanBus);
     friend QDataStream& operator>>(QDataStream & pStream, CANBus& pCanBus);
@@ -25,6 +26,7 @@ public:
     void setActive(bool); //whether this bus should be enabled or not.
     void setCanFD(bool); // enable or disable CANFD support
     void setDataRate(int newSpeed);
+    void setTermination(bool);
 
     int getSpeed() const;
     int getDataRate() const;
@@ -32,6 +34,7 @@ public:
     bool isSingleWire() const;
     bool isActive() const;
     bool isCanFD() const;
+    bool isTermination() const;
 };
 
 QDataStream& operator<<(QDataStream & pStream, const CANBus& pCanBus);

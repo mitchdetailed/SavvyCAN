@@ -6,6 +6,7 @@
 #include "canalystii.h"
 #include "kvasercanlib.h"
 #include "ixxatvci.h"
+#include "cantriple.h"
 
 NewConnectionDialog::NewConnectionDialog(QVector<QString>* gvretips, QVector<QString>* kayakhosts, QWidget *parent) :
     QDialog(parent),
@@ -47,6 +48,7 @@ NewConnectionDialog::NewConnectionDialog(QVector<QString>* gvretips, QVector<QSt
     connect(ui->rbIscan, &QAbstractButton::clicked, this, &NewConnectionDialog::handleConnTypeChanged);
     connect(ui->rbNican, &QAbstractButton::clicked, this, &NewConnectionDialog::handleConnTypeChanged);
     connect(ui->rbNeousys, &QAbstractButton::clicked, this, &NewConnectionDialog::handleConnTypeChanged);
+    connect(ui->rbCanTriple, &QAbstractButton::clicked, this, &NewConnectionDialog::handleConnTypeChanged);
 
     connect(ui->cbDeviceType, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &NewConnectionDialog::handleDeviceTypeChanged);
     connect(ui->btnOK, &QPushButton::clicked, this, &NewConnectionDialog::handleCreateButton);
@@ -98,6 +100,7 @@ void NewConnectionDialog::handleConnTypeChanged()
     if (ui->rbIscan->isChecked()) selectIscan();
     if (ui->rbNican->isChecked()) selectNican();
     if (ui->rbNeousys->isChecked()) selectNeousys();
+    if (ui->rbCanTriple->isChecked()) selectCanTriple();
 }
 
 /*
@@ -129,6 +132,10 @@ bool NewConnectionDialog::populateScannedDevices(CANCon::type type, bool quiet)
     case CANCon::IXXAT:
         what = "IXXAT";
         devices = IxxatVci::enumerateDevices();
+        break;
+    case CANCon::CANTRIPLE:
+        what = "CAN Triple";
+        devices = CANTriple::enumerateDevices();
         break;
 
     default:
@@ -208,6 +215,7 @@ struct BusOptionSupport
     bool speed;      //the adapter lets us choose the arbitration bit rate
     bool listenOnly; //the driver has a silent / listen only mode
     bool canFd;      //the adapter does CAN FD, which brings the data rate with it
+    bool termination;//the adapter can switch its own terminating resistor in
 };
 
 static BusOptionSupport busOptionsFor(CANCon::type pType)
@@ -217,23 +225,29 @@ static BusOptionSupport busOptionsFor(CANCon::type pType)
     //GVRET carries its own bus configuration, whether it is reached over serial or over the network
     case CANCon::GVRET_SERIAL:
     case CANCon::REMOTE:
-        return { true, true, false };
+        return { true, true, false, false };
+
+    /* Whether CAN FD really is there depends on which model answers - a 2.x has it, a 1.x does
+     * not - and that is not known until the device is reached. The driver runs a 1.x as classic
+     * CAN and says so in the debug console, so offering it here costs nothing. */
+    case CANCon::CANTRIPLE:
+        return { true, true, true, true };
 
     /* QT SerialBus covers PEAK, Vector, IXXAT's own plugin and socketcan. Whether the bit rate is
      * ours to set depends on the plugin - socketcan takes it from the OS - but the value is still
      * what the bus load figures get worked out against, so it is worth asking for either way. */
     case CANCon::SERIALBUS:
-        return { true, true, true };
+        return { true, true, true, false };
 
     case CANCon::LAWICEL:
     case CANCon::KVASER:
-        return { true, true, true };
+        return { true, true, true, false };
 
     case CANCon::GSUSB:
     case CANCon::SEEEDSTUDIO:
     case CANCon::CANALYSTII:
     case CANCon::IXXAT:
-        return { true, true, false };
+        return { true, true, false, false };
 
     //these take a speed, but their drivers have no listen only mode to offer
     case CANCon::ROBOTELL:
@@ -241,7 +255,7 @@ static BusOptionSupport busOptionsFor(CANCon::type pType)
     case CANCon::ISCAN:
     case CANCon::NICAN:
     case CANCon::NEOUSYS:
-        return { true, false, false };
+        return { true, false, false, false };
 
     /* Whatever sits at the far end of these owns the bus - a socketcand host, an MQTT broker, a
      * CANserver, another python-can instance. There is nothing here for us to configure. */
@@ -252,7 +266,7 @@ static BusOptionSupport busOptionsFor(CANCon::type pType)
     case CANCon::PYCAN_SERIAL:
     case CANCon::UDP_MULTICAST:
     default:
-        return { false, false, false };
+        return { false, false, false, false };
     }
 }
 
@@ -267,6 +281,7 @@ void NewConnectionDialog::updateBusOptionVisibility()
     ui->lblCANSpeed->setHidden(!opts.speed);
     ui->cbCANSpeed->setHidden(!opts.speed);
     ui->ckListenOnly->setHidden(!opts.listenOnly);
+    ui->ckTermination->setHidden(!opts.termination);
     ui->cbCanFd->setHidden(!opts.canFd);
     ui->lblDataRate->setHidden(!opts.canFd);
     ui->cbDataRate->setHidden(!opts.canFd);
@@ -286,7 +301,7 @@ void NewConnectionDialog::handleCanFdChanged()
 bool NewConnectionDialog::hasBusOptions()
 {
     const BusOptionSupport opts = busOptionsFor(getConnectionType());
-    return opts.speed || opts.listenOnly || opts.canFd;
+    return opts.speed || opts.listenOnly || opts.canFd || opts.termination;
 }
 
 void NewConnectionDialog::populateCANSpeeds()
@@ -591,6 +606,22 @@ void NewConnectionDialog::selectCANlogserver()
     ui->cbPort->clear();
 }
 
+/*
+ * A CAN Triple is a serial port either way - its ST-LINK's VCP on a 1.x, its own USB CDC port on
+ * a 2.x - so start from every port the machine has and then narrow it to the ones that look like
+ * one. If none do the full list stays, since a port can sit behind something that hides its USB IDs.
+ */
+void NewConnectionDialog::selectCanTriple()
+{
+    ui->lPort->setText("CAN Triple Port:");
+
+    hideSerialBits(ui);
+    updateBusOptionVisibility();
+
+    populateSerialPorts();
+    populateScannedDevices(CANCon::CANTRIPLE, true);
+}
+
 void NewConnectionDialog::selectGSUSB()
 {
     ui->lPort->setText("GSUSB Port:");
@@ -669,6 +700,9 @@ void NewConnectionDialog::setPortName(CANCon::type pType, QString pPortName, QSt
         case CANCon::NEOUSYS:
           ui->rbNeousys->setChecked(true);
           break;
+        case CANCon::CANTRIPLE:
+          ui->rbCanTriple->setChecked(true);
+          break;
         default: {}
     }
 
@@ -682,8 +716,11 @@ void NewConnectionDialog::setPortName(CANCon::type pType, QString pPortName, QSt
         case CANCon::SEEEDSTUDIO:
         case CANCon::ROBOTELL:
         case CANCon::PYCAN_SERIAL:
+        case CANCon::CANTRIPLE:
         {
             int idx = ui->cbPort->findText(pPortName);
+            //a scanned entry shows a description and keeps the port name as its data
+            if (idx < 0) idx = ui->cbPort->findData(pPortName);
             if( idx<0 ) idx=0;
             ui->cbPort->setCurrentIndex(idx);
             break;
@@ -776,6 +813,7 @@ QString NewConnectionDialog::getPortName()
     case CANCon::ISCAN:
     case CANCon::NICAN:
     case CANCon::NEOUSYS:
+    case CANCon::CANTRIPLE:
         return ui->cbPort->currentText();
 
     default:
@@ -844,6 +882,7 @@ CANCon::type NewConnectionDialog::getConnectionType()
     if (ui->rbIscan->isChecked()) return CANCon::ISCAN;
     if (ui->rbNican->isChecked()) return CANCon::NICAN;
     if (ui->rbNeousys->isChecked()) return CANCon::NEOUSYS;
+    if (ui->rbCanTriple->isChecked()) return CANCon::CANTRIPLE;
     qDebug() << "getConnectionType: error";
 
     return CANCon::NONE;
@@ -859,6 +898,12 @@ int NewConnectionDialog::getDataRate()
 {
     if (!busOptionsFor(getConnectionType()).canFd) return 0;
     return ui->cbDataRate->currentText().toInt();
+}
+
+bool NewConnectionDialog::isTermination()
+{
+    if (!busOptionsFor(getConnectionType()).termination) return false;
+    return ui->ckTermination->isChecked();
 }
 
 bool NewConnectionDialog::isCanFd()

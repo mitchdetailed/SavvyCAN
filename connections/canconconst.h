@@ -38,6 +38,7 @@ namespace CANCon {
         ISCAN,
         NICAN,
         NEOUSYS,
+        CANTRIPLE,
         NONE
     };
 }
@@ -85,6 +86,26 @@ public:
     int txErrorCount;           //-1 when the driver can't tell us
     uint64_t errorFrames;
     QString busState;           //"Active", "Bus Off", ... whatever the driver reports
+};
+
+/**
+ * @brief What a bus's own CAN controller says about itself.
+ *
+ * Unlike CANBusStats this has to come from the hardware, so only drivers whose device reports it
+ * fill it in (see CANConnection::setControllerState). valid stays false for everything else.
+ */
+class CANControllerState
+{
+public:
+    bool valid = false;
+    QString state;              //"Error Active", "Bus Off", "Off", ...
+    int txErrorCount = -1;
+    int rxErrorCount = -1;
+    uint64_t busErrors = 0;     //protocol errors the controller has seen, running total
+    uint64_t rxOverruns = 0;    //frames the controller lost because its fifo was full, running total
+    uint64_t txRefused = 0;     //frames we asked it to send that it had no room for, running total
+    uint64_t linkDrops = 0;     //frames lost between the device and us, running total
+    QString note;               //anything else worth showing, e.g. why the bus refused its settings
 };
 
 /**

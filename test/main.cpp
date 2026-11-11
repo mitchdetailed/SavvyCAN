@@ -5,6 +5,7 @@
 #include "tst_codecs.h"
 #include "tst_fileio.h"
 #include "tst_framemodel.h"
+#include "tst_cantriple.h"
 
 /*
  * Runs every test class in turn and returns non zero if any of them failed, which is what CI keys
@@ -65,6 +66,7 @@ int main(int argc, char** argv)
    ASSERT_TEST(new TestCodecs(), "codecs");
    ASSERT_TEST(new TestFileIO(), "fileio");
    ASSERT_TEST(new TestFrameModel(), "framemodel");
+   ASSERT_TEST(new TestCANTriple(), "cantriple");
 
    return status;
 }

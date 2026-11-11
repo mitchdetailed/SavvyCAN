@@ -28,6 +28,7 @@ public:
     int getBusSpeed();
     bool isListenOnly();
     bool isCanFd();
+    bool isTermination();
     int getDataRate();
     //whether this connection type has any bus setting worth pushing into the new connection
     bool hasBusOptions();
@@ -68,6 +69,7 @@ private:
     void selectIscan();
     void selectNican();
     void selectNeousys();
+    void selectCanTriple();
     //shared setup for the plain "serial port plus a CAN speed" style adapters
     void selectSerialAdapter(bool showSerialSpeed, int defaultSerialSpeed);
     //shows exactly the bus options the selected connection type can make use of
