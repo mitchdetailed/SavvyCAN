@@ -26,14 +26,19 @@ public:
     QString getDriverName();
     int getSerialSpeed();
     int getBusSpeed();
+    bool isListenOnly();
     bool isCanFd();
+    bool isTermination();
     int getDataRate();
+    //whether this connection type has any bus setting worth pushing into the new connection
+    bool hasBusOptions();
 
 public slots:
     void handleConnTypeChanged();
     void handleDeviceTypeChanged();
     void handleCreateButton();
     void handleScanDevices();
+    void handleCanFdChanged();
 
 private:
     Ui::NewConnectionDialog *ui;
@@ -64,8 +69,13 @@ private:
     void selectIscan();
     void selectNican();
     void selectNeousys();
+    void selectCanTriple();
     //shared setup for the plain "serial port plus a CAN speed" style adapters
-    void selectSerialAdapter(bool showBusSpeed, bool showSerialSpeed, int defaultSerialSpeed);
+    void selectSerialAdapter(bool showSerialSpeed, int defaultSerialSpeed);
+    //shows exactly the bus options the selected connection type can make use of
+    void updateBusOptionVisibility();
+    void populateSerialPorts();
+    void populateDataRates();
     void populateCANSpeeds();
     void populateSerialSpeeds();
     bool isSerialBusAvailable();

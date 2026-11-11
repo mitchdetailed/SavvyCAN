@@ -85,6 +85,7 @@ SOURCES += main.cpp\
     connections/iscanlib.cpp \
     connections/nicanlib.cpp \
     connections/neousyscan.cpp \
+    connections/cantriple.cpp \
     re/sniffer/snifferitem.cpp \
     re/sniffer/sniffermodel.cpp \
     re/sniffer/snifferwindow.cpp \
@@ -193,6 +194,8 @@ HEADERS  += mainwindow.h \
     connections/iscanlib.h \
     connections/nicanlib.h \
     connections/neousyscan.h \
+    connections/cantriple.h \
+    connections/cantriple_protocol.h \
     re/sniffer/snifferitem.h \
     re/sniffer/sniffermodel.h \
     re/sniffer/snifferwindow.h \

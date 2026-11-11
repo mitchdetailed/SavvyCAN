@@ -4,6 +4,10 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QSignalBlocker>
+#include <QApplication>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QStyleOptionButton>
 
 //how many buses per connection we keep settings for. Nothing SavvyCAN talks to has more than this.
 #define MAX_SAVED_BUSES 8
@@ -14,9 +18,49 @@
 #include "ui_connectionwindow.h"
 #include "connections/canconfactory.h"
 #include "connections/canconmanager.h"
+
+/* Devices whose buses can be switched on one at a time and carry their own terminator, which gets
+ * Bus Details its Bus Enabled and Termination boxes. Only the CAN Triple so far. */
+static bool hasBusExtras(CANConnection *conn_p)
+{
+    return conn_p && conn_p->getType() == CANCon::CANTRIPLE;
+}
 #include "canbus.h"
 #include <QSettings>
 #include <connections/newconnectiondialog.h>
+
+void ConnActivateDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
+{
+    QStyle *style = option.widget ? option.widget->style() : QApplication::style();
+
+    //draw the row's own background first so selection and alternating colours still show through
+    style->drawPrimitive(QStyle::PE_PanelItemViewItem, &option, painter, option.widget);
+
+    QStyleOptionButton button;
+    button.rect = option.rect.adjusted(2, 2, -2, -2);
+    button.text = index.data(Qt::DisplayRole).toString();
+    button.state = QStyle::State_Enabled | QStyle::State_Raised;
+    //carry the window's active state across, or the button draws greyed out on some styles
+    if (option.state & QStyle::State_Active) button.state |= QStyle::State_Active;
+
+    style->drawControl(QStyle::CE_PushButton, &button, painter, option.widget);
+}
+
+bool ConnActivateDelegate::editorEvent(QEvent *event, QAbstractItemModel *model,
+                                       const QStyleOptionViewItem &option, const QModelIndex &index)
+{
+    if (event->type() == QEvent::MouseButtonRelease)
+    {
+        QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
+        if (mouse->button() == Qt::LeftButton && option.rect.contains(mouse->position().toPoint()))
+        {
+            emit clicked(index);
+            return true;
+        }
+    }
+
+    return QStyledItemDelegate::editorEvent(event, model, option, index);
+}
 
 ConnectionWindow::ConnectionWindow(QWidget *parent) :
     QDialog(parent),
@@ -40,8 +84,20 @@ ConnectionWindow::ConnectionWindow(QWidget *parent) :
     ui->tableConnections->setColumnWidth(2, 130);
     ui->tableConnections->setColumnWidth(3, 70);
     ui->tableConnections->setColumnWidth(4, 200);
+    ui->tableConnections->setColumnWidth(5, 110);
     QHeaderView *HorzHdr = ui->tableConnections->horizontalHeader();
-    HorzHdr->setStretchLastSection(true); //causes the data column to automatically fill the tableview
+    /* Status takes up the slack rather than the last column - the last column is the Activate
+     * button and stretching that just gives a comically wide button. */
+    HorzHdr->setStretchLastSection(false);
+    HorzHdr->setSectionResizeMode(4, QHeaderView::Stretch);
+    HorzHdr->setSectionResizeMode(5, QHeaderView::Fixed);
+
+    /* One Activate / Deactivate button per device, in place of the per bus "Enable Bus" tick box
+     * that used to live in Bus Details. A device can now be silenced from its own row without
+     * first selecting it and stepping through its bus tabs. */
+    ConnActivateDelegate *activeDelegate = new ConnActivateDelegate(this);
+    ui->tableConnections->setItemDelegateForColumn(5, activeDelegate);
+    connect(activeDelegate, &ConnActivateDelegate::clicked, this, &ConnectionWindow::toggleConnActive);
 
     ui->textConsole->setEnabled(false);
     ui->btnClearDebug->setEnabled(false);
@@ -284,11 +340,50 @@ void ConnectionWindow::handleNewConn()
         conn = create(newType, newPort, newDriver, newSerialSpeed, newBusSpeed, newCanFd, newDataRate);
         if (conn)
         {
+            /* The dialog's bus settings are pushed in here rather than being left to the factory.
+             * Only some driver constructors take a speed, none of them take listen only, and doing
+             * it this way means every connection type that offers the options honours them without
+             * needing twenty constructors changed. This is the same path a restored connection
+             * takes, so it is a well travelled one.
+             *
+             * Bus 0 only. A multi bus device works out its remaining buses for itself, and those
+             * can be set individually in Bus Details. */
+            if (thisDialog->hasBusOptions())
+            {
+                CANBus bus;
+                if (newBusSpeed > 0) bus.setSpeed(newBusSpeed);
+                if (newDataRate > 0) bus.setDataRate(newDataRate);
+                bus.setCanFD(newCanFd);
+                bus.setListenOnly(thisDialog->isListenOnly());
+                bus.setTermination(thisDialog->isTermination());
+                //a device the user has just asked for should come up running
+                bus.setActive(true);
+                conn->setBusSettings(0, bus);
+            }
+
             connModel->add(conn);
             ui->tableConnections->setCurrentIndex(connModel->index(connModel->rowCount() - 1, 1));
         }
     }
     delete thisDialog;
+}
+
+/*
+ * Switch a device on or off from the button on its own row.
+ *
+ * This replaces the "Enable Bus" tick box that used to sit in Bus Details. That one acted on
+ * whichever single bus tab happened to be showing, which made silencing a three bus GVRET a
+ * three step job and gave no indication from the device list of what was live.
+ */
+void ConnectionWindow::toggleConnActive(const QModelIndex &index)
+{
+    if (!index.isValid()) return;
+
+    connModel->setConnActive(index.row(), !connModel->isConnActive(index.row()));
+
+    //Bus Details may be showing the device that just changed, so put it back in step
+    if (index.row() == ui->tableConnections->currentIndex().row())
+        populateBusDetails(qMax(0, ui->tabBuses->currentIndex()));
 }
 
 void ConnectionWindow::handleRemoveConn()
@@ -369,6 +464,8 @@ void ConnectionWindow::handleResetConn()
      * comes back with nothing but defaults. The constructor only takes the first bus so the rest
      * get pushed back in once the new connection exists. */
     const QList<CANBus> buses = captureBusConfig(conn_p);
+    //and carry over the record of which buses were on, so the replacement's button still knows
+    const QVector<bool> busMask = connModel->busMask(conn_p);
 
     if (buses.count() > 0)
     {
@@ -394,6 +491,7 @@ void ConnectionWindow::handleResetConn()
     {
         applyBusConfig(conn_p, buses);
         connModel->replace(selIdx, conn_p);
+        connModel->setBusMask(conn_p, busMask);
     }
 }
 
@@ -439,11 +537,20 @@ void ConnectionWindow::saveBusSettings()
             return;
         }
 
+        /* Whether the bus is switched on is deliberately left alone here. That is the Activate /
+         * Deactivate button's job now, and bus was read back from the connection just above, so
+         * saving settings on a deactivated device does not quietly switch it back on. */
         bus.setSpeed(ui->cbBusSpeed->currentText().toInt());
-        bus.setActive(ui->ckEnable->isChecked());
         bus.setListenOnly(ui->ckListenOnly->isChecked());
         bus.setCanFD(ui->canFDEnable->isChecked());
         bus.setDataRate(ui->cbDataRate->currentText().toInt());
+        if (hasBusExtras(conn_p))
+        {
+            bus.setTermination(ui->ckTermination->isChecked());
+            /* Only while the device as a whole is switched on - the box is greyed out otherwise -
+             * so the row's Activate button and the buses underneath it can't disagree. */
+            if (connModel->isConnActive(selIdx)) bus.setActive(ui->ckBusEnabled->isChecked());
+        }
         conn_p->setBusSettings(offset, bus);
     }
 }
@@ -466,6 +573,8 @@ void ConnectionWindow::updateBusHealth()
         ui->lblHealthCounts->setText("-");
         ui->lblHealthErrors->setText("-");
         ui->lblHealthErrors->setStyleSheet("");
+        ui->lblHealthController->setText("-");
+        ui->lblHealthController->setStyleSheet("");
         return;
     }
 
@@ -491,6 +600,26 @@ void ConnectionWindow::updateBusHealth()
     ui->lblHealthErrors->setText(QString::number(stats.errorFrames));
     //make error frames stand out, they are the thing worth noticing here
     ui->lblHealthErrors->setStyleSheet(stats.errorFrames > 0 ? "color: red; font-weight: bold;" : "");
+
+    /* What the controller itself says, for the drivers whose hardware reports it. Everything above
+     * is worked out from traffic; this is the only place error counters and dropped frames show. */
+    CANControllerState ctl;
+    if (conn_p->getControllerState(localBus, ctl))
+    {
+        QString text = QString("%1, TEC %2 / REC %3").arg(ctl.state).arg(ctl.txErrorCount).arg(ctl.rxErrorCount);
+        if (ctl.busErrors) text += QString(", %1 bus errors").arg(ctl.busErrors);
+        const uint64_t lost = ctl.rxOverruns + ctl.txRefused + ctl.linkDrops;
+        if (lost) text += QString(", lost %1 rx / %2 tx / %3 link").arg(ctl.rxOverruns).arg(ctl.txRefused).arg(ctl.linkDrops);
+        if (!ctl.note.isEmpty()) text += " - " + ctl.note;
+        ui->lblHealthController->setText(text);
+        const bool bad = ctl.state != "Error Active" && ctl.state != "Off";
+        ui->lblHealthController->setStyleSheet((bad || lost) ? "color: red; font-weight: bold;" : "");
+    }
+    else
+    {
+        ui->lblHealthController->setText("-");
+        ui->lblHealthController->setStyleSheet("");
+    }
 }
 
 void ConnectionWindow::populateBusDetails(int offset)
@@ -513,6 +642,12 @@ void ConnectionWindow::populateBusDetails(int offset)
         CANBus bus;
         if(!conn_p) return;
 
+        const bool extras = hasBusExtras(conn_p);
+        ui->lblBusEnabled->setVisible(extras);
+        ui->ckBusEnabled->setVisible(extras);
+        ui->lblTermination->setVisible(extras);
+        ui->ckTermination->setVisible(extras);
+
         if (!conn_p->getBusSettings(offset, bus))
         {
             qDebug() << "Could not retrieve bus settings!";
@@ -522,14 +657,29 @@ void ConnectionWindow::populateBusDetails(int offset)
         //int busBase = CANConManager::getInstance()->getBusBase(conn_p);
         //ui->lblBusNum->setText(QString::number(busBase + offset));
         ui->ckListenOnly->setChecked(bus.isListenOnly());
-        ui->ckEnable->setChecked(bus.isActive());
-        if (conn_p->getType() == CANCon::type::SERIALBUS || conn_p->getType() == CANCon::type::LAWICEL)
+        if (extras)
+        {
+            ui->ckTermination->setChecked(bus.isTermination());
+            ui->ckBusEnabled->setChecked(bus.isActive());
+            ui->ckBusEnabled->setEnabled(connModel->isConnActive(selIdx));
+        }
+        if (conn_p->getType() == CANCon::type::SERIALBUS || conn_p->getType() == CANCon::type::LAWICEL ||
+            conn_p->getType() == CANCon::type::CANTRIPLE)
         {
             ui->canFDEnable->setVisible(true);
             ui->canFDEnable_label->setVisible(true);
             ui->canFDEnable->setChecked(bus.isCanFD());
             ui->cbDataRate->setVisible(true);
             ui->dataRate_label->setVisible(true);
+        }
+        //the data rate list may never have been filled for a type that didn't show it before
+        if (ui->cbDataRate->count() == 0)
+        {
+            ui->cbDataRate->addItem("1000000");
+            ui->cbDataRate->addItem("2000000");
+            ui->cbDataRate->addItem("4000000");
+            ui->cbDataRate->addItem("5000000");
+            ui->cbDataRate->addItem("8000000");
         }
 
         bool found = false;
@@ -732,6 +882,9 @@ int ConnectionWindow::loadConnectionsFromGroup(const QString &group)
     QVector<int> DataRates = readIntVec(settings, group + "/DataRates_0");
     QVector<int> isCanFds = readIntVec(settings, group + "/isCanFds_0");
     QVector<int> serialSpeeds = readIntVec(settings, group + "/serialSpeeds");
+    /* Read without a length check on purpose - settings written before the Activate button existed
+     * simply have no entry, and those connections come back exactly as they always did. */
+    QVector<int> busMaskBits = readIntVec(settings, group + "/busMaskBits");
     //don't load the connections if the three setting arrays above aren't all the same size.
     if (portNames.size() != driverNames.size() || devTypes.size() != driverNames.size() ||  busSpeeds.size() != driverNames.size() || isCanFds.size() != driverNames.size() ||
 	DataRates.size() != driverNames.size() || serialSpeeds.size() != driverNames.size() ) return 0;
@@ -744,15 +897,19 @@ int ConnectionWindow::loadConnectionsFromGroup(const QString &group)
     QVector<int> allCanFds[MAX_SAVED_BUSES];
     QVector<int> allListenOnly[MAX_SAVED_BUSES];
     QVector<int> allActive[MAX_SAVED_BUSES];
+    QVector<int> allTermination[MAX_SAVED_BUSES];
 
     for (int busIdx = 0; busIdx < MAX_SAVED_BUSES; busIdx++)
     {
+        allTermination[busIdx] = readIntVec(settings, QString("%1/termination_%2").arg(group).arg(busIdx));
         allSpeeds[busIdx] = readIntVec(settings, QString("%1/busSpeeds_%2").arg(group).arg(busIdx));
         allDataRates[busIdx] = readIntVec(settings, QString("%1/DataRates_%2").arg(group).arg(busIdx));
         allCanFds[busIdx] = readIntVec(settings, QString("%1/isCanFds_%2").arg(group).arg(busIdx));
         allListenOnly[busIdx] = readIntVec(settings, QString("%1/listenOnly_%2").arg(group).arg(busIdx));
         allActive[busIdx] = readIntVec(settings, QString("%1/isActive_%2").arg(group).arg(busIdx));
     }
+
+    int restored = 0;
 
     for(int i = 0 ; i < portNames.size() ; i++)
     {
@@ -770,6 +927,8 @@ int ConnectionWindow::loadConnectionsFromGroup(const QString &group)
             if (allDataRates[busIdx].size() == portNames.size()) bus.setDataRate(allDataRates[busIdx][i]);
             if (allCanFds[busIdx].size() == portNames.size()) bus.setCanFD(allCanFds[busIdx][i] ? true : false);
             if (allListenOnly[busIdx].size() == portNames.size()) bus.setListenOnly(allListenOnly[busIdx][i] ? true : false);
+            //older settings have no termination entry, and off is the safe answer for those
+            if (allTermination[busIdx].size() == portNames.size()) bus.setTermination(allTermination[busIdx][i] ? true : false);
             //settings written before buses had an enabled flag should come back enabled
             if (allActive[busIdx].size() == portNames.size()) bus.setActive(allActive[busIdx][i] ? true : false);
             else bus.setActive(true);
@@ -780,13 +939,29 @@ int ConnectionWindow::loadConnectionsFromGroup(const QString &group)
 
         /* add connection to model */
         connModel->add(conn_p);
+        restored++;
+
+        /* A device saved switched off already has every bus inactive above, so there is nothing to
+         * undo here. All the model needs is the pattern of buses it had on, so that its Activate
+         * button can put back exactly those instead of enabling the lot. */
+        const int maskBits = (busMaskBits.size() == portNames.size()) ? busMaskBits[i] : 0;
+        if (maskBits != 0)
+        {
+            QVector<bool> mask;
+            for (int busIdx = 0; busIdx < MAX_SAVED_BUSES; busIdx++)
+                mask.append((maskBits & (1 << busIdx)) != 0);
+            connModel->setBusMask(conn_p, mask);
+        }
     }
 
     if (connModel->rowCount() > 0) {
         ui->tableConnections->selectRow(0);
     }
 
-    return portNames.size();
+    /* What the caller wants to know is how many connections actually came up, not how many were
+     * listed in the file. Returning the latter meant a profile whose devices all failed to open
+     * reported success and left the user with an empty table and no explanation. */
+    return restored;
 }
 
 void ConnectionWindow::saveConnections()
@@ -803,6 +978,9 @@ void ConnectionWindow::saveConnectionsToGroup(const QString &group)
     QVector<int> devTypes;
     QVector<QString> driverNames;
     QVector<int> serialSpeeds;
+    /* One entry per connection rather than per bus: which buses this device had on before it was
+     * switched off, one bit per bus index. Zero for a device that is switched on. */
+    QVector<int> busMaskBits;
 
     //one array per bus index so a multi bus device keeps the settings of all of its buses
     QVector<int> busSpeeds[MAX_SAVED_BUSES];
@@ -810,6 +988,7 @@ void ConnectionWindow::saveConnectionsToGroup(const QString &group)
     QVector<int> canFds[MAX_SAVED_BUSES];
     QVector<int> listenOnly[MAX_SAVED_BUSES];
     QVector<int> isActive[MAX_SAVED_BUSES];
+    QVector<int> termination[MAX_SAVED_BUSES];
 
     /* save connections */
     foreach(CANConnection* conn_p, conns)
@@ -818,6 +997,24 @@ void ConnectionWindow::saveConnectionsToGroup(const QString &group)
         portNames.append(conn_p->getPort());
         devTypes.append(conn_p->getType());
         driverNames.append(conn_p->getDriver());
+
+        /* A device that has been switched off has every one of its buses inactive, and that on its
+         * own loses which buses the user actually wanted.
+         *
+         * isActive_N still records the off state, deliberately. Anything that reads these settings
+         * without knowing about the mask - an older build, upstream SavvyCAN, both of which share
+         * this settings group - has to see the device as off, because being wrong the other way
+         * puts a controller onto a live bus. The pattern therefore rides alongside in its own key
+         * rather than being written into isActive_N, and a reader that ignores it fails safe.
+         *
+         * The bits are indexed by bus number and written whatever the device currently claims its
+         * bus count is, so a count that moves between saving and loading cannot silently drop
+         * part of the pattern. */
+        int maskBits = 0;
+        const QVector<bool> mask = connModel->busMask(conn_p);
+        for (int busIdx = 0; busIdx < mask.size() && busIdx < MAX_SAVED_BUSES; busIdx++)
+            if (mask[busIdx]) maskBits |= (1 << busIdx);
+        busMaskBits.append(maskBits);
 
         /* Every array has to end up the same length as the others, the loader throws the whole lot
          * away otherwise. So a bus we can't read still gets a placeholder entry. */
@@ -831,6 +1028,7 @@ void ConnectionWindow::saveConnectionsToGroup(const QString &group)
                 dataRates[busIdx].append(bus.getDataRate());
                 listenOnly[busIdx].append(bus.isListenOnly() ? 1 : 0);
                 isActive[busIdx].append(bus.isActive() ? 1 : 0);
+                termination[busIdx].append(bus.isTermination() ? 1 : 0);
             }
             else
             {
@@ -839,6 +1037,7 @@ void ConnectionWindow::saveConnectionsToGroup(const QString &group)
                 dataRates[busIdx].append(0);
                 listenOnly[busIdx].append(0);
                 isActive[busIdx].append(0);
+                termination[busIdx].append(0);
             }
         }
     }
@@ -847,6 +1046,7 @@ void ConnectionWindow::saveConnectionsToGroup(const QString &group)
     writeIntVec(settings, group + "/types", devTypes);
     writeStringVec(settings, group + "/driverNames", driverNames);
     writeIntVec(settings, group + "/serialSpeeds", serialSpeeds);
+    writeIntVec(settings, group + "/busMaskBits", busMaskBits);
 
     for (int busIdx = 0; busIdx < MAX_SAVED_BUSES; busIdx++)
     {
@@ -855,6 +1055,7 @@ void ConnectionWindow::saveConnectionsToGroup(const QString &group)
         writeIntVec(settings, QString("%1/DataRates_%2").arg(group).arg(busIdx), dataRates[busIdx]);
         writeIntVec(settings, QString("%1/listenOnly_%2").arg(group).arg(busIdx), listenOnly[busIdx]);
         writeIntVec(settings, QString("%1/isActive_%2").arg(group).arg(busIdx), isActive[busIdx]);
+        writeIntVec(settings, QString("%1/termination_%2").arg(group).arg(busIdx), termination[busIdx]);
     }
 
     settings.sync();

@@ -10,6 +10,7 @@ CANBus::CANBus()
     active      = false;
     canFD       = false;
     dataRate    = 2000000;
+    termination = false;
 }
 
 
@@ -19,7 +20,8 @@ bool CANBus::operator==(const CANBus& bus) const{
             singleWire == bus.singleWire &&
             active == bus.active &&
             canFD == bus.canFD &&
-            dataRate == bus.dataRate;
+            dataRate == bus.dataRate &&
+            termination == bus.termination;
 }
 
 void CANBus::setSpeed(int newSpeed){
@@ -74,6 +76,14 @@ bool CANBus::isActive() const {
 
 bool CANBus::isCanFD() const {
     return canFD;
+}
+
+void CANBus::setTermination(bool mode){
+    termination = mode;
+}
+
+bool CANBus::isTermination() const {
+    return termination;
 }
 
 

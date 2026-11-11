@@ -304,6 +304,22 @@ void CANConnection::setCapSuspended(bool pIsSuspended) {
     mIsCapSuspended = pIsSuspended;
 }
 
+bool CANConnection::getControllerState(int pBusIdx, CANControllerState &pState)
+{
+    QMutexLocker locker(&mControllerStateMutex);
+    if (pBusIdx < 0 || pBusIdx >= mControllerState.size() || !mControllerState[pBusIdx].valid) return false;
+    pState = mControllerState[pBusIdx];
+    return true;
+}
+
+void CANConnection::setControllerState(int pBusIdx, const CANControllerState &pState)
+{
+    QMutexLocker locker(&mControllerStateMutex);
+    if (pBusIdx < 0 || pBusIdx >= getNumBuses()) return;
+    if (mControllerState.size() < getNumBuses()) mControllerState.resize(getNumBuses());
+    mControllerState[pBusIdx] = pState;
+}
+
 void CANConnection::debugInput(QByteArray bytes) {
     Q_UNUSED(bytes)
 }

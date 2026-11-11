@@ -11,6 +11,7 @@
 #include <QItemSelection>
 #include <QCanBusDeviceInfo>
 #include <QUdpSocket>
+#include <QStyledItemDelegate>
 #include "canconnectionmodel.h"
 #include "connections/canconnection.h"
 
@@ -20,6 +21,30 @@ class CANConnectionModel;
 namespace Ui {
 class ConnectionWindow;
 }
+
+/**
+ * @brief Draws the Activate / Deactivate button that sits on every row of the device list.
+ *
+ * A delegate rather than a real button placed into each row: the connection model resets itself
+ * whenever a device is added, removed or reordered, and widgets set on an index do not survive a
+ * reset. The caption is whatever the model gives for the cell.
+ */
+class ConnActivateDelegate : public QStyledItemDelegate
+{
+    Q_OBJECT
+
+public:
+    explicit ConnActivateDelegate(QObject *parent = nullptr) : QStyledItemDelegate(parent) {}
+
+    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+
+signals:
+    void clicked(const QModelIndex &index);
+
+protected:
+    bool editorEvent(QEvent *event, QAbstractItemModel *model,
+                     const QStyleOptionViewItem &option, const QModelIndex &index) override;
+};
 
 
 class ConnectionWindow : public QDialog
@@ -60,6 +85,8 @@ private slots:
     void saveProfile();
     void loadProfile();
     void deleteProfile();
+    //switches every bus on one device on or off, from the button on that device's row
+    void toggleConnActive(const QModelIndex &index);
 
 private:
     Ui::ConnectionWindow *ui;    
