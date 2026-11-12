@@ -346,19 +346,13 @@ void ConnectionWindow::handleNewConn()
              * needing twenty constructors changed. This is the same path a restored connection
              * takes, so it is a well travelled one.
              *
-             * Bus 0 only. A multi bus device works out its remaining buses for itself, and those
-             * can be set individually in Bus Details. */
+             * Most types are offered bus 0 only, and a multi bus device works out its remaining
+             * buses for itself; those can be set individually in Bus Details. A CAN Triple gets
+             * a row per bus in the dialog, so all three of its buses arrive here configured. */
             if (thisDialog->hasBusOptions())
             {
-                CANBus bus;
-                if (newBusSpeed > 0) bus.setSpeed(newBusSpeed);
-                if (newDataRate > 0) bus.setDataRate(newDataRate);
-                bus.setCanFD(newCanFd);
-                bus.setListenOnly(thisDialog->isListenOnly());
-                bus.setTermination(thisDialog->isTermination());
-                //a device the user has just asked for should come up running
-                bus.setActive(true);
-                conn->setBusSettings(0, bus);
+                const int count = qMin(thisDialog->getBusCount(), conn->getNumBuses());
+                for (int i = 0; i < count; i++) conn->setBusSettings(i, thisDialog->getBusSettings(i));
             }
 
             connModel->add(conn);
