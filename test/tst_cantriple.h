@@ -15,6 +15,8 @@ class TestCANTriple : public QObject
 private slots:
     void protocolHelpers();
     void session();
+    //a time delta across a second boundary must stay the real gap, however a driver stamped it
+    void deltaAcrossSecondBoundary();
 };
 
 #endif // TST_CANTRIPLE_H
