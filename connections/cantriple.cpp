@@ -693,10 +693,14 @@ void CANTriple::handleFrames(const uint8_t *p, size_t len)
         if (rtr) frame_p->setFrameType(QCanBusFrame::RemoteRequestFrame);
         else frame_p->setPayload(QByteArray((const char*)data, (int)dataLen));
 
+        /* The whole time goes in the microseconds field, which is where SavvyCAN reads it from.
+         * TimeStamp::fromMicroSeconds() would split it into seconds and a 0-999999 remainder, and
+         * the frame list keeps only the remainder - every time column and delta then wraps each
+         * second. */
         if (useSystemTime)
-            frame_p->setTimeStamp(QCanBusFrame::TimeStamp::fromMicroSeconds(QDateTime::currentMSecsSinceEpoch() * 1000ull));
+            frame_p->setTimeStamp(QCanBusFrame::TimeStamp(0, QDateTime::currentMSecsSinceEpoch() * 1000));
         else
-            frame_p->setTimeStamp(QCanBusFrame::TimeStamp::fromMicroSeconds(mTimeBasis + devTime));
+            frame_p->setTimeStamp(QCanBusFrame::TimeStamp(0, mTimeBasis + devTime));
 
         checkTargettedFrame(*frame_p);
         getQueue().queue();

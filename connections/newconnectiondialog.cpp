@@ -1,5 +1,7 @@
 #include <QCanBus>
 #include <QMessageBox>
+#include <QGridLayout>
+#include <QLabel>
 #include "newconnectiondialog.h"
 #include "ui_newconnectiondialog.h"
 #include "gsusbconnection.h"
@@ -12,9 +14,11 @@ NewConnectionDialog::NewConnectionDialog(QVector<QString>* gvretips, QVector<QSt
     QDialog(parent),
     ui(new Ui::NewConnectionDialog),
     remoteDeviceIPGVRET(gvretips),
-    remoteBusKayak(kayakhosts)
+    remoteBusKayak(kayakhosts),
+    gbBuses(nullptr)
 {
     ui->setupUi(this);
+    buildBusTable(CTSC_NUM_BUSES);
     if (isSerialBusAvailable())
     {
         ui->rbSocketCAN->setEnabled(true);
@@ -270,10 +274,153 @@ static BusOptionSupport busOptionsFor(CANCon::type pType)
     }
 }
 
+/*
+ * How many buses the dialog sets up one by one for a connection type.
+ *
+ * Most adapters get the single row of bus controls, which configures their first bus; a multi bus
+ * GVRET works the rest out for itself. A CAN Triple is bought for its three buses, and each one can
+ * sit on a different network at a different speed with its own termination, so it gets the per bus
+ * table instead and every bus is set up before the connection is ever opened.
+ */
+static int dialogBusCount(CANCon::type pType)
+{
+    if (pType == CANCon::CANTRIPLE) return CTSC_NUM_BUSES;
+    return 1;
+}
+
+static void fillCANSpeeds(QComboBox *box)
+{
+    for (const char *s : {"10000", "20000", "50000", "83333", "100000", "125000", "250000", "500000", "1000000"})
+        box->addItem(s);
+    /* Start on the speed a bus most often runs at rather than on the slowest entry in the list.
+     * This dialog decides what a new connection opens with now, so whatever sits at the top has
+     * to be a sane answer for somebody who never touches it. It matches CANBus's own default. */
+    box->setCurrentIndex(box->findText("500000"));
+}
+
+/*
+ * The per bus table: one row per bus, with the same options Bus Details offers for it afterwards.
+ *
+ * Only the first bus starts out enabled. A bus that is switched on joins in on whatever it is wired
+ * to, and one at the wrong speed and not in listen only mode will put error frames onto a network
+ * it was never meant to touch - so the other two wait for the user to ask for them.
+ */
+void NewConnectionDialog::buildBusTable(int count)
+{
+    gbBuses = new QGroupBox(tr("Buses"), this);
+    QGridLayout *grid = new QGridLayout(gbBuses);
+
+    const QStringList heads = { tr("Bus"), tr("Enabled"), tr("Speed"), tr("Listen Only"),
+                                tr("Termination"), tr("CAN-FD"), tr("CAN-FD Data Rate") };
+    for (int c = 0; c < heads.count(); c++)
+        grid->addWidget(new QLabel("<b>" + heads[c] + "</b>", gbBuses), 0, c);
+
+    for (int i = 0; i < count; i++)
+    {
+        BusRow row;
+        const int r = i + 1;
+
+        grid->addWidget(new QLabel(tr("Bus %1").arg(i + 1), gbBuses), r, 0);
+
+        row.enabled = new QCheckBox(gbBuses);
+        row.enabled->setChecked(i == 0);
+        row.enabled->setToolTip(tr("Switch this bus on as soon as the connection opens"));
+        grid->addWidget(row.enabled, r, 1);
+
+        row.speed = new QComboBox(gbBuses);
+        fillCANSpeeds(row.speed);
+        grid->addWidget(row.speed, r, 2);
+
+        row.listenOnly = new QCheckBox(gbBuses);
+        row.listenOnly->setToolTip(ui->ckListenOnly->toolTip());
+        grid->addWidget(row.listenOnly, r, 3);
+
+        row.termination = new QCheckBox(gbBuses);
+        row.termination->setToolTip(tr("Switch the CAN Triple's 120 Ohm terminating resistor across this bus"));
+        grid->addWidget(row.termination, r, 4);
+
+        row.canFd = new QCheckBox(gbBuses);
+        row.canFd->setToolTip(tr("CAN Triple 2.x only - a 1.x runs this bus as classic CAN"));
+        grid->addWidget(row.canFd, r, 5);
+
+        row.dataRate = new QComboBox(gbBuses);
+        for (const char *s : {"1000000", "2000000", "4000000", "5000000", "8000000"}) row.dataRate->addItem(s);
+        //again, matching the default a CANBus is built with
+        row.dataRate->setCurrentIndex(row.dataRate->findText("2000000"));
+        grid->addWidget(row.dataRate, r, 6);
+
+        busRows.append(row);
+        connect(row.enabled, &QCheckBox::toggled, this, [this, i]() { updateBusRow(i); });
+        connect(row.canFd, &QCheckBox::toggled, this, [this, i]() { updateBusRow(i); });
+        updateBusRow(i);
+    }
+    grid->setColumnStretch(heads.count(), 1);
+
+    //sits where the single row of bus controls does, and takes its place when it is shown
+    ui->verticalLayout->insertWidget(ui->verticalLayout->indexOf(ui->cbDataRate) + 1, gbBuses);
+    gbBuses->setHidden(true);
+}
+
+//a bus that is off has nothing to configure, and the data rate means nothing without CAN FD
+void NewConnectionDialog::updateBusRow(int row)
+{
+    if (row < 0 || row >= busRows.count()) return;
+    const BusRow &r = busRows[row];
+    const bool on = r.enabled->isChecked();
+    r.speed->setEnabled(on);
+    r.listenOnly->setEnabled(on);
+    r.termination->setEnabled(on);
+    r.canFd->setEnabled(on);
+    r.dataRate->setEnabled(on && r.canFd->isChecked());
+}
+
+int NewConnectionDialog::getBusCount()
+{
+    return dialogBusCount(getConnectionType());
+}
+
+/*
+ * Everything one bus should start out with. For the per bus table that is the row as the user left
+ * it; for everything else it is the single row of controls, which only ever describes bus 0.
+ */
+CANBus NewConnectionDialog::getBusSettings(int bus)
+{
+    CANBus out;
+    const CANCon::type type = getConnectionType();
+
+    if (dialogBusCount(type) > 1)
+    {
+        if (bus < 0 || bus >= busRows.count()) return out;
+        const BusRow &r = busRows[bus];
+        const BusOptionSupport opts = busOptionsFor(type);
+        out.setSpeed(r.speed->currentText().toInt());
+        out.setListenOnly(opts.listenOnly && r.listenOnly->isChecked());
+        out.setTermination(opts.termination && r.termination->isChecked());
+        out.setCanFD(opts.canFd && r.canFd->isChecked());
+        out.setDataRate(r.dataRate->currentText().toInt());
+        out.setActive(r.enabled->isChecked());
+        return out;
+    }
+
+    if (getBusSpeed() > 0) out.setSpeed(getBusSpeed());
+    if (getDataRate() > 0) out.setDataRate(getDataRate());
+    out.setCanFD(isCanFd());
+    out.setListenOnly(isListenOnly());
+    out.setTermination(isTermination());
+    //a device the user has just asked for should come up running
+    out.setActive(true);
+    return out;
+}
+
 //put the bus options this connection type can use on screen, and no others
 void NewConnectionDialog::updateBusOptionVisibility()
 {
-    const BusOptionSupport opts = busOptionsFor(getConnectionType());
+    BusOptionSupport opts = busOptionsFor(getConnectionType());
+
+    //a multi bus adapter gets the per bus table in place of the single row of controls
+    const bool table = dialogBusCount(getConnectionType()) > 1;
+    if (gbBuses) gbBuses->setVisible(table);
+    if (table) opts = { false, false, false, false };
 
     if (opts.speed) populateCANSpeeds();
     if (opts.canFd) populateDataRates();
@@ -307,21 +454,7 @@ bool NewConnectionDialog::hasBusOptions()
 void NewConnectionDialog::populateCANSpeeds()
 {
     if (ui->cbCANSpeed->count() > 0) return;
-
-    ui->cbCANSpeed->addItem("10000");
-    ui->cbCANSpeed->addItem("20000");
-    ui->cbCANSpeed->addItem("50000");
-    ui->cbCANSpeed->addItem("83333");
-    ui->cbCANSpeed->addItem("100000");
-    ui->cbCANSpeed->addItem("125000");
-    ui->cbCANSpeed->addItem("250000");
-    ui->cbCANSpeed->addItem("500000");
-    ui->cbCANSpeed->addItem("1000000");
-
-    /* Start on the speed a bus most often runs at rather than on the slowest entry in the list.
-     * This dialog decides what a new connection opens with now, so whatever sits at the top has
-     * to be a sane answer for somebody who never touches it. It matches CANBus's own default. */
-    ui->cbCANSpeed->setCurrentIndex(ui->cbCANSpeed->findText("500000"));
+    fillCANSpeeds(ui->cbCANSpeed);
 }
 
 void NewConnectionDialog::populateDataRates()
@@ -846,16 +979,19 @@ int NewConnectionDialog::getSerialSpeed()
     }
 }
 
-/* The four getters below all key off the same table the controls are shown from, so a value can
- * only come back for an option the user was actually offered. */
+/* With the per bus table on screen these getters report its first row, which is what the
+ * connection factory is handed. Otherwise they all key off the same table the controls are shown
+ * from, so a value can only come back for an option the user was actually offered. */
 int NewConnectionDialog::getBusSpeed()
 {
+    if (getBusCount() > 1) return getBusSettings(0).getSpeed();
     if (!busOptionsFor(getConnectionType()).speed) return 0;
     return ui->cbCANSpeed->currentText().toInt();
 }
 
 bool NewConnectionDialog::isListenOnly()
 {
+    if (getBusCount() > 1) return getBusSettings(0).isListenOnly();
     if (!busOptionsFor(getConnectionType()).listenOnly) return false;
     return ui->ckListenOnly->isChecked();
 }
@@ -896,18 +1032,21 @@ bool NewConnectionDialog::isSerialBusAvailable()
 
 int NewConnectionDialog::getDataRate()
 {
+    if (getBusCount() > 1) return getBusSettings(0).getDataRate();
     if (!busOptionsFor(getConnectionType()).canFd) return 0;
     return ui->cbDataRate->currentText().toInt();
 }
 
 bool NewConnectionDialog::isTermination()
 {
+    if (getBusCount() > 1) return getBusSettings(0).isTermination();
     if (!busOptionsFor(getConnectionType()).termination) return false;
     return ui->ckTermination->isChecked();
 }
 
 bool NewConnectionDialog::isCanFd()
 {
+    if (getBusCount() > 1) return getBusSettings(0).isCanFD();
     if (!busOptionsFor(getConnectionType()).canFd) return false;
     /* NB: this used to return the checkbox pointer itself, which is never null, so CAN FD was
      * reported as enabled no matter what the user had ticked. */

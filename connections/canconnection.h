@@ -15,6 +15,25 @@ class CANConnection : public QObject
 {
     Q_OBJECT
 
+public:
+    /**
+     * @brief Put a frame's whole timestamp back into the microseconds field.
+     *
+     * SavvyCAN's convention is TimeStamp(0, total_us): the frame model, graphs, file writers and
+     * the rest read microSeconds() as the full time and ignore seconds(). Qt's own
+     * TimeStamp::fromMicroSeconds() splits the value instead, and a frame stamped that way loses
+     * everything but its fraction of a second the moment the frame list rebases it - its time
+     * column wraps every second and its delta turns into a huge number whenever it crosses one.
+     * Several drivers stamp that way, so frames are put right here on their way in rather than
+     * relying on every driver to get it right.
+     */
+    static void normalizeTimeStamp(CANFrame &frame)
+    {
+        const QCanBusFrame::TimeStamp ts = frame.timeStamp();
+        if (ts.seconds() != 0)
+            frame.setTimeStamp(QCanBusFrame::TimeStamp(0, ts.seconds() * 1000000 + ts.microSeconds()));
+    }
+
 protected:
 
     /**

@@ -207,6 +207,7 @@ void CANConManager::refreshConnection(CANConnection* pConn_p)
 
     while( (frame_p = pConn_p->getQueue().peek() ) ) {
         frame_p->bus += busBase;
+        CANConnection::normalizeTimeStamp(*frame_p);
         //qDebug() << "Rx of frame from bus: " << frame_p->bus;
         frames.append(*frame_p);
         pConn_p->getQueue().dequeue();

@@ -5,6 +5,49 @@
 #include "tst_cantriple.h"
 #include "cantriple.h"
 #include "cantriple_protocol.h"
+#include "canframemodel.h"
+
+/*
+ * What the user saw: in overwrite mode the Time Delta column jumped to an enormous value for an
+ * instant, over and over. Two frames of one ID, 100 ms apart, straddling a second boundary, and
+ * stamped the way Qt's TimeStamp::fromMicroSeconds() stamps them (seconds plus a 0-999999 rest).
+ * Unrepaired, the frame list keeps only the rest, so 0.05 s minus 0.95 s goes negative and is
+ * shown as about 1.8e13 seconds. Repaired on the way in, the delta is the real 100000 us.
+ */
+void TestCANTriple::deltaAcrossSecondBoundary()
+{
+    const qint64 base = 1762862400LL * 1000000;   //a whole second, epoch microseconds
+    auto make = [](qint64 us) {
+        CANFrame f;
+        f.bus = 0;
+        f.setFrameId(0x123);
+        f.setPayload(QByteArray(8, 0));
+        f.isReceived = true;
+        f.setTimeStamp(QCanBusFrame::TimeStamp::fromMicroSeconds(us));
+        return f;
+    };
+    CANFrame a = make(base + 950000);
+    CANFrame b = make(base + 1050000);
+    QVERIFY(a.timeStamp().seconds() != 0);   //split, as such a driver hands it over
+
+    CANConnection::normalizeTimeStamp(a);
+    CANConnection::normalizeTimeStamp(b);
+    QCOMPARE(a.timeStamp().seconds(), (qint64)0);
+    QCOMPARE(a.timeStamp().microSeconds(), base + 950000);
+
+    //normalising twice changes nothing
+    CANFrame again = b;
+    CANConnection::normalizeTimeStamp(again);
+    QCOMPARE(again.timeStamp().microSeconds(), b.timeStamp().microSeconds());
+
+    CANFrameModel model;
+    model.setOverwriteMode(true);
+    model.addFrame(a, false);
+    model.addFrame(b, false);
+    const QVector<CANFrame> *rows = model.getFilteredListReference();
+    QCOMPARE(rows->size(), 1);
+    QCOMPARE((qint64)rows->at(0).timedelta, (qint64)100000);
+}
 
 namespace {
 
@@ -186,9 +229,13 @@ QList<CANFrame> drain(CANConnection &conn)
     return frames;
 }
 
+/* Read a timestamp the way the rest of SavvyCAN does: the frame model, the graphs and the file
+ * writers all take microSeconds() as the whole time and never look at seconds(). Adding seconds()
+ * back in here once hid a driver that split its stamps, which showed up in the app as the time
+ * delta jumping to nonsense every time a frame crossed a second boundary. */
 qint64 micros(const CANFrame &f)
 {
-    return f.timeStamp().seconds() * 1000000 + f.timeStamp().microSeconds();
+    return f.timeStamp().microSeconds();
 }
 
 }
@@ -269,6 +316,14 @@ void TestCANTriple::session()
 
     QCOMPARE(rx[3].frameType(), QCanBusFrame::RemoteRequestFrame);
     QCOMPARE(rx[3].frameId(), 0x55u);
+
+    //whole time in the microseconds field, anchored to the wall clock, nothing in seconds()
+    const qint64 nowUs = QDateTime::currentMSecsSinceEpoch() * 1000;
+    for (const CANFrame &f : rx)
+    {
+        QCOMPARE(f.timeStamp().seconds(), (qint64)0);
+        QVERIFY(qAbs(micros(f) - nowUs) < 60LL * 1000000);
+    }
 
     //the device clock wrapped between frames 0 and 1, which must not show as a jump backwards
     QCOMPARE(micros(rx[1]) - micros(rx[0]), (qint64)(0x2000 - 100));

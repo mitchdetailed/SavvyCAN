@@ -427,6 +427,7 @@ void CANConnection::checkTargettedFrame(CANFrame &frame)
     /* observers registered their filters with system global bus numbers but frame.bus
      * still holds the connection local number here, so forward a fixed up copy */
     CANFrame globalFrame = frame;
+    normalizeTimeStamp(globalFrame);
     int busBase = mBusBase.loadRelaxed();
     if (busBase > 0) globalFrame.bus += busBase;
     foreach (const CANFltObserver filt, targettedFrames)

@@ -2,6 +2,9 @@
 #define NEWCONNECTIONDIALOG_H
 
 #include <QDialog>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QGroupBox>
 #include <QCanBusDeviceInfo>
 #include <QSerialPortInfo>
 #include <QDebug>
@@ -32,6 +35,10 @@ public:
     int getDataRate();
     //whether this connection type has any bus setting worth pushing into the new connection
     bool hasBusOptions();
+    //how many buses this dialog sets up for the chosen type - 1 unless it shows the per bus table
+    int getBusCount();
+    //the complete settings for one bus, ready for CANConnection::setBusSettings
+    CANBus getBusSettings(int bus);
 
 public slots:
     void handleConnTypeChanged();
@@ -46,6 +53,21 @@ private:
     QList<QCanBusDeviceInfo> canDevices;
     QVector<QString>* remoteDeviceIPGVRET;
     QVector<QString>* remoteBusKayak;
+
+    //one row of the per bus table shown for multi bus adapters such as the CAN Triple
+    struct BusRow
+    {
+        QCheckBox *enabled;
+        QComboBox *speed;
+        QCheckBox *listenOnly;
+        QCheckBox *termination;
+        QCheckBox *canFd;
+        QComboBox *dataRate;
+    };
+    QGroupBox *gbBuses;
+    QVector<BusRow> busRows;
+    void buildBusTable(int count);
+    void updateBusRow(int row);
 
     void selectSerial();
     void selectKvaser();
